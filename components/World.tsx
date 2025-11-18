@@ -37,59 +37,52 @@ const createNoiseTexture = () => {
   return new CanvasTexture(canvas);
 };
 
-const World: React.FC<WorldProps> = ({ playerPosition }) => {
+const Chunk: React.FC<{ chunkX: number; chunkZ: number }> = React.memo(({ chunkX, chunkZ }) => {
   const meshRef = useRef<InstancedMesh>(null);
-  const [texture, setTexture] = useState<CanvasTexture | null>(null);
-
-  useEffect(() => {
-    const tex = createNoiseTexture();
-    if (tex) {
-        tex.magFilter = NearestFilter;
-        tex.minFilter = NearestFilter;
-        tex.wrapS = RepeatWrapping;
-        tex.wrapT = RepeatWrapping;
-        setTexture(tex);
-    }
-  }, []);
-
-  // Calculate chunk coordinates
-  const playerChunkX = Math.floor(playerPosition.x / CHUNK_SIZE);
-  const playerChunkZ = Math.floor(playerPosition.z / CHUNK_SIZE);
-
+  
   const { instances, count } = useMemo(() => {
     const data: { x: number; y: number; z: number; type: BlockType }[] = [];
-    
-    for (let cx = playerChunkX - RENDER_DISTANCE; cx <= playerChunkX + RENDER_DISTANCE; cx++) {
-      for (let cz = playerChunkZ - RENDER_DISTANCE; cz <= playerChunkZ + RENDER_DISTANCE; cz++) {
-        
-        const startX = cx * CHUNK_SIZE;
-        const startZ = cz * CHUNK_SIZE;
+    const startX = chunkX * CHUNK_SIZE;
+    const startZ = chunkZ * CHUNK_SIZE;
 
-        for (let x = 0; x < CHUNK_SIZE; x++) {
-          for (let z = 0; z < CHUNK_SIZE; z++) {
-            const worldX = startX + x;
-            const worldZ = startZ + z;
-            
-            // Expanded height scan for buildings
-            for (let y = -2; y < 45; y++) {
-               const block = getBlockAt(worldX, y, worldZ);
-               if (block !== BlockType.AIR) {
-                   data.push({ x: worldX, y, z: worldZ, type: block });
-               }
-            }
-          }
+    for (let x = 0; x < CHUNK_SIZE; x++) {
+      for (let z = 0; z < CHUNK_SIZE; z++) {
+        const worldX = startX + x;
+        const worldZ = startZ + z;
+        
+        // Optimization: Scan relevant heights
+        // In real app, you'd query heightmap first
+        for (let y = -5; y < 80; y++) {
+           const block = getBlockAt(worldX, y, worldZ);
+           if (block !== BlockType.AIR) {
+               data.push({ x: worldX, y, z: worldZ, type: block });
+           }
         }
       }
     }
     return { instances: data, count: data.length };
-  }, [playerChunkX, playerChunkZ]);
+  }, [chunkX, chunkZ]);
 
   useLayoutEffect(() => {
     if (!meshRef.current) return;
 
     let index = 0;
     for (const instance of instances) {
+      tempObject.scale.set(1, 1, 1);
       tempObject.position.set(instance.x, instance.y, instance.z);
+
+      // Decoration Scaling
+      if (instance.type === BlockType.FLOWER_YELLOW || instance.type === BlockType.FLOWER_RED) {
+          tempObject.scale.set(0.3, 0.4, 0.3);
+          tempObject.position.set(instance.x, instance.y - 0.3, instance.z);
+      } else if (instance.type === BlockType.SMALL_ROCK) {
+          tempObject.scale.set(0.4, 0.2, 0.4);
+          tempObject.position.set(instance.x, instance.y - 0.4, instance.z);
+      } else if (instance.type === BlockType.MAGIC_CRYSTAL) {
+          tempObject.scale.set(0.6, 0.8, 0.6);
+          tempObject.rotation.y = Math.random() * Math.PI;
+      }
+
       tempObject.updateMatrix();
       meshRef.current.setMatrixAt(index, tempObject.matrix);
 
@@ -101,17 +94,36 @@ const World: React.FC<WorldProps> = ({ playerPosition }) => {
         case BlockType.SAND: colorHex = COLORS.SAND; break;
         case BlockType.WATER: colorHex = COLORS.WATER; break;
         case BlockType.SNOW: colorHex = COLORS.SNOW; break;
-        // Architecture
+        
         case BlockType.STONE_BRICK: colorHex = COLORS.STONE_BRICK; break;
+        case BlockType.RED_BRICK: colorHex = COLORS.RED_BRICK; break;
         case BlockType.WOOD_LOG: colorHex = COLORS.WOOD_LOG; break;
         case BlockType.WOOD_PLANK: colorHex = COLORS.WOOD_PLANK; break;
+        case BlockType.DARK_PLANK: colorHex = COLORS.DARK_PLANK; break;
         case BlockType.PLASTER: colorHex = COLORS.PLASTER; break;
         case BlockType.ROOF_RED: colorHex = COLORS.ROOF_RED; break;
         case BlockType.ROOF_BLUE: colorHex = COLORS.ROOF_BLUE; break;
         case BlockType.GLASS: colorHex = COLORS.GLASS; break;
         case BlockType.COBBLESTONE: colorHex = COLORS.COBBLESTONE; break;
+        case BlockType.MOSSY_COBBLESTONE: colorHex = COLORS.MOSSY_COBBLESTONE; break;
         case BlockType.PATH: colorHex = COLORS.PATH; break;
         case BlockType.LEAVES: colorHex = COLORS.LEAVES; break;
+        
+        // Variants
+        case BlockType.FACTORY_BRICK: colorHex = COLORS.FACTORY_BRICK; break;
+        case BlockType.IRON_BLOCK: colorHex = COLORS.IRON_BLOCK; break;
+        case BlockType.OBSIDIAN: colorHex = COLORS.OBSIDIAN; break;
+        case BlockType.BASALT: colorHex = COLORS.BASALT; break;
+        case BlockType.SLIME_BLOCK: colorHex = COLORS.SLIME_BLOCK; break;
+        case BlockType.MAGIC_CRYSTAL: colorHex = COLORS.MAGIC_CRYSTAL; break;
+
+        case BlockType.FLOWER_YELLOW: colorHex = COLORS.FLOWER_YELLOW; break;
+        case BlockType.FLOWER_RED: colorHex = COLORS.FLOWER_RED; break;
+        case BlockType.SMALL_ROCK: colorHex = COLORS.SMALL_ROCK; break;
+        
+        case BlockType.BIRCH_LOG: colorHex = COLORS.BIRCH_LOG; break;
+        case BlockType.BIRCH_LEAVES: colorHex = COLORS.BIRCH_LEAVES; break;
+        case BlockType.PINE_LEAVES: colorHex = COLORS.PINE_LEAVES; break;
       }
       
       tempColor.set(colorHex);
@@ -133,12 +145,25 @@ const World: React.FC<WorldProps> = ({ playerPosition }) => {
       <boxGeometry args={[1, 1, 1]} />
       <meshStandardMaterial 
         attach="material" 
-        roughness={0.9} 
+        roughness={0.8} 
         metalness={0.1} 
-        map={texture}
       />
     </instancedMesh>
   );
+});
+
+const World: React.FC<WorldProps> = ({ playerPosition }) => {
+  const playerChunkX = Math.floor(playerPosition.x / CHUNK_SIZE);
+  const playerChunkZ = Math.floor(playerPosition.z / CHUNK_SIZE);
+
+  const chunks = [];
+  for (let cx = playerChunkX - RENDER_DISTANCE; cx <= playerChunkX + RENDER_DISTANCE; cx++) {
+    for (let cz = playerChunkZ - RENDER_DISTANCE; cz <= playerChunkZ + RENDER_DISTANCE; cz++) {
+      chunks.push(<Chunk key={`${cx}-${cz}`} chunkX={cx} chunkZ={cz} />);
+    }
+  }
+
+  return <group>{chunks}</group>;
 };
 
 export default World;

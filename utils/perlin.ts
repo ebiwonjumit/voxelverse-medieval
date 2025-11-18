@@ -1,3 +1,4 @@
+
 // A simple pseudo-random noise generator to avoid external huge deps for this demo
 // Based on a simple hashing of coordinates
 
@@ -9,7 +10,7 @@ class PseudoNoise {
   }
 
   // Simple hash function
-  private hash(x: number, z: number): number {
+  public hash(x: number, z: number): number {
     let h = Math.sin(x * 12.9898 + z * 78.233 + this.seed) * 43758.5453;
     return h - Math.floor(h);
   }
