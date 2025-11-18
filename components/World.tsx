@@ -1,5 +1,5 @@
-import React, { useMemo, useRef, useLayoutEffect } from 'react';
-import { InstancedMesh, Object3D, Color, Vector3 } from 'three';
+import React, { useMemo, useRef, useLayoutEffect, useEffect, useState } from 'react';
+import { InstancedMesh, Object3D, Color, Vector3, CanvasTexture, NearestFilter, RepeatWrapping } from 'three';
 import { BlockType, COLORS, RENDER_DISTANCE, CHUNK_SIZE } from '../constants';
 import { getBlockAt } from '../utils/terrain';
 
@@ -10,48 +10,69 @@ interface WorldProps {
 const tempObject = new Object3D();
 const tempColor = new Color();
 
+// Helper to create a procedural noise texture
+const createNoiseTexture = () => {
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, size, size);
+
+  const imageData = ctx.getImageData(0, 0, size, size);
+  const data = imageData.data;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const val = 200 + Math.random() * 55; // Light noise
+    data[i] = val;     // R
+    data[i + 1] = val; // G
+    data[i + 2] = val; // B
+    data[i + 3] = 255; // Alpha
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  return new CanvasTexture(canvas);
+};
+
 const World: React.FC<WorldProps> = ({ playerPosition }) => {
   const meshRef = useRef<InstancedMesh>(null);
+  const [texture, setTexture] = useState<CanvasTexture | null>(null);
 
-  // Calculate chunk coordinates of player
+  useEffect(() => {
+    const tex = createNoiseTexture();
+    if (tex) {
+        tex.magFilter = NearestFilter;
+        tex.minFilter = NearestFilter;
+        tex.wrapS = RepeatWrapping;
+        tex.wrapT = RepeatWrapping;
+        setTexture(tex);
+    }
+  }, []);
+
+  // Calculate chunk coordinates
   const playerChunkX = Math.floor(playerPosition.x / CHUNK_SIZE);
   const playerChunkZ = Math.floor(playerPosition.z / CHUNK_SIZE);
 
-  // Determine total visible blocks count for buffer allocation
-  // (Chunks * Width * Depth * Height) approx
-  // For a simple demo, we'll just generate a fixed area around 0,0 if we don't do dynamic chunk loading
-  // or we re-calculate the instances when player moves across chunk boundaries.
-  // For smooth React performance, let's memoize the data generation based on chunk coords.
-  
   const { instances, count } = useMemo(() => {
     const data: { x: number; y: number; z: number; type: BlockType }[] = [];
     
-    // Iterate chunks within render distance
     for (let cx = playerChunkX - RENDER_DISTANCE; cx <= playerChunkX + RENDER_DISTANCE; cx++) {
       for (let cz = playerChunkZ - RENDER_DISTANCE; cz <= playerChunkZ + RENDER_DISTANCE; cz++) {
         
         const startX = cx * CHUNK_SIZE;
         const startZ = cz * CHUNK_SIZE;
 
-        // Iterate blocks in chunk
         for (let x = 0; x < CHUNK_SIZE; x++) {
           for (let z = 0; z < CHUNK_SIZE; z++) {
             const worldX = startX + x;
             const worldZ = startZ + z;
             
-            // Optimization: Only check relevant height range or simplified columns
-            // For this demo, we scan a reasonable vertical range.
-            // To optimize: find ground height, then render slightly below and above.
-            
-            // We can't easily import getHeight here without circular deps or re-import.
-            // We will accept the cost of `getBlockAt` logic for now.
-            // Scan from Y= -5 to Y= 35
-            for (let y = -2; y < 35; y++) {
+            // Expanded height scan for buildings
+            for (let y = -2; y < 45; y++) {
                const block = getBlockAt(worldX, y, worldZ);
-               
-               // Culling: Don't render if completely surrounded (simple check)
-               // For this demo, we skip strict face culling for simplicity of code
-               // and just skip AIR.
                if (block !== BlockType.AIR) {
                    data.push({ x: worldX, y, z: worldZ, type: block });
                }
@@ -68,12 +89,10 @@ const World: React.FC<WorldProps> = ({ playerPosition }) => {
 
     let index = 0;
     for (const instance of instances) {
-      // Position
       tempObject.position.set(instance.x, instance.y, instance.z);
       tempObject.updateMatrix();
       meshRef.current.setMatrixAt(index, tempObject.matrix);
 
-      // Color
       let colorHex = '#ffffff';
       switch (instance.type) {
         case BlockType.GRASS: colorHex = COLORS.GRASS; break;
@@ -81,17 +100,21 @@ const World: React.FC<WorldProps> = ({ playerPosition }) => {
         case BlockType.STONE: colorHex = COLORS.STONE; break;
         case BlockType.SAND: colorHex = COLORS.SAND; break;
         case BlockType.WATER: colorHex = COLORS.WATER; break;
-        case BlockType.WOOD: colorHex = COLORS.WOOD; break;
-        case BlockType.LEAVES: colorHex = COLORS.LEAVES; break;
         case BlockType.SNOW: colorHex = COLORS.SNOW; break;
-        case BlockType.ROOF: colorHex = COLORS.ROOF; break;
+        // Architecture
+        case BlockType.STONE_BRICK: colorHex = COLORS.STONE_BRICK; break;
+        case BlockType.WOOD_LOG: colorHex = COLORS.WOOD_LOG; break;
+        case BlockType.WOOD_PLANK: colorHex = COLORS.WOOD_PLANK; break;
+        case BlockType.PLASTER: colorHex = COLORS.PLASTER; break;
+        case BlockType.ROOF_RED: colorHex = COLORS.ROOF_RED; break;
+        case BlockType.ROOF_BLUE: colorHex = COLORS.ROOF_BLUE; break;
+        case BlockType.GLASS: colorHex = COLORS.GLASS; break;
+        case BlockType.COBBLESTONE: colorHex = COLORS.COBBLESTONE; break;
         case BlockType.PATH: colorHex = COLORS.PATH; break;
+        case BlockType.LEAVES: colorHex = COLORS.LEAVES; break;
       }
       
       tempColor.set(colorHex);
-      // Simple fake Ambient Occlusion / Lighting variation based on height
-      // tempColor.multiplyScalar(0.8 + (instance.y / 40) * 0.2); 
-      
       meshRef.current.setColorAt(index, tempColor);
       index++;
     }
@@ -108,7 +131,12 @@ const World: React.FC<WorldProps> = ({ playerPosition }) => {
       receiveShadow
     >
       <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial attach="material" roughness={0.8} metalness={0.1} />
+      <meshStandardMaterial 
+        attach="material" 
+        roughness={0.9} 
+        metalness={0.1} 
+        map={texture}
+      />
     </instancedMesh>
   );
 };

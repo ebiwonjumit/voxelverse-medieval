@@ -5,161 +5,267 @@ import { noise } from './perlin';
 export const getBlockAt = (x: number, y: number, z: number): BlockType => {
   const height = getTerrainHeight(x, z);
   
-  // Water
+  // 1. Water
   if (y <= WATER_LEVEL && y > height) {
     return BlockType.WATER;
   }
 
-  // Terrain surface
+  // 2. Town & Structures (Above ground logic)
+  if (y > height) {
+    return getStructureBlock(x, y, z, height);
+  }
+
+  // 3. Surface Terrain
   if (y === height) {
+    // Town Roads
+    if (isTownRoad(x, z)) return BlockType.COBBLESTONE;
+    if (isTownPlaza(x, z)) return BlockType.STONE_BRICK;
+
     if (height <= WATER_LEVEL + 1) return BlockType.SAND;
-    if (height > 25) return BlockType.SNOW;
-    
-    // Village Path logic (Center area)
-    if (Math.abs(x) < 8 && Math.abs(z) < 8) {
-        // Simple noise for path patches
-        if (noise.noise2D(x * 0.5, z * 0.5) > 0.6) return BlockType.PATH;
-    }
+    if (height > 28) return BlockType.SNOW;
     
     return BlockType.GRASS;
   }
 
-  // Underground
+  // 4. Underground
   if (y < height) {
-    if (y < height - 3) return BlockType.STONE;
+    if (y < height - 4) return BlockType.STONE;
     return BlockType.DIRT;
-  }
-
-  // Trees & Structures (Above ground)
-  // Only generate objects if we are directly on top of the terrain
-  if (y > height) {
-    return getObjectBlock(x, y, z, height);
   }
 
   return BlockType.AIR;
 };
 
-// Calculate terrain height based on biomes
 export const getTerrainHeight = (x: number, z: number): number => {
   let baseHeight = 6;
 
-  // Biome Weights
-  // East (Positive X) -> Mountains
-  // West (Negative X) -> Coast/Ocean
-  // South (Positive Z) -> Forest (Hilly)
-  // Center (0,0) -> Village (Flat)
-
-  // Mountain Influence (East)
-  if (x > 20) {
-    const mountainFactor = Math.min((x - 20) / 50, 1); // 0 to 1 transition
-    baseHeight += noise.octaveNoise(x * 0.05, z * 0.05, 4) * 30 * mountainFactor;
+  // Biomes
+  if (x > 30) { // Mountains East
+    const factor = Math.min((x - 30) / 40, 1);
+    baseHeight += noise.octaveNoise(x * 0.05, z * 0.05, 4) * 40 * factor;
   }
 
-  // Coast Influence (West)
-  if (x < -20) {
-    const coastFactor = Math.min(Math.abs(x + 20) / 40, 1);
-    baseHeight -= coastFactor * 10; // Drop down to ocean
+  if (x < -30) { // Coast West
+    const factor = Math.min(Math.abs(x + 30) / 30, 1);
+    baseHeight -= factor * 10;
   }
 
-  // Base noise for variation everywhere
-  baseHeight += noise.octaveNoise(x * 0.03, z * 0.03, 2) * 4;
+  if (z > 30) { // Forest South (Rolling hills)
+     baseHeight += noise.noise2D(x * 0.05, z * 0.05) * 5;
+  }
 
-  // Flatten village area (Center)
-  const distFromCenter = Math.sqrt(x * x + z * z);
-  if (distFromCenter < 25) {
-    const flattenFactor = 1 - Math.min(distFromCenter / 25, 1);
-    // Lerp towards flat level (e.g., 6)
-    baseHeight = baseHeight * (1 - flattenFactor) + 6 * flattenFactor;
+  // Base noise
+  baseHeight += noise.octaveNoise(x * 0.02, z * 0.02, 2) * 3;
+
+  // Flatten Town Center (Radius 40)
+  const dist = Math.sqrt(x*x + z*z);
+  if (dist < 40) {
+    const flatten = 1 - Math.min(dist / 40, 1);
+    // Smoothly interpolate to height 6
+    baseHeight = baseHeight * (1 - flatten) + 6 * flatten;
   }
 
   return Math.floor(baseHeight);
 };
 
-// Procedural Object Generation (Trees, Houses)
-const getObjectBlock = (x: number, y: number, z: number, groundHeight: number): BlockType => {
-  // Don't place objects in water or too high
-  if (groundHeight <= WATER_LEVEL) return BlockType.AIR;
+// --- Town Layout Logic ---
 
-  // Check if this x,z coordinate is a tree root
-  // Use a hash to deterministically decide tree positions
-  const treeNoise = noise.noise2D(x * 100, z * 100); // High frequency for random spots
-  const isForest = z > 15; // South is forest
-  const isVillage = Math.abs(x) < 20 && Math.abs(z) < 20;
+const isTownPlaza = (x: number, z: number) => Math.sqrt(x*x + z*z) < 12;
 
-  // FOREST TREES
-  if (isForest && treeNoise > 0.85) {
-    const treeHeight = 4 + Math.floor(noise.noise2D(x, z) * 3);
-    // Trunk
-    if (y > groundHeight && y <= groundHeight + treeHeight) {
-      return BlockType.WOOD;
-    }
-    // Leaves
-    if (y > groundHeight + 2 && y <= groundHeight + treeHeight + 2) {
-      // Simple plus shape or block for leaves
-      return BlockType.LEAVES; // This logic is flawed for single column checking. 
-      // In a column-based generator, we can only place the trunk. 
-      // A true voxel engine generates neighbors. 
-      // For this simplifed version: we only render the trunk in this column check.
-    }
-  }
+const isTownRoad = (x: number, z: number) => {
+  // Main Roads (Cardinal directions)
+  const absX = Math.abs(x);
+  const absZ = Math.abs(z);
   
-  // However, to render leaves over *other* blocks (neighbors), we'd need neighbor checking.
-  // For this simplified specific implementation:
-  // We will just render vertical stacks.
-  // To make trees look like trees, we check if we are *near* a trunk.
+  // Central Cross
+  if ((absX < 3 && absZ < 45) || (absZ < 3 && absX < 45)) return true;
   
-  if (isForest) {
-      // Check neighborhood for a "trunk" location
-      for(let dx = -2; dx <= 2; dx++) {
-          for (let dz = -2; dz <= 2; dz++) {
-              if (dx === 0 && dz === 0) continue; // handled by trunk logic
-              const targetX = x + dx;
-              const targetZ = z + dz;
-              const targetHash = noise.noise2D(targetX * 100, targetZ * 100);
-              
-              if (targetHash > 0.85) {
-                  const neighborGround = getTerrainHeight(targetX, targetZ);
-                  const treeH = 4 + Math.floor(noise.noise2D(targetX, targetZ) * 3);
-                  // Leaf canopy logic
-                  if (y > neighborGround + treeH - 2 && y <= neighborGround + treeH + 1) {
-                      return BlockType.LEAVES;
-                  }
-              }
-          }
-      }
+  // Ring Road
+  const dist = Math.sqrt(x*x + z*z);
+  if (dist > 35 && dist < 39) return true;
+
+  return false;
+};
+
+// --- Structure Generation ---
+
+const getStructureBlock = (x: number, y: number, z: number, groundH: number): BlockType => {
+  // 1. Forest Trees (South, away from town)
+  if (z > 40) {
+    return getTreeBlock(x, y, z, groundH);
   }
 
-  // VILLAGE HOUSES (Simple Boxes)
-  if (isVillage) {
-     // Define a few house locations manually or via noise
-     const houseX = Math.round(x / 10) * 10; // Grid of potential houses
-     const houseZ = Math.round(z / 10) * 10;
-     
-     // Check if we are within a house footprint (e.g. 4x4) centered at houseX, houseZ
-     // And verify "house exists" there via noise
-     if (noise.noise2D(houseX, houseZ) > 0.2 && Math.abs(houseX) > 5) { // Don't build on 0,0
-         const dx = Math.abs(x - houseX);
-         const dz = Math.abs(z - houseZ);
-         
-         if (dx <= 2 && dz <= 2) {
-             const houseBase = getTerrainHeight(houseX, houseZ);
-             // Walls
-             if (y > houseBase && y <= houseBase + 3) {
-                 // Window logic
-                 if (y === houseBase + 2 && (dx === 0 || dz === 0)) return BlockType.AIR;
-                 return BlockType.WOOD; 
-             }
-             // Roof
-             if (y > houseBase + 3 && y <= houseBase + 5) {
-                 // Pyramid roof
-                 const roofHeight = y - (houseBase + 3);
-                 if (dx <= 2 - roofHeight && dz <= 2 - roofHeight) {
-                     return BlockType.ROOF;
-                 }
-             }
-         }
+  // 2. Town Houses
+  // Grid based checking for house plots
+  // We define a virtual grid of 16x16 chunks for houses
+  const plotSize = 16;
+  // Offset coordinates to align grid
+  const plotX = Math.floor((x + 1000) / plotSize);
+  const plotZ = Math.floor((z + 1000) / plotSize);
+  
+  // Deterministic random for this plot
+  const plotHash = noise.noise2D(plotX * 12.3, plotZ * 45.6);
+  
+  // Check if this plot is valid for a house
+  // - Close to center (dist < 40)
+  // - Not on a road
+  // - Not in plaza
+  const centerX = plotX * plotSize - 1000 + plotSize/2;
+  const centerZ = plotZ * plotSize - 1000 + plotSize/2;
+  const distToTownCenter = Math.sqrt(centerX*centerX + centerZ*centerZ);
+
+  if (distToTownCenter < 45 && distToTownCenter > 15 && plotHash > 0.3) {
+     // Avoid main roads logic roughly
+     if (Math.abs(centerX) > 6 && Math.abs(centerZ) > 6) {
+         return getHouseBlock(x, y, z, groundH, centerX, centerZ, plotHash);
      }
   }
 
   return BlockType.AIR;
+};
+
+const getTreeBlock = (x: number, y: number, z: number, groundH: number): BlockType => {
+  // Simple sparse trees
+  const hash = noise.noise2D(x, z);
+  // Only check specific points for trunks to avoid density
+  // This is a simplified per-block check. 
+  // Real voxel engines generate the tree once. Here we infer it.
+  
+  // We need to find the "nearest" tree center.
+  const gridS = 5;
+  const localX = Math.round(x / gridS) * gridS;
+  const localZ = Math.round(z / gridS) * gridS;
+  
+  if (noise.noise2D(localX, localZ) > 0.6) {
+     // Tree exists at localX, localZ
+     const dx = x - localX;
+     const dz = z - localZ;
+     const dist = Math.sqrt(dx*dx + dz*dz);
+     
+     const treeH = 5 + Math.floor(Math.abs(noise.noise2D(localX, localZ)) * 4);
+     
+     // Trunk
+     if (dx === 0 && dz === 0 && y <= groundH + treeH) return BlockType.WOOD_LOG;
+     
+     // Leaves (Spherical-ish)
+     if (y > groundH + 2 && y <= groundH + treeH + 2) {
+        const radius = (y < groundH + treeH) ? 2.5 : 1.5;
+        if (dist <= radius) return BlockType.LEAVES;
+     }
+  }
+  return BlockType.AIR;
+};
+
+// Complex House Generator (SAO / Medieval Style)
+const getHouseBlock = (x: number, y: number, z: number, groundH: number, houseX: number, houseZ: number, seed: number): BlockType => {
+    // House Params derived from seed
+    const width = 6 + Math.floor((seed * 100) % 3); // 6 to 8
+    const depth = 6 + Math.floor((seed * 200) % 3); // 6 to 8
+    const height = 5 + Math.floor((seed * 300) % 2); // 1st floor height
+    const floors = seed > 0.6 ? 2 : 1;
+    
+    const dx = x - Math.floor(houseX);
+    const dz = z - Math.floor(houseZ);
+    
+    // Local coords relative to house center
+    const halfW = Math.floor(width / 2);
+    const halfD = Math.floor(depth / 2);
+    
+    // 1st Floor
+    if (Math.abs(dx) <= halfW && Math.abs(dz) <= halfD) {
+        const localY = y - groundH;
+        
+        // Foundation
+        if (localY === 1) return BlockType.STONE_BRICK;
+        
+        // Walls
+        if (localY > 1 && localY <= height) {
+            // Corners -> Logs
+            if (Math.abs(dx) === halfW && Math.abs(dz) === halfD) return BlockType.WOOD_LOG;
+            // Windows
+            if (localY === 3 && (Math.abs(dx) === halfW || Math.abs(dz) === halfD)) {
+               // Don't put windows on corners
+               if (Math.abs(dx) !== halfW || Math.abs(dz) !== halfD) {
+                   // periodic windows
+                   if ((dx + dz) % 2 !== 0) return BlockType.GLASS;
+               }
+            }
+            // Walls
+            if (Math.abs(dx) === halfW || Math.abs(dz) === halfD) return BlockType.PLASTER;
+            
+            // Interior
+            return BlockType.AIR; 
+        }
+        
+        // Ceiling / Floor 2 base
+        if (localY === height + 1) return BlockType.WOOD_PLANK;
+    }
+    
+    // 2nd Floor (Overhang)
+    if (floors === 2) {
+        const overhang = 1;
+        const w2 = halfW + overhang;
+        const d2 = halfD + overhang;
+        const h1 = height + 1;
+        const h2 = height + 5; // 2nd floor height
+        
+        if (Math.abs(dx) <= w2 && Math.abs(dz) <= d2) {
+            const localY = y - groundH;
+            
+            if (localY > h1 && localY <= h2) {
+                // Frame supports (corners)
+                 if (Math.abs(dx) === w2 && Math.abs(dz) === d2) return BlockType.WOOD_LOG;
+                 
+                 // Timber framing (crosses)
+                 if ((Math.abs(dx) === w2 || Math.abs(dz) === d2) && localY === Math.floor((h1+h2)/2)) return BlockType.WOOD_LOG;
+                 
+                 // Windows
+                 if (localY === h1 + 2 && (Math.abs(dx) === w2 || Math.abs(dz) === d2)) {
+                      if (Math.abs(dx) < w2 - 1 || Math.abs(dz) < d2 - 1) return BlockType.GLASS;
+                 }
+
+                 // Walls
+                 if (Math.abs(dx) === w2 || Math.abs(dz) === d2) return BlockType.PLASTER;
+                 
+                 return BlockType.AIR;
+            }
+        }
+        
+        // Roof (Pyramid style)
+        const roofStart = h2 + 1;
+        const localY = y - groundH;
+        if (localY >= roofStart) {
+            const roofH = localY - roofStart;
+            const currentW = w2 + 1 - roofH;
+            const currentD = d2 + 1 - roofH;
+            
+            if (currentW >= 0 && currentD >= 0) {
+                if (Math.abs(dx) <= currentW && Math.abs(dz) <= currentD) {
+                    // Outer shell is roof, inner is air or attic
+                    if (Math.abs(dx) === currentW || Math.abs(dz) === currentD) {
+                        return seed > 0.5 ? BlockType.ROOF_RED : BlockType.ROOF_BLUE;
+                    }
+                }
+            }
+        }
+    } else {
+        // 1 Floor Roof
+        const roofStart = height + 2;
+        const localY = y - groundH;
+         if (localY >= roofStart) {
+            const roofH = localY - roofStart;
+            const currentW = halfW + 1 - roofH;
+            const currentD = halfD + 1 - roofH;
+            
+            if (currentW >= 0 && currentD >= 0) {
+                 if (Math.abs(dx) <= currentW && Math.abs(dz) <= currentD) {
+                     if (Math.abs(dx) === currentW || Math.abs(dz) === currentD) {
+                         return BlockType.WOOD_PLANK; // Simple wood roof for small huts
+                     }
+                 }
+            }
+         }
+    }
+
+    return BlockType.AIR;
 };
