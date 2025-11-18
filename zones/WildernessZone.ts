@@ -1,4 +1,4 @@
-import { Zone, AtmosphereSettings } from './Zone';
+import { Zone, AtmosphereSettings, LodLevel } from './Zone';
 import { BlockType, WATER_LEVEL, MILE } from '../constants';
 import { noise } from '../utils/perlin';
 
@@ -40,7 +40,7 @@ export class WildernessZone extends Zone {
     return h;
   }
 
-  getBlock(x: number, y: number, z: number, groundH: number): BlockType {
+  getBlock(x: number, y: number, z: number, groundH: number, lod: LodLevel): BlockType {
      if (y > groundH) {
          const roadInfo = this.getRoadInfo(x, z);
          if (!roadInfo.isRoad) return this.getNature(x, y, z, groundH);

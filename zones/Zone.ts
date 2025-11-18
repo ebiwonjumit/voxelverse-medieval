@@ -1,5 +1,10 @@
 import { BlockType } from '../constants';
 
+export enum LodLevel {
+  LOW = 0,
+  HIGH = 1
+}
+
 export interface AtmosphereSettings {
   fogColor: string;
   skyTint: string;
@@ -16,7 +21,7 @@ export abstract class Zone {
   abstract getHeight(x: number, z: number, baseNoiseHeight: number): number;
   
   // Return a structure block or AIR
-  abstract getBlock(x: number, y: number, z: number, groundH: number): BlockType;
+  abstract getBlock(x: number, y: number, z: number, groundH: number, lod: LodLevel): BlockType;
   
   // Visual atmosphere
   abstract getAtmosphere(): AtmosphereSettings;

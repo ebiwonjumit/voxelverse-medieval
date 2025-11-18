@@ -1,6 +1,7 @@
 import { BlockType, WATER_LEVEL } from '../constants';
 import { noise } from './perlin';
 import { getZone } from '../zones';
+import { LodLevel } from '../zones/Zone';
 
 export { getZone, getCurrentZoneName } from '../zones';
 
@@ -16,7 +17,18 @@ export const getBlockAt = (x: number, y: number, z: number): BlockType => {
   if (y < height) return BlockType.STONE;
 
   const zone = getZone(x, z);
-  const block = zone.getBlock(x, y, z, height); 
+  const block = zone.getBlock(x, y, z, height, LodLevel.HIGH); 
+  if (block !== BlockType.AIR) return block;
+
+  return BlockType.AIR;
+};
+
+export const getBlockOptimized = (x: number, y: number, z: number, groundH: number, lod: LodLevel): BlockType => {
+  if (y <= WATER_LEVEL && y > groundH) return BlockType.WATER;
+  if (y < groundH) return BlockType.STONE;
+
+  const zone = getZone(x, z);
+  const block = zone.getBlock(x, y, z, groundH, lod);
   if (block !== BlockType.AIR) return block;
 
   return BlockType.AIR;

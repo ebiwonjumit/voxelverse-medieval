@@ -1,4 +1,4 @@
-import { Zone, AtmosphereSettings } from './Zone';
+import { Zone, AtmosphereSettings, LodLevel } from './Zone';
 import { BlockType, MILE } from '../constants';
 
 export class AmestrisZone extends Zone {
@@ -24,7 +24,7 @@ export class AmestrisZone extends Zone {
     return 6;
   }
 
-  getBlock(x: number, y: number, z: number, groundH: number): BlockType {
+  getBlock(x: number, y: number, z: number, groundH: number, lod: LodLevel): BlockType {
      const dx = x - this.centerX;
      const dz = z - this.centerZ;
      const streetW = 6;

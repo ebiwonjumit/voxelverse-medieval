@@ -1,4 +1,4 @@
-import { Zone, AtmosphereSettings } from './Zone';
+import { Zone, AtmosphereSettings, LodLevel } from './Zone';
 import { BlockType, MILE } from '../constants';
 import { noise } from '../utils/perlin';
 
@@ -25,7 +25,7 @@ export class TempestZone extends Zone {
     return 8; 
   }
 
-  getBlock(x: number, y: number, z: number, groundH: number): BlockType {
+  getBlock(x: number, y: number, z: number, groundH: number, lod: LodLevel): BlockType {
     const dx = x - this.centerX;
     const dz = z - this.centerZ;
     const dist = Math.sqrt(dx*dx + dz*dz);

@@ -28,6 +28,8 @@ export const COLORS = {
   GRASS_TEMPEST: '#2e7d32',  // Dark Jungle
   GRASS_AMESTRIS: '#8d8d8d', // Dead/Desaturated
   GRASS_BOSSE: '#cddc39',    // Golden/Lime
+  GRASS_FREMMEVILLA: '#81d4fa', // Cool Blue-Green
+  GRASS_MAGNOLIA: '#f48fb1',    // Pinkish Green
   
   // Architecture
   STONE_BRICK: '#475569', 
@@ -56,6 +58,14 @@ export const COLORS = {
   MARBLE: '#f5f5f5',        // Pure white stone
   GOLD_BLOCK: '#ffd700',    // Gold accents
 
+  // Knights & Magic
+  STEEL_BEAM: '#37474f',    // Dark Steel
+  HANGAR_WALL: '#546e7a',   // Reinforced Stone
+
+  // Fairy Tail
+  GUILD_WOOD: '#ffcc80',    // Light Orange Wood
+  MAGIC_STONE: '#f8bbd0',   // Pinkish Stone
+
   // New Trees
   BIRCH_LOG: '#d4c5a2',   
   BIRCH_LEAVES: '#66bb6a', 
@@ -65,11 +75,16 @@ export const COLORS = {
   FLOWER_YELLOW: '#FBC02D',
   FLOWER_RED: '#D32F2F',
   SMALL_ROCK: '#78909c',
-
-  // Missing Blocks
   WOOD_FENCE: '#8D6E63',
   FARMLAND: '#4E342E',
-  WHEAT: '#E4D00A'
+  WHEAT: '#E4D00A',
+
+  // Greensom Polish
+  LILY_PAD: '#2e7d32',
+  SUGARCANE: '#9ccc65',
+  TALL_GRASS: '#558b2f',
+  LANTERN: '#ffeb3b',
+  RED_APPLE: '#d32f2f'
 };
 
 export enum BlockType {
@@ -123,8 +138,23 @@ export enum BlockType {
   // Missing
   WOOD_FENCE = 34,
   FARMLAND = 35,
-  WHEAT = 36
+  WHEAT = 36,
+
+  // Knights & Magic
+  STEEL_BEAM = 37,
+  HANGAR_WALL = 38,
+
+  // Fairy Tail
+  GUILD_WOOD = 39,
+  MAGIC_STONE = 40,
+
+  // Greensom Polish
+  LILY_PAD = 41,
+  SUGARCANE = 42,
+  TALL_GRASS = 43,
+  LANTERN = 44,
+  RED_APPLE = 45
 }
 
-// Start at Greenson (South of SAO)
+// Start at Greensom (South of SAO)
 export const INITIAL_SPAWN = new Vector3(0, 15, 600);

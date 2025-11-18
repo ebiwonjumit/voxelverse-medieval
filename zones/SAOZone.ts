@@ -1,4 +1,4 @@
-import { Zone, AtmosphereSettings } from './Zone';
+import { Zone, AtmosphereSettings, LodLevel } from './Zone';
 import { BlockType } from '../constants';
 import { noise } from '../utils/perlin';
 
@@ -24,7 +24,7 @@ export class SAOZone extends Zone {
     return 6 + (dist - 100) * 0.1; 
   }
 
-  getBlock(x: number, y: number, z: number, groundH: number): BlockType {
+  getBlock(x: number, y: number, z: number, groundH: number, lod: LodLevel): BlockType {
     const dist = Math.sqrt(x*x + z*z);
     
     // 1. The Iron Great Dungeon (Center Tower)

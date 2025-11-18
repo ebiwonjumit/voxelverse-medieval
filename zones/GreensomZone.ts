@@ -1,5 +1,6 @@
-import { Zone, AtmosphereSettings } from './Zone';
+import { Zone, AtmosphereSettings, LodLevel } from './Zone';
 import { BlockType, WATER_LEVEL } from '../constants';
+import { noise } from '../utils/perlin';
 
 export class GreensomZone extends Zone {
   name = "Greensom Village";
@@ -40,46 +41,54 @@ export class GreensomZone extends Zone {
     return 7 + (dist - 50) * 0.1; // Gentle slope out
   }
 
-  getBlock(x: number, y: number, z: number, groundH: number): BlockType {
+  getBlock(x: number, y: number, z: number, groundH: number, lod: LodLevel): BlockType {
     const dx = x;
     const dz = z - this.centerZ;
     const streamDist = this.getStreamDistance(x, z);
 
-    // --- STREAM & BRIDGE ---
+    // --- STREAM & VEGETATION ---
     if (streamDist < 4.5) {
-        // Bridge Intersection with Main Road (dx < 3)
+        // Bridge Intersection
         if (Math.abs(dx) < 3) {
-            if (y === 7) return BlockType.WOOD_PLANK; // Bridge Deck
-            // Bridge supports
+            if (y === 7) return BlockType.WOOD_PLANK; 
             if (Math.abs(dx) === 2 && y < 7 && y >= groundH) return BlockType.WOOD_LOG;
-            if (y < 7 && y > groundH) return BlockType.AIR; // Tunnel under bridge
+            if (y < 7 && y > groundH) return BlockType.AIR; 
         }
 
-        // Water Logic
-        if (y <= 6 && y > groundH) return BlockType.WATER; // Water surface at y=6
-        if (y === groundH) return BlockType.SAND; // Sandy bed
+        // Water & Decor
+        if (y <= 6 && y > groundH) {
+            if (y === 6 && lod === LodLevel.HIGH && noise.hash(x, z) > 0.95) return BlockType.LILY_PAD;
+            return BlockType.WATER; 
+        }
+        if (y === groundH) {
+            if (streamDist > 3 && lod === LodLevel.HIGH && noise.hash(x, z) > 0.85) return BlockType.SUGARCANE;
+            return BlockType.SAND; 
+        }
         return BlockType.AIR;
     }
 
-    // --- MAIN ROAD ---
-    // Main Road (Dirt/Path) - Overrides Wilderness logic locally
+    // --- MAIN ROAD & STREET LIGHTS ---
     if (Math.abs(dx) < 3) {
       if (y === groundH) return BlockType.PATH;
+      
+      if (dz < 0 && Math.abs(dz) % 15 === 0 && Math.abs(dx) === 2 && lod === LodLevel.HIGH) {
+          if (y > groundH && y <= groundH + 3) return BlockType.WOOD_FENCE;
+          if (y === groundH + 4) return BlockType.LANTERN;
+      }
       return BlockType.AIR;
     }
 
     // --- VILLAGE CENTER ---
-    // Well at (0, 0) relative to center
     if (Math.abs(dx) < 4 && Math.abs(dz) < 4) {
-        if (y === groundH) return BlockType.COBBLESTONE; // Plaza floor
+        if (y === groundH) return BlockType.COBBLESTONE; 
         const wellDist = Math.sqrt(dx*dx + dz*dz);
         if (wellDist < 2.5) {
              if (y <= groundH + 1 && y > groundH - 2) {
-                 if (wellDist > 1.5) return BlockType.STONE_BRICK; // Well wall
-                 return BlockType.WATER; // Water inside well
+                 if (wellDist > 1.5) return BlockType.STONE_BRICK; 
+                 return BlockType.WATER; 
              }
              if (y > groundH + 1 && y < groundH + 4) {
-                 if (Math.abs(dx) > 1.5 && Math.abs(dx) < 2.5 && Math.abs(dz) < 0.5) return BlockType.WOOD_FENCE; // Supports
+                 if (Math.abs(dx) > 1.5 && Math.abs(dx) < 2.5 && Math.abs(dz) < 0.5) return BlockType.WOOD_FENCE; 
                  return BlockType.AIR;
              }
              if (y === groundH + 4) return BlockType.ROOF_RED;
@@ -88,69 +97,53 @@ export class GreensomZone extends Zone {
     }
 
     // --- HOUSES ---
-    // Refined Cottage Generation
     const houseLocations = [
       { x: -18, z: -18, rot: 0 },
       { x: 18, z: -18, rot: 0 },
       { x: -18, z: 18, rot: 0 },
       { x: 18, z: 18, rot: 0 },
-      // Extra houses
       { x: -25, z: 0, rot: 1 } 
     ];
 
     for (const loc of houseLocations) {
       const hx = dx - loc.x;
       const hz = dz - loc.z;
-      
-      // Check bounds for a 6x6 house (radius 3) plus porch
-      const w = 4; 
-      const d = 4;
+      const w = 4, d = 4;
       
       if (Math.abs(hx) <= w + 1 && Math.abs(hz) <= d + 1) {
          const ly = y - groundH;
+         if (ly === 0) return BlockType.COBBLESTONE; 
 
-         // Porch / Foundation
-         if (ly === 0) return BlockType.COBBLESTONE;
-
-         // House Structure
          if (Math.abs(hx) <= w && Math.abs(hz) <= d) {
-             // Walls
              if (ly > 0 && ly <= 4) {
-                 // Corners
-                 if (Math.abs(hx) === w && Math.abs(hz) === d) return BlockType.WOOD_LOG;
-                 // Walls
+                 if (Math.abs(hx) === w && Math.abs(hz) === d) return BlockType.WOOD_LOG; 
                  if (Math.abs(hx) === w || Math.abs(hz) === d) {
-                     // Windows
                      if (ly === 2 && (Math.abs(hx) === 2 || Math.abs(hz) === 2)) return BlockType.GLASS;
-                     // Door (Face center)
+                     if (ly === 1 && (Math.abs(hx) === 2 || Math.abs(hz) === 2) && lod === LodLevel.HIGH) return BlockType.DIRT; 
                      if (ly < 3 && Math.abs(hx) < 1 && ((loc.x < 0 && hx > 0) || (loc.x > 0 && hx < 0))) return BlockType.AIR;
-                     
                      return BlockType.WOOD_PLANK;
                  }
-                 return BlockType.AIR; // Interior
+                 return BlockType.AIR;
              }
-             // Roof
              if (ly > 4) {
+                 if (ly < 9 && Math.abs(hx - 2) < 1 && Math.abs(hz - 2) < 1) return BlockType.COBBLESTONE; // Chimney
                  const roofH = ly - 4;
                  if (Math.abs(hx) <= w - roofH + 1 && Math.abs(hz) <= d - roofH + 1) return BlockType.ROOF_RED;
              }
          }
          
-         // Porch Roof / Supports
          if (Math.abs(hz) === d + 1 && loc.z * hz < 0 && Math.abs(hx) <= w) {
-             if (ly === 1) return BlockType.WOOD_FENCE; // Railing
-             if (ly === 3) return BlockType.WOOD_FENCE; // Pillars
-             if (ly === 4) return BlockType.WOOD_PLANK; // Roof
+             if (ly === 1) return BlockType.WOOD_FENCE;
+             if (ly === 3) return BlockType.WOOD_FENCE;
+             if (ly === 4) return BlockType.WOOD_PLANK;
          }
       }
     }
     
-    // --- FARMING AREA ---
-    // West side of village (-40 to -20)
+    // --- FARMING ---
     if (dx < -25 && dx > -55 && Math.abs(dz) < 20) {
-        // Farm rows
         if (y === groundH) {
-            if (Math.abs(dx) % 3 === 0) return BlockType.WATER; // Irrigation
+            if (Math.abs(dx) % 3 === 0) return BlockType.WATER;
             return BlockType.FARMLAND;
         }
         if (y === groundH + 1) {
@@ -159,7 +152,47 @@ export class GreensomZone extends Zone {
         return BlockType.AIR;
     }
 
+    // --- TREES ---
+    // Scan for nearby tree centers
+    if (y > groundH) {
+        const treeGrid = 9;
+        const centerTreeX = Math.floor(x / treeGrid) * treeGrid;
+        const centerTreeZ = Math.floor(z / treeGrid) * treeGrid;
+        
+        // Avoid spawning inside houses/roads/river
+        const tdx = centerTreeX; 
+        const tdz = centerTreeZ - this.centerZ;
+        const tsDist = this.getStreamDistance(centerTreeX, centerTreeZ);
+        
+        if (tsDist > 6 && Math.abs(tdx) > 6 && Math.abs(tdz) > 6 && !(tdx < -20 && tdx > -60 && Math.abs(tdz) < 25)) {
+            const treeNoise = noise.noise2D(centerTreeX * 0.1, centerTreeZ * 0.1);
+            if (treeNoise > 0.5) {
+                const th = 5;
+                const ly = y - groundH;
+                const distToTrunk = Math.sqrt(Math.pow(x - centerTreeX, 2) + Math.pow(z - centerTreeZ, 2));
+                
+                if (ly <= th && distToTrunk < 0.5) return BlockType.WOOD_LOG;
+                if (ly >= 3 && ly <= th + 2) {
+                    const radius = ly > th ? 1.5 : 2.5;
+                    if (distToTrunk <= radius) {
+                        // Apples
+                        if (lod === LodLevel.HIGH && ly === 4 && (x + z) % 3 === 0) return BlockType.RED_APPLE;
+                        return BlockType.LEAVES;
+                    }
+                }
+            }
+        }
+    }
+
+    // --- GROUND VEGETATION ---
     if (y === groundH) return BlockType.GRASS;
+    if (y === groundH + 1 && lod === LodLevel.HIGH) {
+        const n = noise.hash(x, z);
+        if (n > 0.95) return BlockType.TALL_GRASS;
+        if (n > 0.92) return BlockType.FLOWER_YELLOW;
+        if (n > 0.90) return BlockType.SMALL_ROCK;
+    }
+
     return BlockType.AIR;
   }
 }
