@@ -6,16 +6,18 @@
 - [x] **Zone System Architecture:** Implement object-oriented zone management.
 - [x] **Anime Zones:**
     - [x] SAO (Start): Standard blue skies, medieval architecture.
+    - [x] Greenson (New Spawn): Clear skies, humble village, dirt roads.
     - [x] Tempest (East): Greenish magic fog, Japanese/Fantasy fusion.
     - [x] Amestris (West): Industrial smog, grey skies, factory bricks.
     - [x] Kingdom of Bosse (North): Bright heavenly gold/white atmosphere, castle architecture.
-- [x] **Dynamic Atmosphere:** Smoothly blend fog colors and lighting tints when walking between zones.
-- [ ] **Biome Blending:** Smooth transitions for ground blocks (e.g. grass color changes).
+- [x] **Dynamic Atmosphere:** Implement zone-specific `AtmosphereSettings` (fog color, sky tint) and ensure smooth transitions between them.
+- [x] **Biome Blending:** Smooth transitions for ground blocks and foliage colors based on zones.
+- [x] **Road Refinement:** Organic dithering edges and material transitions based on distance.
 
 ## Stage 2: Structural Complexity
 **Goal:** Cities should feel organic and lived-in, not just placed on a grid.
 
-- [ ] **Road Networks:** Implement "Random Walker" algorithms to create winding paths instead of grid streets.
+- [ ] **Road Networks (Advanced):** Implement "Random Walker" algorithms for winding paths within cities.
 - [ ] **Density Maps:** Use noise to determine city centers (tall buildings) vs outskirts (cottages).
 - [ ] **Interiors:** Logic to carve out hollow rooms inside procedural houses.
 - [ ] **Props:** Add fences, lamp posts, and market stalls.

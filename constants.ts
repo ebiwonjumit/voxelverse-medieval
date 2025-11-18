@@ -23,6 +23,12 @@ export const COLORS = {
   WATER: '#3b82f6',       
   SNOW: '#f8fafc',        
   
+  // Biome Variations (Grass)
+  GRASS_SAO: '#4ade80',      // Vibrant
+  GRASS_TEMPEST: '#2e7d32',  // Dark Jungle
+  GRASS_AMESTRIS: '#8d8d8d', // Dead/Desaturated
+  GRASS_BOSSE: '#cddc39',    // Golden/Lime
+  
   // Architecture
   STONE_BRICK: '#475569', 
   RED_BRICK: '#8D4E46',   
@@ -58,7 +64,12 @@ export const COLORS = {
   // Decorations
   FLOWER_YELLOW: '#FBC02D',
   FLOWER_RED: '#D32F2F',
-  SMALL_ROCK: '#78909c'
+  SMALL_ROCK: '#78909c',
+
+  // Missing Blocks
+  WOOD_FENCE: '#8D6E63',
+  FARMLAND: '#4E342E',
+  WHEAT: '#E4D00A'
 };
 
 export enum BlockType {
@@ -107,7 +118,13 @@ export enum BlockType {
   
   // Ranking of Kings
   MARBLE = 32,
-  GOLD_BLOCK = 33
+  GOLD_BLOCK = 33,
+
+  // Missing
+  WOOD_FENCE = 34,
+  FARMLAND = 35,
+  WHEAT = 36
 }
 
-export const INITIAL_SPAWN = new Vector3(0, 20, 10); // Offset slightly so we face the tower
+// Start at Greenson (South of SAO)
+export const INITIAL_SPAWN = new Vector3(0, 15, 600);
