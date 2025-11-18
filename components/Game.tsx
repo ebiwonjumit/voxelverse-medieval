@@ -93,7 +93,7 @@ const Game: React.FC = () => {
     <div className="relative w-full h-full">
       {/* UI Overlay */}
       <div className="absolute top-0 left-0 z-10 p-6 text-white pointer-events-none select-none">
-        <h1 className="text-4xl font-bold drop-shadow-md mb-2 font-serif">VoxelVerse: Anime Worlds</h1>
+        <h1 className="text-4xl font-bold drop-shadow-md mb-2 font-serif">VoxelVerse</h1>
         <div className="bg-black/60 p-4 rounded-lg backdrop-blur-sm text-sm space-y-2 max-w-xs border border-white/10">
           <div className="border-b border-white/20 pb-2">
             <p className="text-xs text-gray-400">CURRENT LOCATION</p>

@@ -1,18 +1,20 @@
+
 import { Zone, AtmosphereSettings, LodLevel} from './Zone';
 import { BlockType, WATER_LEVEL } from '../constants';
 import { noise } from '../utils/perlin';
 
 export class GreensomZone extends Zone {
   name = "Greensom Village";
-  centerZ = 300; // South of SAO, adjusted for halved world scale
+  centerZ = 300; // South of SAO
 
   isInside(x: number, z: number): boolean {
+    // Square boundary for simpler logic, matches chunk loading better than circle
     return Math.abs(x) < 70 && Math.abs(z - this.centerZ) < 70;
   }
 
   getAtmosphere(): AtmosphereSettings {
     return {
-      fogColor: '#87CEEB', // Clear Blue
+      fogColor: '#87CEEB', 
       skyTint: '#ffffff',
       fogDensity: 0.015,
       fixedTime: 0.25 // Always Noon
@@ -27,19 +29,40 @@ export class GreensomZone extends Zone {
   }
 
   getHeight(x: number, z: number, baseH: number): number {
-    const streamDist = this.getStreamDistance(x, z);
-    
-    // Carve River
-    if (streamDist < 3.5) return 3; // Deep riverbed
-    if (streamDist < 6) return 4 + (streamDist - 3.5); // River banks slope up
-
-    // Village Flattening with gentle hills
     const dx = x;
     const dz = z - this.centerZ;
     const dist = Math.sqrt(dx*dx + dz*dz);
     
-    if (dist < 50) return 7; // Central flat area
-    return 7 + (dist - 50) * 0.1; // Gentle slope out
+    // Calculate Village Height
+    let h = 7; // Default village flat level
+    
+    const streamDist = this.getStreamDistance(x, z);
+    if (streamDist < 3.5) h = 3; // Riverbed
+    else if (streamDist < 6) h = 4 + (streamDist - 3.5); // Banks
+    else if (Math.abs(dx) < 4) h = 7; // Force road to be flat
+    else if (dist > 50) h = 7 + (dist - 50) * 0.2; // Gentle slope out
+
+    // BLENDING LOGIC:
+    // As we get closer to the edge (70), blend 'h' with 'baseH' (Wilderness)
+    // We use the square distance to edge because isInside is square
+    const distToEdgeX = 70 - Math.abs(dx);
+    const distToEdgeZ = 70 - Math.abs(dz);
+    const distToEdge = Math.min(distToEdgeX, distToEdgeZ);
+
+    if (distToEdge < 20) {
+        // If strictly on the North Road (leading to SAO), blend to ROAD height (approx 6-7), not HILL height
+        if (Math.abs(x) < 5 && z < this.centerZ) {
+             const t = distToEdge / 20; 
+             // Wilderness road is approx height 6-7. BaseH is hills.
+             // We blend towards 7.
+             return h * t + 7 * (1 - t);
+        }
+
+        const t = distToEdge / 20; // 0 at edge, 1 at 20 blocks in
+        return h * t + baseH * (1 - t);
+    }
+
+    return h;
   }
 
   getBlock(x: number, y: number, z: number, groundH: number, lod: LodLevel): BlockType {
@@ -70,7 +93,11 @@ export class GreensomZone extends Zone {
 
     // --- MAIN ROAD & STREET LIGHTS ---
     if (Math.abs(dx) < 3) {
-      if (y === groundH) return BlockType.PATH;
+      if (y === groundH) {
+          // Main road to SAO should be Cobblestone to match the capital
+          if (dz < -30) return BlockType.COBBLESTONE; 
+          return BlockType.PATH;
+      }
       
       if (dz < 0 && Math.abs(dz) % 15 === 0 && Math.abs(dx) === 2 && lod === LodLevel.HIGH) {
           if (y > groundH && y <= groundH + 3) return BlockType.WOOD_FENCE;
@@ -154,13 +181,11 @@ export class GreensomZone extends Zone {
     }
 
     // --- TREES ---
-    // Scan for nearby tree centers
     if (y > groundH) {
         const treeGrid = 9;
         const centerTreeX = Math.floor(x / treeGrid) * treeGrid;
         const centerTreeZ = Math.floor(z / treeGrid) * treeGrid;
         
-        // Avoid spawning inside houses/roads/river
         const tdx = centerTreeX; 
         const tdz = centerTreeZ - this.centerZ;
         const tsDist = this.getStreamDistance(centerTreeX, centerTreeZ);
@@ -176,7 +201,6 @@ export class GreensomZone extends Zone {
                 if (ly >= 3 && ly <= th + 2) {
                     const radius = ly > th ? 1.5 : 2.5;
                     if (distToTrunk <= radius) {
-                        // Apples
                         if (lod === LodLevel.HIGH && ly === 4 && (x + z) % 3 === 0) return BlockType.RED_APPLE;
                         return BlockType.LEAVES;
                     }

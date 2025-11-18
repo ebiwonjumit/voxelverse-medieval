@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import { Vector3, Euler } from 'three';
@@ -50,10 +51,6 @@ const Player: React.FC<PlayerProps> = ({ setPlayerPos }) => {
         for (let y = minY; y <= maxY; y++) {
            if (isSolid(x, y, z)) {
              // Precise AABB overlap test
-             // Block AABB: [x-0.5, x+0.5] (if centered) 
-             // NOTE: Our World rendering puts block at (x,y,z). BoxGeometry default is 1x1x1 centered.
-             // So block bounds are [x-0.5, x+0.5].
-             
              const blockMinX = x - 0.5;
              const blockMaxX = x + 0.5;
              const blockMinY = y - 0.5;
@@ -82,9 +79,10 @@ const Player: React.FC<PlayerProps> = ({ setPlayerPos }) => {
   };
 
   useFrame((state, delta) => {
-    // 1. Input Handling
+    // 1. Input Handling (Using explicit vectors to fix direction issues)
     const inputVector = new Vector3(0, 0, 0);
     
+    // In Three.js: Forward is -Z, Right is +X
     if (moveForward) inputVector.z -= 1;
     if (moveBackward) inputVector.z += 1;
     if (moveLeft) inputVector.x -= 1;
@@ -154,13 +152,12 @@ const Player: React.FC<PlayerProps> = ({ setPlayerPos }) => {
 
         if (falling) {
             isJumping.current = false;
-            // Optional: Snap to surface could be added here for extra smoothness
         }
     }
     
-    // Safety Floor (Void protection)
+    // Safety Floor (Void protection) - Fixes infinite falling
     if (position.current.y < -20) {
-        position.current.copy(INITIAL_SPAWN);
+        position.current.y = 30; // Teleport back up to safe height
         velocity.current.set(0,0,0);
     }
 
