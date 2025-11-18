@@ -3,13 +3,18 @@
 ## Stage 1: Environmental Distinctiveness (Current Focus)
 **Goal:** The player should know where they are just by looking at the sky, lighting, and terrain colors, not just the block types.
 
-- [x] **Zone System Architecture:** Implement object-oriented zone management.
+- [x] **Zone System Architecture:**
+    - [x] Implement object-oriented zone management.
+    - [x] **Refactor:** Modular file structure (one file per zone).
+    - [x] **Optimization:** Column-based generation and Level of Detail (LOD) culling.
 - [x] **Anime Zones:**
     - [x] SAO (Start): Standard blue skies, medieval architecture.
-    - [x] Greenson (New Spawn): Clear skies, humble village, dirt roads.
+    - [x] Greensom (New Spawn): Clear skies, humble village, dirt roads.
     - [x] Tempest (East): Greenish magic fog, Japanese/Fantasy fusion.
     - [x] Amestris (West): Industrial smog, grey skies, factory bricks.
     - [x] Kingdom of Bosse (North): Bright heavenly gold/white atmosphere, castle architecture.
+    - [x] Kingdom of Fremmevilla (NE): Cool blue tech atmosphere, massive steel hangars (Knights & Magic).
+    - [x] Magnolia Town (SW): Pink magic vibe, European guild architecture (Fairy Tail).
 - [x] **Dynamic Atmosphere:** Implement zone-specific `AtmosphereSettings` (fog color, sky tint) and ensure smooth transitions between them.
 - [x] **Biome Blending:** Smooth transitions for ground blocks and foliage colors based on zones.
 - [x] **Road Refinement:** Organic dithering edges and material transitions based on distance.

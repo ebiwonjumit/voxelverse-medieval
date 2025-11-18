@@ -5,7 +5,7 @@ import { Vector3, Color, DirectionalLight, Fog } from 'three';
 import World from './World';
 import Player from './Player';
 import { INITIAL_SPAWN, MILE } from '../constants';
-import { getCurrentZoneName, getZone } from '../utils/terrain';
+import { getCurrentZoneName, getZone } from '../utils/terrain'; // Re-exported from terrain
 
 const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number }) => {
   const { scene } = useThree();
@@ -123,8 +123,10 @@ const Game: React.FC = () => {
     const distTempest = ((3 * MILE - x) / MILE).toFixed(1); // East
     const distAmestris = ((x - (-3 * MILE)) / MILE).toFixed(1); // West
     const distBosse = ((z - (-3 * MILE)) / MILE).toFixed(1); // North (Negative Z)
+    const distFremme = (Math.sqrt(Math.pow(x - 3200, 2) + Math.pow(z - (-3200), 2)) / MILE).toFixed(1);
+    const distMagnolia = (Math.sqrt(Math.pow(x - (-3200), 2) + Math.pow(z - 3200, 2)) / MILE).toFixed(1);
 
-    return { x, z, currentZone, distTempest, distAmestris, distBosse };
+    return { x, z, currentZone, distTempest, distAmestris, distBosse, distFremme, distMagnolia };
   }
 
   const hud = getHUDInfo();
@@ -152,6 +154,14 @@ const Game: React.FC = () => {
              <p className="text-yellow-200 flex justify-between">
               <span>Bosse (North)</span> 
               <span className="text-white font-mono">{hud.distBosse} mi</span>
+            </p>
+             <p className="text-blue-200 flex justify-between">
+              <span>Fremmevilla (NE)</span> 
+              <span className="text-white font-mono">{hud.distFremme} mi</span>
+            </p>
+             <p className="text-pink-200 flex justify-between">
+              <span>Magnolia (SW)</span> 
+              <span className="text-white font-mono">{hud.distMagnolia} mi</span>
             </p>
           </div>
 
