@@ -116,6 +116,9 @@ const Chunk: React.FC<{ chunkX: number; chunkZ: number }> = React.memo(({ chunkX
         case BlockType.BASALT: colorHex = COLORS.BASALT; break;
         case BlockType.SLIME_BLOCK: colorHex = COLORS.SLIME_BLOCK; break;
         case BlockType.MAGIC_CRYSTAL: colorHex = COLORS.MAGIC_CRYSTAL; break;
+        
+        case BlockType.MARBLE: colorHex = COLORS.MARBLE; break;
+        case BlockType.GOLD_BLOCK: colorHex = COLORS.GOLD_BLOCK; break;
 
         case BlockType.FLOWER_YELLOW: colorHex = COLORS.FLOWER_YELLOW; break;
         case BlockType.FLOWER_RED: colorHex = COLORS.FLOWER_RED; break;

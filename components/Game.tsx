@@ -1,21 +1,24 @@
 import React, { useState, Suspense, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Sky, Stars } from '@react-three/drei';
-import { Vector3, Color, DirectionalLight } from 'three';
+import { Vector3, Color, DirectionalLight, Fog } from 'three';
 import World from './World';
 import Player from './Player';
 import { INITIAL_SPAWN, MILE } from '../constants';
-import { getCurrentZoneName } from '../utils/terrain';
+import { getCurrentZoneName, getZone } from '../utils/terrain';
 
-const DayNightCycle = () => {
+const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number }) => {
   const { scene } = useThree();
   const dirLight = useRef<DirectionalLight>(null);
   const ambientLight = useRef<any>(null);
   const [sunPosition, setSunPosition] = useState(new Vector3(100, 20, 100));
+  
+  // Refs for smooth transition
+  const currentFogColor = useRef(new Color('#87CEEB'));
 
   useFrame(({ clock, camera }) => {
     const time = clock.getElapsedTime();
-    const dayDuration = 120; // Slower day
+    const dayDuration = 120; 
     const cycle = (time % dayDuration) / dayDuration;
     const angle = cycle * Math.PI * 2;
     
@@ -26,6 +29,11 @@ const DayNightCycle = () => {
     
     const currentSunPos = new Vector3(sunX, sunY, sunZ);
     setSunPosition(currentSunPos);
+
+    // Get Target Atmosphere based on Zone
+    const zone = getZone(playerX, playerZ);
+    const atmosphere = zone.getAtmosphere();
+    const targetFogHex = atmosphere.fogColor;
 
     if (dirLight.current && ambientLight.current) {
       dirLight.current.position.copy(camera.position).add(currentSunPos);
@@ -61,19 +69,27 @@ const DayNightCycle = () => {
     }
 
     if (scene.fog) {
-      const fog = scene.fog as any;
+      const fog = scene.fog as Fog;
       const heightFactor = sunY / radius;
 
-      const dayColor = new Color('#87CEEB');
+      // Base Day/Night colors
+      const dayColor = new Color(targetFogHex); // Dynamic Zone Color
       const sunsetColor = new Color('#fd5e53');
       const nightColor = new Color('#0b1026');
 
+      // Interpolate current fog color towards the target Zone color slowly
+      currentFogColor.current.lerp(dayColor, 0.01);
+
+      // Apply time of day logic to the already interpolated zone color
+      const finalColor = currentFogColor.current.clone();
+
       if (heightFactor > 0.15) {
-        fog.color.lerp(dayColor, 0.05);
+         // Use the zone color directly
+         fog.color.lerp(finalColor, 0.05);
       } else if (heightFactor > -0.15) {
-        fog.color.lerp(sunsetColor, 0.05);
+         fog.color.lerp(sunsetColor, 0.05);
       } else {
-        fog.color.lerp(nightColor, 0.05);
+         fog.color.lerp(nightColor, 0.05);
       }
     }
   });
@@ -106,8 +122,9 @@ const Game: React.FC = () => {
     
     const distTempest = ((3 * MILE - x) / MILE).toFixed(1); // East
     const distAmestris = ((x - (-3 * MILE)) / MILE).toFixed(1); // West
+    const distBosse = ((z - (-3 * MILE)) / MILE).toFixed(1); // North (Negative Z)
 
-    return { x, z, currentZone, distTempest, distAmestris };
+    return { x, z, currentZone, distTempest, distAmestris, distBosse };
   }
 
   const hud = getHUDInfo();
@@ -132,6 +149,10 @@ const Game: React.FC = () => {
               <span>Amestris (West)</span> 
               <span className="text-white font-mono">{hud.distAmestris} mi</span>
             </p>
+             <p className="text-yellow-200 flex justify-between">
+              <span>Bosse (North)</span> 
+              <span className="text-white font-mono">{hud.distBosse} mi</span>
+            </p>
           </div>
 
           <div className="pt-2 mt-2 border-t border-white/20 text-xs text-gray-400 font-mono">
@@ -146,7 +167,7 @@ const Game: React.FC = () => {
       </div>
 
       <Canvas shadows camera={{ fov: 75 }}>
-        <DayNightCycle />
+        <DayNightCycle playerX={playerPos.x} playerZ={playerPos.z} />
         <fog attach="fog" args={['#87CEEB', 20, 80]} /> 
 
         <Suspense fallback={null}>

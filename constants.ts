@@ -45,6 +45,10 @@ export const COLORS = {
   BASALT: '#424242',        // Dark Grey column
   SLIME_BLOCK: '#00e676',   // Translucent Green
   MAGIC_CRYSTAL: '#d500f9', // Glowing Purple
+  
+  // Ranking of Kings
+  MARBLE: '#f5f5f5',        // Pure white stone
+  GOLD_BLOCK: '#ffd700',    // Gold accents
 
   // New Trees
   BIRCH_LOG: '#d4c5a2',   
@@ -99,7 +103,11 @@ export enum BlockType {
   OBSIDIAN = 28,
   BASALT = 29,
   SLIME_BLOCK = 30,
-  MAGIC_CRYSTAL = 31
+  MAGIC_CRYSTAL = 31,
+  
+  // Ranking of Kings
+  MARBLE = 32,
+  GOLD_BLOCK = 33
 }
 
 export const INITIAL_SPAWN = new Vector3(0, 20, 10); // Offset slightly so we face the tower
