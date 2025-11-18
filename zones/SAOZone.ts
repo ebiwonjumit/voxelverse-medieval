@@ -39,16 +39,41 @@ export class SAOZone extends Zone {
         return BlockType.AIR;
     }
 
-    // 2. Town Plazas
+    // 2. Town Wall & Gate (Radius 85)
+    const wallRadius = 85;
+    if (dist > wallRadius - 2 && dist < wallRadius + 2) {
+        // Gate Opening at South (z > 0, x near 0)
+        if (z > 0 && Math.abs(x) < 6) {
+            // Archway
+            if (y === groundH) return BlockType.COBBLESTONE;
+            if (y > groundH + 6 && y <= groundH + 8) return BlockType.STONE_BRICK; // Arch top
+            if (y === groundH + 6 && (Math.abs(x) === 4 || Math.abs(x) === 5) && lod === LodLevel.HIGH) return BlockType.LANTERN;
+            return BlockType.AIR;
+        }
+
+        if (y > groundH && y < groundH + 10) return BlockType.STONE_BRICK;
+        if (y === groundH + 10 && (Math.abs(x) + Math.abs(z)) % 2 === 0) return BlockType.STONE_BRICK; // Battlements
+        
+        // Gate Towers
+        if (z > 0 && Math.abs(x) > 6 && Math.abs(x) < 12 && dist > wallRadius - 1 && dist < wallRadius + 1) {
+            if (y >= groundH + 10 && y < groundH + 15) return BlockType.STONE_BRICK;
+        }
+    }
+
+    // 3. Town Plazas
     if (dist < 40) {
         if (y === groundH) return BlockType.COBBLESTONE;
         return BlockType.AIR;
     }
     
-    // 3. Houses
-    if (y > groundH) return this.getMedievalHouse(x, y, z, groundH);
+    // 4. Houses
+    if (y > groundH && dist < wallRadius - 5) return this.getMedievalHouse(x, y, z, groundH);
     
-    if (y === groundH) return BlockType.STONE_BRICK;
+    if (y === groundH) {
+        if (dist < wallRadius) return BlockType.STONE_BRICK; // Paved town
+        return BlockType.GRASS;
+    }
+    
     return BlockType.AIR;
   }
 

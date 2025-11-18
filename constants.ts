@@ -5,7 +5,7 @@ export const RENDER_DISTANCE = 4;
 export const BLOCK_SIZE = 1;
 export const WORLD_HEIGHT = 60; // Increased for towers
 export const WATER_LEVEL = 3;
-export const MILE = 1600; 
+export const MILE = 500; 
 
 // Physics
 export const GRAVITY = 30;
@@ -157,4 +157,4 @@ export enum BlockType {
 }
 
 // Start at Greensom (South of SAO)
-export const INITIAL_SPAWN = new Vector3(0, 15, 600);
+export const INITIAL_SPAWN = new Vector3(0, 15, 300);

@@ -9,6 +9,7 @@ export interface AtmosphereSettings {
   fogColor: string;
   skyTint: string;
   fogDensity: number;
+  fixedTime?: number;
 }
 
 export abstract class Zone {

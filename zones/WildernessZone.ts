@@ -73,14 +73,14 @@ export class WildernessZone extends Zone {
       const baseWidth = 3.5;
       const w = baseWidth + roadNoise;
 
-      // East/West Highway
-      if (absZ < w && x > -4800 && x < 4800) return { isRoad: true };
+      // East/West Highway (reduced from 4800 to 2400)
+      if (absZ < w && x > -2400 && x < 2400) return { isRoad: true };
       
-      // South Road
-      if (absX < w && z > 0 && z < 13000) return { isRoad: true };
+      // South Road (reduced from 13000 to 6500)
+      if (absX < w && z > 0 && z < 6500) return { isRoad: true };
       
-      // North Road (To Ranking of Kings)
-      if (absX < w && z > -6000 && z < 0) return { isRoad: true };
+      // North Road (reduced from 6000 to 3000)
+      if (absX < w && z > -3000 && z < 0) return { isRoad: true };
       
       return { isRoad: false };
   }

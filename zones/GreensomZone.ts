@@ -1,10 +1,10 @@
-import { Zone, AtmosphereSettings, LodLevel } from './Zone';
+import { Zone, AtmosphereSettings, LodLevel} from './Zone';
 import { BlockType, WATER_LEVEL } from '../constants';
 import { noise } from '../utils/perlin';
 
 export class GreensomZone extends Zone {
   name = "Greensom Village";
-  centerZ = 600; // South of SAO
+  centerZ = 300; // South of SAO, adjusted for halved world scale
 
   isInside(x: number, z: number): boolean {
     return Math.abs(x) < 70 && Math.abs(z - this.centerZ) < 70;
@@ -14,7 +14,8 @@ export class GreensomZone extends Zone {
     return {
       fogColor: '#87CEEB', // Clear Blue
       skyTint: '#ffffff',
-      fogDensity: 0.015
+      fogDensity: 0.015,
+      fixedTime: 0.25 // Always Noon
     };
   }
 

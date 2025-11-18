@@ -3,8 +3,8 @@ import { BlockType } from '../constants';
 
 export class FremmevillaZone extends Zone {
   name = "Kingdom of Fremmevilla";
-  centerX = 3200; 
-  centerZ = -3200;
+  centerX = 1600; // Was 3200
+  centerZ = -1600; // Was -3200
 
   isInside(x: number, z: number): boolean {
     const dx = x - this.centerX;

@@ -52,7 +52,7 @@ waterMaterial.onBeforeCompile = (shader) => {
       float wz = instanceMatrix[3][2];
       
       // Combine sine waves for organic movement
-      float wave = sin(wx * 0.5 + uTime) * 0.08 + cos(wz * 0.4 + uTime * 1.2) * 0.06;
+      float wave = sin(wx * 0.5 + uTime) * 0.2 + cos(wz * 0.4 + uTime * 1.2) * 0.15;
       
       // Apply to Y axis
       transformed.y += wave;
@@ -79,7 +79,8 @@ const Chunk: React.FC<{ chunkX: number; chunkZ: number; lodLevel: LodLevel }> = 
         
         const groundH = getTerrainHeight(worldX, worldZ);
         
-        const minScan = Math.max(-5, groundH - 5); 
+        // FIX: Scan deeper to prevent seeing void/skybox under the world
+        const minScan = -30; 
         const maxScan = groundH + 65; 
 
         for (let y = minScan; y < maxScan; y++) {
@@ -151,8 +152,8 @@ const Chunk: React.FC<{ chunkX: number; chunkZ: number; lodLevel: LodLevel }> = 
             const dTempest = Math.sqrt(Math.pow(instance.x - 3 * MILE, 2) + Math.pow(instance.z, 2));
             const dAmestris = Math.sqrt(Math.pow(instance.x - (-3 * MILE), 2) + Math.pow(instance.z, 2));
             const dBosse = Math.sqrt(Math.pow(instance.x, 2) + Math.pow(instance.z - (-3 * MILE), 2));
-            const dFremme = Math.sqrt(Math.pow(instance.x - 3200, 2) + Math.pow(instance.z - (-3200), 2));
-            const dMagnolia = Math.sqrt(Math.pow(instance.x - (-3200), 2) + Math.pow(instance.z - 3200, 2));
+            const dFremme = Math.sqrt(Math.pow(instance.x - 1600, 2) + Math.pow(instance.z - (-1600), 2));
+            const dMagnolia = Math.sqrt(Math.pow(instance.x - (-1600), 2) + Math.pow(instance.z - 1600, 2));
 
             // Inverse distance weighting
             const eps = 1;
