@@ -1,15 +1,16 @@
 import { Vector3 } from 'three';
 
 export const CHUNK_SIZE = 32;
-export const RENDER_DISTANCE = 2; // chunks radius
+export const RENDER_DISTANCE = 4; // Increased for better visibility
 export const BLOCK_SIZE = 1;
-export const WORLD_HEIGHT = 40;
+export const WORLD_HEIGHT = 50; // Increased to handle mountain height
 export const WATER_LEVEL = 3;
+export const MILE = 1600; // Gameplay scale for a mile
 
 // Physics
 export const GRAVITY = 30;
 export const JUMP_FORCE = 10;
-export const MOVE_SPEED = 8;
+export const MOVE_SPEED = 12; // Slightly faster for open world travel
 export const PLAYER_HEIGHT = 1.8;
 export const PLAYER_RADIUS = 0.4;
 

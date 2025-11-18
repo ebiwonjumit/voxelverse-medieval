@@ -58,9 +58,6 @@ const DayNightCycle = () => {
       }
 
       // Ambient Light logic
-      // Sunrise/Sunset: Warmer, dimmer
-      // Noon: Bright, neutral
-      // Night: Dark, cool blue
       if (isDay) {
          if (heightFactor < 0.2) {
              // Transition from Night to Sunrise
@@ -117,22 +114,38 @@ const DayNightCycle = () => {
 const Game: React.FC = () => {
   const [playerPos, setPlayerPos] = useState<Vector3>(INITIAL_SPAWN);
 
+  // Simple distance display calculation
+  const getDistanceText = () => {
+    const x = Math.round(playerPos.x);
+    const z = Math.round(playerPos.z);
+    const MILE = 1600;
+    
+    // Roughly
+    const milesEast = (x / MILE).toFixed(1);
+    const milesSouth = (z / MILE).toFixed(1);
+    const milesWest = (Math.abs(x) / MILE).toFixed(1);
+
+    return { x, z, milesEast, milesSouth, milesWest };
+  }
+
+  const coords = getDistanceText();
+
   return (
     <div className="relative w-full h-full">
       {/* UI Overlay */}
       <div className="absolute top-0 left-0 z-10 p-6 text-white pointer-events-none select-none">
         <h1 className="text-4xl font-bold drop-shadow-md mb-2 font-serif">VoxelVerse</h1>
         <div className="bg-black/50 p-4 rounded-lg backdrop-blur-sm text-sm space-y-1 max-w-xs">
-          <h2 className="font-bold text-yellow-400 mb-2 border-b border-white/20 pb-1">Medieval Origins</h2>
+          <h2 className="font-bold text-yellow-400 mb-2 border-b border-white/20 pb-1">Medieval Origins Map</h2>
           <p><span className="font-bold text-green-300">W A S D</span> to Walk</p>
           <p><span className="font-bold text-green-300">SPACE</span> to Jump</p>
-          <p><span className="font-bold text-green-300">MOUSE</span> to Look</p>
-          <p className="text-gray-300 text-xs italic pt-2">Click anywhere to capture mouse</p>
-          <div className="pt-2 mt-2 border-t border-white/20 grid grid-cols-2 gap-2 text-xs">
-            <span className="text-blue-300">West: Coast</span>
-            <span className="text-gray-300">East: Mountains</span>
-            <span className="text-green-300">South: Forest</span>
-            <span className="text-yellow-300">Center: Village</span>
+          <div className="pt-2 mt-2 border-t border-white/20 text-xs space-y-1">
+            <p className="text-blue-300">Coast (West): <span className="text-white">3 Miles</span></p>
+            <p className="text-gray-300">Mountains (East): <span className="text-white">20 Miles</span></p>
+            <p className="text-green-300">Forest (South): <span className="text-white">8 Miles</span></p>
+            <div className="mt-2 font-mono text-yellow-200 opacity-80">
+               Pos: {coords.x}, {coords.z}
+            </div>
           </div>
         </div>
       </div>
@@ -146,7 +159,7 @@ const Game: React.FC = () => {
       {/* 3D Scene */}
       <Canvas shadows camera={{ fov: 75 }}>
         <DayNightCycle />
-        <fog attach="fog" args={['#87CEEB', 10, 60]} /> 
+        <fog attach="fog" args={['#87CEEB', 20, 80]} /> 
 
         <Suspense fallback={null}>
           <World playerPosition={playerPos} />
