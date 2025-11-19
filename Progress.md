@@ -16,6 +16,10 @@
     - [x] Procedural noise textures for all blocks.
     - [x] Edge darkening (Ambient Occlusion simulation).
     - [x] "Grass Top / Dirt Side" shader logic.
+- [x] **Engine Improvements:** 
+    - [x] Fixed structure culling in landmark zones.
+    - [x] **Lighting Fix:** Resolved broken ambient lighting by fixing DirectionalLight target scene graph issues.
+    - [x] **Shader Fix:** Stabilized custom material compilation for robust cross-platform rendering.
 
 ## Stage 2: Zone Detailing & Visual Polish (Current Focus)
 **Goal:** Approach each zone sequentially to define its identity with specific props, architecture, and organic details.
@@ -31,6 +35,7 @@
 - [ ] **Walls:** Gate mechanisms, battlements, flags.
 
 ### Zone 3: Federation of Tempest
+- [x] **Landmarks:** Fixed bounding boxes for Coliseum and Town Hall to prevent rendering voids.
 - [ ] **Roads:** Paved stone texture with custom patterns.
 - [ ] **Architecture:** Japanese-style curved roofs, sliding doors, tatami mats.
 - [ ] **Lighting:** Magic ore lanterns (glowing blue/green).

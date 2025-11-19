@@ -56,34 +56,39 @@ export class TempestZone extends Zone {
 
     // 1. The Coliseum (East side, on main avenue)
     // Location: x > 150, z near 0 (Scaled up position)
-    if (dx > 150 && dx < 250 && Math.abs(dz) < 50) {
+    // Widened bounding box significantly to prevent any edge clipping
+    if (dx > 145 && dx < 255 && Math.abs(dz) < 65) {
         const cx = 200; 
         const cz = 0;
         const cDist = Math.sqrt(Math.pow(dx - cx, 2) + Math.pow(dz - cz, 2));
         const ly = y - groundH;
 
-        // Arena Floor
-        if (ly === 0) {
-            if (cDist < 15) return BlockType.OBSIDIAN; 
-            return BlockType.SAND;
+        // Strictly define the structure area so we don't void the corners of the bounding box
+        if (cDist <= 48) {
+            // Arena Floor
+            if (ly === 0) {
+                if (cDist < 15) return BlockType.OBSIDIAN; 
+                return BlockType.SAND;
+            }
+            
+            // Walls / Stands
+            if (cDist > 30 && cDist < 45) {
+                const slopeH = (cDist - 30) * 1.2;
+                if (ly <= slopeH) return BlockType.STONE_BRICK;
+            }
+            
+            // Outer Wall
+            if (cDist >= 45) {
+                if (ly < 20) return BlockType.STONE_BRICK;
+                if (ly === 20 && (Math.abs(dx) % 2 === 0)) return BlockType.STONE_BRICK; 
+            }
+            return BlockType.AIR; // Clear interior air
         }
-        
-        // Walls / Stands
-        if (cDist > 30 && cDist < 45) {
-            const slopeH = (cDist - 30) * 1.2;
-            if (ly <= slopeH) return BlockType.STONE_BRICK;
-        }
-        
-        // Outer Wall
-        if (cDist >= 45 && cDist <= 48) {
-            if (ly < 20) return BlockType.STONE_BRICK;
-            if (ly === 20 && (Math.abs(dx) % 2 === 0)) return BlockType.STONE_BRICK; 
-        }
-        return BlockType.AIR;
+        // If outside cDist but inside bounding box, fall through to allow roads/grass
     }
 
     // 2. Town Hall (North side)
-    if (Math.abs(dx) < 40 && dz < -80 && dz > -140) {
+    if (Math.abs(dx) < 45 && dz < -75 && dz > -145) {
         const ly = y - groundH;
         // Main Building
         if (ly < 25) {
@@ -126,7 +131,7 @@ export class TempestZone extends Zone {
     // --- HOUSING GRID ---
     if (y > groundH && !isRoad && dist > 50 && dist < 650) {
         // Don't build inside landmarks
-        if (dx > 140 && dx < 260 && Math.abs(dz) < 60) return BlockType.AIR; // Near Coliseum
+        if (dx > 140 && dx < 260 && Math.abs(dz) < 70) return BlockType.AIR; // Near Coliseum
         if (Math.abs(dx) < 50 && dz < -70 && dz > -150) return BlockType.AIR; // Near Town Hall
 
         return this.getPlannedHouse(dx, dz, y, groundH, lod);

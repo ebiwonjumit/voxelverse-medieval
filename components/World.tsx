@@ -66,7 +66,13 @@ solidMaterial.onBeforeCompile = (shader) => {
     '#include <begin_vertex>',
     `
     #include <begin_vertex>
-    vWorldNormal = normalize( mat3( instanceMatrix ) * normal );
+    // Calculate world normal for side-detection in fragment shader
+    #ifdef USE_INSTANCING
+      // For instanced meshes, transform normal properly
+      vWorldNormal = normalize( normalMatrix * normal );
+    #else
+      vWorldNormal = normalize( normalMatrix * normal );
+    #endif
     `
   );
 
@@ -90,20 +96,17 @@ solidMaterial.onBeforeCompile = (shader) => {
     diffuseColor.rgb *= edgeFactor;
 
     // Grass Side Logic
-    // Check if the block is effectively "Green" (Grass/Leaves) and we are looking at the side
     bool isGreen = diffuseColor.g > diffuseColor.r * 1.2 && diffuseColor.g > diffuseColor.b * 1.2;
     bool isSide = abs(vWorldNormal.y) < 0.5;
 
     if (isGreen && isSide) {
         vec3 dirtColor = vec3(0.36, 0.25, 0.22);
         
-        // Retrieve noise from map to keep texture detail on the dirt side
         vec3 noiseVal = vec3(1.0);
         #ifdef USE_MAP
-          noiseVal = texture2D( map, vMapUv ).rgb;
+          noiseVal = texture2D( map, localUv ).rgb;
         #endif
 
-        // Apply dirt color + edge darkening + original noise texture
         diffuseColor.rgb = dirtColor * edgeFactor * (noiseVal + 0.2);
     }
     `

@@ -1,7 +1,7 @@
-import React, { useState, Suspense, useRef, useEffect } from 'react';
+import React, { useState, Suspense, useRef, useEffect, useMemo } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Sky, Stats } from '@react-three/drei';
-import { Vector3, Color, DirectionalLight, Fog, Mesh } from 'three';
+import { Vector3, Color, DirectionalLight, Fog, Mesh, Object3D } from 'three';
 import World from './World';
 import Player from './Player';
 import { INITIAL_SPAWN, MILE } from '../constants';
@@ -12,6 +12,19 @@ const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number 
   const dirLight = useRef<DirectionalLight>(null);
   const ambientLight = useRef<any>(null);
   const skyRef = useRef<Mesh>(null);
+  
+  // Create a persistent target object for the directional light
+  const lightTarget = useMemo(() => {
+    const obj = new Object3D();
+    scene.add(obj); // Critical: Add target to scene for updates to work
+    return obj;
+  }, [scene]);
+
+  useEffect(() => {
+    return () => {
+      scene.remove(lightTarget);
+    };
+  }, [scene, lightTarget]);
   
   const [sunPosition] = useState(new Vector3(50, 100, 50));
   const currentFogColor = useRef(new Color('#87CEEB'));
@@ -29,13 +42,15 @@ const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number 
 
     if (dirLight.current && ambientLight.current) {
       dirLight.current.position.copy(camera.position).add(relativeSunPos);
-      dirLight.current.target.position.copy(camera.position);
-      dirLight.current.target.updateMatrixWorld();
+      
+      // Update the target position to follow camera but stay grounded relative to light direction
+      lightTarget.position.copy(camera.position);
+      lightTarget.updateMatrixWorld();
 
       dirLight.current.intensity = 1.5;
       dirLight.current.color.setHSL(0.1, 1, 0.95);
 
-      ambientLight.current.intensity = 0.5;
+      ambientLight.current.intensity = 0.6; // Increased base brightness
       ambientLight.current.color.setHSL(0.6, 0.1, 0.6);
     }
 
@@ -53,6 +68,7 @@ const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number 
       <ambientLight ref={ambientLight} intensity={0.5} />
       <directionalLight 
         ref={dirLight}
+        target={lightTarget}
         castShadow 
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.0005}
