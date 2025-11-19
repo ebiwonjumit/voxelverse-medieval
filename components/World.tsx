@@ -78,21 +78,33 @@ solidMaterial.onBeforeCompile = (shader) => {
     `
     #include <map_fragment>
     
+    vec2 localUv = vMapUv; 
+    
+    // Edge Darkening (Fake AO)
     float edgeWidth = 0.05;
-    float edgeX = step(edgeWidth, vMapUv.x) * step(vMapUv.x, 1.0 - edgeWidth);
-    float edgeY = step(edgeWidth, vMapUv.y) * step(vMapUv.y, 1.0 - edgeWidth);
+    float edgeX = step(edgeWidth, localUv.x) * step(localUv.x, 1.0 - edgeWidth);
+    float edgeY = step(edgeWidth, localUv.y) * step(localUv.y, 1.0 - edgeWidth);
     float centerMask = edgeX * edgeY;
     float edgeFactor = 0.8 + (0.2 * centerMask);
+    
     diffuseColor.rgb *= edgeFactor;
 
+    // Grass Side Logic
+    // Check if the block is effectively "Green" (Grass/Leaves) and we are looking at the side
     bool isGreen = diffuseColor.g > diffuseColor.r * 1.2 && diffuseColor.g > diffuseColor.b * 1.2;
     bool isSide = abs(vWorldNormal.y) < 0.5;
 
     if (isGreen && isSide) {
         vec3 dirtColor = vec3(0.36, 0.25, 0.22);
-        float luminance = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-        diffuseColor.rgb = dirtColor * edgeFactor;
-        diffuseColor.rgb *= (texelColor.rgb + 0.2);
+        
+        // Retrieve noise from map to keep texture detail on the dirt side
+        vec3 noiseVal = vec3(1.0);
+        #ifdef USE_MAP
+          noiseVal = texture2D( map, vMapUv ).rgb;
+        #endif
+
+        // Apply dirt color + edge darkening + original noise texture
+        diffuseColor.rgb = dirtColor * edgeFactor * (noiseVal + 0.2);
     }
     `
   );
