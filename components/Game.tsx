@@ -1,7 +1,8 @@
+
 import React, { useState, Suspense, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Sky } from '@react-three/drei';
-import { Vector3, Color, DirectionalLight, Fog } from 'three';
+import { Vector3, Color, DirectionalLight, Fog, Mesh } from 'three';
 import World from './World';
 import Player from './Player';
 import { INITIAL_SPAWN, MILE } from '../constants';
@@ -11,6 +12,7 @@ const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number 
   const { scene } = useThree();
   const dirLight = useRef<DirectionalLight>(null);
   const ambientLight = useRef<any>(null);
+  const skyRef = useRef<Mesh>(null);
   
   // Fixed midday sun position
   const [sunPosition] = useState(new Vector3(50, 100, 50));
@@ -18,6 +20,11 @@ const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number 
   const currentFogColor = useRef(new Color('#87CEEB'));
 
   useFrame(({ camera }) => {
+    // Move Sky with camera to simulate infinite world
+    if (skyRef.current) {
+        skyRef.current.position.copy(camera.position);
+    }
+
     // Constant sun position relative to camera for infinite world illusion
     const relativeSunPos = sunPosition.clone();
 
@@ -54,7 +61,8 @@ const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number 
 
   return (
     <>
-      <Sky sunPosition={sunPosition} turbidity={0.2} rayleigh={0.5} mieCoefficient={0.005} mieDirectionalG={0.8} />
+      {/* Fix: Cast ref to any to avoid strict Geometry type mismatch with Drei's Sky component */}
+      <Sky ref={skyRef as any} sunPosition={sunPosition} turbidity={0.2} rayleigh={0.5} mieCoefficient={0.005} mieDirectionalG={0.8} />
       <ambientLight ref={ambientLight} intensity={0.5} />
       <directionalLight 
         ref={dirLight}
@@ -78,10 +86,20 @@ const Game: React.FC = () => {
     const currentZone = getCurrentZoneName(x, z);
     
     const distSAO = (Math.sqrt(x*x + z*z) / MILE).toFixed(1);
-    const distTempest = ((3 * MILE - x) / MILE).toFixed(1); // East
-    const distAmestris = ((x - (-3 * MILE)) / MILE).toFixed(1); // West
-    const distBosse = ((z - (-3 * MILE)) / MILE).toFixed(1); // North (Negative Z)
+    
+    // Tempest Center (3 * MILE, 0)
+    const distTempest = (Math.sqrt(Math.pow(x - 3 * MILE, 2) + Math.pow(z, 2)) / MILE).toFixed(1);
+    
+    // Amestris Center (-3 * MILE, 0)
+    const distAmestris = (Math.sqrt(Math.pow(x - (-3 * MILE), 2) + Math.pow(z, 2)) / MILE).toFixed(1);
+    
+    // Bosse Center (0, -3 * MILE)
+    const distBosse = (Math.sqrt(Math.pow(x, 2) + Math.pow(z - (-3 * MILE), 2)) / MILE).toFixed(1);
+    
+    // Fremmevilla Center (1600, -1600)
     const distFremme = (Math.sqrt(Math.pow(x - 1600, 2) + Math.pow(z - (-1600), 2)) / MILE).toFixed(1);
+    
+    // Magnolia Center (-1600, 1600)
     const distMagnolia = (Math.sqrt(Math.pow(x - (-1600), 2) + Math.pow(z - 1600, 2)) / MILE).toFixed(1);
 
     return { x, z, currentZone, distSAO, distTempest, distAmestris, distBosse, distFremme, distMagnolia };

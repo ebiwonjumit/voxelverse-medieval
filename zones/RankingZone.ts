@@ -1,15 +1,16 @@
+
 import { Zone, AtmosphereSettings, LodLevel } from './Zone';
 import { BlockType, MILE } from '../constants';
 
 export class RankingZone extends Zone {
   name = "Kingdom of Bosse";
   centerX = 0;
-  centerZ = -3 * MILE; // North
+  centerZ = -3 * MILE; // Moved to -1500
 
   isInside(x: number, z: number): boolean {
     const dx = x - this.centerX;
     const dz = z - this.centerZ;
-    return Math.sqrt(dx*dx + dz*dz) < 200;
+    return Math.sqrt(dx*dx + dz*dz) < 700;
   }
 
   getAtmosphere(): AtmosphereSettings {
@@ -33,14 +34,14 @@ export class RankingZone extends Zone {
     if (y > groundH) {
        const ly = y - groundH;
        // Simple Castle shape
-       if (Math.abs(dx) < 20 && Math.abs(dz) < 20) {
-           if (ly < 15) {
-               if (Math.abs(dx) === 19 || Math.abs(dz) === 19) return BlockType.MARBLE;
+       if (Math.abs(dx) < 30 && Math.abs(dz) < 30) {
+           if (ly < 20) {
+               if (Math.abs(dx) > 28 || Math.abs(dz) > 28) return BlockType.MARBLE;
                return BlockType.AIR;
            }
            // Gold spires
-           if (ly >= 15 && ly < 25) {
-                if (Math.abs(dx) < 5 && Math.abs(dz) < 5) return BlockType.GOLD_BLOCK;
+           if (ly >= 20 && ly < 35) {
+                if (Math.abs(dx) < 8 && Math.abs(dz) < 8) return BlockType.GOLD_BLOCK;
            }
        }
     }

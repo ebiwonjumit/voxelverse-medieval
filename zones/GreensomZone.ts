@@ -53,9 +53,10 @@ export class GreensomZone extends Zone {
         // If strictly on the North Road (leading to SAO), blend to ROAD height (approx 6-7), not HILL height
         if (Math.abs(x) < 5 && z < this.centerZ) {
              const t = distToEdge / 20; 
-             // Wilderness road is approx height 6-7. BaseH is hills.
-             // We blend towards 7.
-             return h * t + 7 * (1 - t);
+             // Wilderness road logic is: baseH * 0.2 + 6 * 0.8.
+             // We blend towards this dynamic value instead of a static 7 to prevent divets/jumps at the border.
+             const wildRoadH = baseH * 0.2 + 4.8;
+             return h * t + wildRoadH * (1 - t);
         }
 
         const t = distToEdge / 20; // 0 at edge, 1 at 20 blocks in

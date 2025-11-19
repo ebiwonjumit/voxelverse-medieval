@@ -5,21 +5,22 @@ import { generatePlannedGrid, RoadMap } from '../utils/roadGenerators';
 
 export class TempestZone extends Zone {
   name = "Federation of Tempest";
-  centerX = 1.5 * MILE; 
+  centerX = 3 * MILE; // Moved to 1500 to match HUD/Visuals
   centerZ = 0;
   
   private roadMap: RoadMap;
 
   constructor() {
       super();
-      // 500x500 Map, 24-block blocks, 10-block wide main avenues
-      this.roadMap = generatePlannedGrid(500, 24, 10);
+      // Expanded map size to 1200x1200 to cover larger radius
+      // 24-block blocks, 10-block wide main avenues
+      this.roadMap = generatePlannedGrid(1200, 24, 10);
   }
 
   isInside(x: number, z: number): boolean {
     const dx = x - this.centerX;
     const dz = z - this.centerZ;
-    return Math.sqrt(dx*dx + dz*dz) < 300;
+    return Math.sqrt(dx*dx + dz*dz) < 700; // Increased radius
   }
 
   getAtmosphere(): AtmosphereSettings {
@@ -37,9 +38,9 @@ export class TempestZone extends Zone {
     
     let h = 8; // City Base Height
 
-    // Blend to wilderness at edges (250 -> 300)
-    if (dist > 250) {
-        const t = (dist - 250) / 50;
+    // Blend to wilderness at edges (600 -> 700)
+    if (dist > 600) {
+        const t = (dist - 600) / 100;
         return h * (1 - t) + baseH * t;
     }
 
@@ -54,64 +55,60 @@ export class TempestZone extends Zone {
     // --- LANDMARKS ---
 
     // 1. The Coliseum (East side, on main avenue)
-    // Location: x > 80, z near 0
-    if (dx > 100 && dx < 180 && Math.abs(dz) < 40) {
-        const cx = 140; // Center of Coliseum
+    // Location: x > 150, z near 0 (Scaled up position)
+    if (dx > 150 && dx < 250 && Math.abs(dz) < 50) {
+        const cx = 200; 
         const cz = 0;
         const cDist = Math.sqrt(Math.pow(dx - cx, 2) + Math.pow(dz - cz, 2));
         const ly = y - groundH;
 
-        // Arena Floor (Dungeon Entrance)
+        // Arena Floor
         if (ly === 0) {
-            if (cDist < 10) return BlockType.OBSIDIAN; // The Hole
+            if (cDist < 15) return BlockType.OBSIDIAN; 
             return BlockType.SAND;
         }
         
         // Walls / Stands
-        if (cDist > 25 && cDist < 35) {
-            // Sloped stands
-            const slopeH = (cDist - 25) * 1.5;
+        if (cDist > 30 && cDist < 45) {
+            const slopeH = (cDist - 30) * 1.2;
             if (ly <= slopeH) return BlockType.STONE_BRICK;
         }
         
         // Outer Wall
-        if (cDist >= 35 && cDist <= 38) {
-            if (ly < 15) return BlockType.STONE_BRICK;
-            if (ly === 15 && (Math.abs(dx) % 2 === 0)) return BlockType.STONE_BRICK; // Battlements
+        if (cDist >= 45 && cDist <= 48) {
+            if (ly < 20) return BlockType.STONE_BRICK;
+            if (ly === 20 && (Math.abs(dx) % 2 === 0)) return BlockType.STONE_BRICK; 
         }
         return BlockType.AIR;
     }
 
-    // 2. Town Hall (North side, end of avenue)
-    // Location: x near 0, z < -80
-    if (Math.abs(dx) < 30 && dz < -60 && dz > -100) {
+    // 2. Town Hall (North side)
+    if (Math.abs(dx) < 40 && dz < -80 && dz > -140) {
         const ly = y - groundH;
         // Main Building
-        if (ly < 20) {
-            if (Math.abs(dx) === 29 || dz === -61 || dz === -99) return BlockType.PLASTER;
-            if (ly % 5 === 0) return BlockType.WOOD_LOG; // Beams
+        if (ly < 25) {
+            if (Math.abs(dx) === 39 || dz === -81 || dz === -139) return BlockType.PLASTER;
+            if (ly % 6 === 0) return BlockType.WOOD_LOG; 
             return BlockType.AIR; 
         }
         // Roof
-        if (ly >= 20) {
-             const roofH = ly - 20;
-             if (Math.abs(dx) <= 30 - roofH && Math.abs(dz - (-80)) <= 20 - roofH) return BlockType.ROOF_BLUE;
+        if (ly >= 25) {
+             const roofH = ly - 25;
+             if (Math.abs(dx) <= 40 - roofH && Math.abs(dz - (-110)) <= 30 - roofH) return BlockType.ROOF_BLUE;
         }
         return BlockType.AIR;
     }
 
-    // 3. Central Plaza Details
-    if (dist < 35) {
-        if (y === groundH) return BlockType.STONE_BRICK; // Paved
+    // 3. Central Plaza
+    if (dist < 50) {
+        if (y === groundH) return BlockType.STONE_BRICK; 
         
-        // Central Fountain / Platform
-        if (dist < 8) {
-            if (y <= groundH + 2) return BlockType.MARBLE;
-            if (y === groundH + 3 && dist < 2 && lod === LodLevel.HIGH) return BlockType.SLIME_BLOCK; // Rimuru Statue representation
+        if (dist < 10) {
+            if (y <= groundH + 3) return BlockType.MARBLE;
+            if (y === groundH + 4 && dist < 3 && lod === LodLevel.HIGH) return BlockType.SLIME_BLOCK; 
         }
-        // Decorative Slime Lamps around plaza
-        if (dist > 30 && dist < 34 && lod === LodLevel.HIGH) {
-             if ((Math.floor(dx) % 10 === 0) || (Math.floor(dz) % 10 === 0)) {
+        if (dist > 40 && dist < 45 && lod === LodLevel.HIGH) {
+             if ((Math.floor(dx) % 12 === 0) || (Math.floor(dz) % 12 === 0)) {
                  if (y === groundH + 1) return BlockType.WOOD_FENCE;
                  if (y === groundH + 2) return BlockType.SLIME_BLOCK;
              }
@@ -122,15 +119,15 @@ export class TempestZone extends Zone {
     // --- ROADS ---
     const isRoad = this.roadMap.isRoad(dx, dz);
     if (y === groundH) {
-        if (isRoad) return BlockType.STONE_BRICK; // Paved roads
+        if (isRoad) return BlockType.STONE_BRICK; 
         return BlockType.GRASS;
     }
 
     // --- HOUSING GRID ---
-    if (y > groundH && !isRoad && dist > 35 && dist < 250) {
+    if (y > groundH && !isRoad && dist > 50 && dist < 650) {
         // Don't build inside landmarks
-        if (dx > 90 && Math.abs(dz) < 50) return BlockType.AIR; // Near Coliseum
-        if (Math.abs(dx) < 40 && dz < -50) return BlockType.AIR; // Near Town Hall
+        if (dx > 140 && dx < 260 && Math.abs(dz) < 60) return BlockType.AIR; // Near Coliseum
+        if (Math.abs(dx) < 50 && dz < -70 && dz > -150) return BlockType.AIR; // Near Town Hall
 
         return this.getPlannedHouse(dx, dz, y, groundH, lod);
     }

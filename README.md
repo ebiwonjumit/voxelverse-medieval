@@ -1,3 +1,4 @@
+
 # VoxelVerse: Anime Worlds
 
 **VoxelVerse** is an ambitious open-world procedural voxel exploration engine built with React Three Fiber. It features an infinite world inspired by iconic fantasy anime settings, where every zone offers a distinct atmosphere, architectural style, and biome.
@@ -34,29 +35,28 @@ The world is generated procedurally using noise functions and a custom "Zone Sys
 *   **Organic World Generation**:
     *   **Roads**: Paths wander organically using noise-based dithering and change materials based on distance from civilization.
     *   **Vegetation**: Procedural placement of trees (Oak, Birch, Pine), flowers, and crops.
-*   **Optimized Rendering**: 
-    *   **Column-Major Generation**: Terrain calculations are optimized to run once per vertical column rather than per block.
-    *   **LOD (Level of Detail)**: Distant chunks skip rendering small details (fences, flowers) to maintain high frame rates.
-    *   **InstancedMesh**: Uses Three.js instancing to render thousands of blocks efficiently.
+*   **Visual Fidelity**:
+    *   **Custom Shaders**: Procedural noise textures, edge darkening (AO), and directional material logic (Dirt sides on Grass blocks).
+    *   **Optimized Rendering**: Column-Major generation and InstancedMesh for high performance.
 
 ## 🗺️ Development Roadmap
 
-### Stage 1: Environmental Distinctiveness (Current Focus)
+### Stage 1: Environmental Distinctiveness (Completed)
 **Goal:** The player should know where they are just by looking at the sky, lighting, and terrain colors.
 
 - [x] **Zone System Architecture:** Modular file structure & optimizations.
-- [x] **Anime Zones:** SAO, Greensom, Tempest, Amestris, Bosse, Fremmevilla, Magnolia.
 - [x] **Dynamic Atmosphere:** Zone-specific fog and sky tint blending.
 - [x] **Biome Blending:** Smooth transitions for ground blocks and foliage colors.
-- [x] **Road Refinement:** Organic dithering edges and material transitions.
+- [x] **Visual Fidelity:** Shaders for textures, AO, and material variations.
 
-### Stage 2: Structural Complexity
-**Goal:** Cities should feel organic and lived-in.
+### Stage 2: Zone Detailing & Visual Polish (Current Focus)
+**Goal:** Approach each zone sequentially to define its identity with specific props and details.
 
-- [ ] **Road Networks (Advanced):** "Random Walker" algorithms for winding city streets.
-- [ ] **Density Maps:** Procedural zoning for city centers vs. outskirts.
-- [ ] **Interiors:** Logic to carve out hollow rooms inside houses.
-- [ ] **Props:** Fences, lamp posts, and market stalls.
+- [ ] **Greensom Village:** Crops, fences, well details.
+- [ ] **Town of Beginnings:** Market stalls, fountains, tower interior.
+- [ ] **Federation of Tempest:** Japanese roofing, stone pavements, lanterns.
+- [ ] **Amestris District:** Smokestacks, pipes, storage tanks.
+- [ ] **Bosse / Fremmevilla / Magnolia:** Unique architectural props.
 
 ### Stage 3: The "Living" World (NPCs)
 **Goal:** Populate the world with inhabitants.

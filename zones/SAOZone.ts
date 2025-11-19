@@ -26,8 +26,8 @@ export class SAOZone extends Zone {
     // Blend to wilderness at edge (Radius 150 -> 200)
     if (dist > 150) {
         const t = (dist - 150) / 50;
-        // If on main roads, keep flat
-        if ((Math.abs(x) < 10 || Math.abs(z) < 10)) {
+        // If on main roads, keep flat (Widened to 12 to match getBlock)
+        if ((Math.abs(x) < 12 || Math.abs(z) < 12)) {
              return h * (1 - t) + 7 * t; // Blend to Road Height (approx 7)
         }
         return h * (1 - t) + baseH * t;
@@ -48,9 +48,11 @@ export class SAOZone extends Zone {
         if (dist < 40) return BlockType.COBBLESTONE;
 
         // 3. South Road Extension (Connects to Wilderness Road)
-        if (z > 0 && Math.abs(x) < 6) return BlockType.COBBLESTONE;
+        // Widened to +/- 12 to catch players slightly off center (e.g. x=-11)
+        if (z > 0 && Math.abs(x) < 12) return BlockType.COBBLESTONE;
+        
         // North/East/West Roads
-        if ((Math.abs(x) < 6 || Math.abs(z) < 6) && dist < 150) return BlockType.COBBLESTONE;
+        if ((Math.abs(x) < 12 || Math.abs(z) < 12) && dist < 150) return BlockType.COBBLESTONE;
 
         // 4. Inside Walls (Paved)
         if (dist < 85) return BlockType.STONE_BRICK;
@@ -75,9 +77,10 @@ export class SAOZone extends Zone {
         // 2. Town Wall & Gate (Radius 85)
         if (dist > 83 && dist < 87) {
             // Gate Opening at South (z > 0, x near 0)
-            if (z > 0 && Math.abs(x) < 6) {
+            // Widened to +/- 12 to match road
+            if (z > 0 && Math.abs(x) < 12) {
                 if (ly > 6 && ly <= 8) return BlockType.STONE_BRICK; // Arch top
-                if (ly === 6 && (Math.abs(x) === 4 || Math.abs(x) === 5) && lod === LodLevel.HIGH) return BlockType.LANTERN;
+                if (ly === 6 && (Math.abs(x) === 10 || Math.abs(x) === 11) && lod === LodLevel.HIGH) return BlockType.LANTERN;
                 return BlockType.AIR;
             }
 
@@ -85,8 +88,8 @@ export class SAOZone extends Zone {
             if (ly < 10) return BlockType.STONE_BRICK;
             if (ly === 10 && (Math.abs(x) + Math.abs(z)) % 2 === 0) return BlockType.STONE_BRICK; // Battlements
             
-            // Gate Towers
-            if (z > 0 && Math.abs(x) > 6 && Math.abs(x) < 12 && dist > 84 && dist < 86) {
+            // Gate Towers (Shifted out to accommodate wider gate)
+            if (z > 0 && Math.abs(x) >= 12 && Math.abs(x) < 18 && dist > 84 && dist < 86) {
                 if (ly >= 10 && ly < 15) return BlockType.STONE_BRICK;
             }
             return BlockType.AIR;
@@ -95,7 +98,7 @@ export class SAOZone extends Zone {
         // 3. Houses (Inside Walls)
         if (dist < 80 && dist > 40) {
              // Don't build on main roads
-             if (Math.abs(x) > 8 && Math.abs(z) > 8) {
+             if (Math.abs(x) > 14 && Math.abs(z) > 14) {
                  return this.getMedievalHouse(x, y, z, groundH);
              }
         }

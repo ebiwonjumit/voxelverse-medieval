@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useLayoutEffect, useEffect, useState } from 'react';
-import { InstancedMesh, Object3D, Color, Vector3, CanvasTexture, NearestFilter, RepeatWrapping, MeshStandardMaterial } from 'three';
+import { InstancedMesh, Object3D, Color, Vector3, CanvasTexture, NearestFilter, RepeatWrapping, MeshStandardMaterial, SRGBColorSpace } from 'three';
 import { useFrame } from '@react-three/fiber';
 import { BlockType, COLORS, RENDER_DISTANCE, CHUNK_SIZE, MILE } from '../constants';
 import { getBlockOptimized, getTerrainHeight } from '../utils/terrain';
@@ -20,10 +20,118 @@ const C_BOSSE = new Color(COLORS.GRASS_BOSSE);
 const C_FREMMEVILLA = new Color(COLORS.GRASS_FREMMEVILLA);
 const C_MAGNOLIA = new Color(COLORS.GRASS_MAGNOLIA);
 
+// --- TEXTURE GENERATION ---
+// Create a pixelated noise texture on the fly to give blocks grain/detail
+const createVoxelTexture = () => {
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, size, size);
+    
+    for (let i = 0; i < 800; i++) {
+      const x = Math.floor(Math.random() * size);
+      const y = Math.floor(Math.random() * size);
+      const opacity = Math.random() * 0.15; // Subtle noise
+      ctx.fillStyle = `rgba(0,0,0,${opacity})`;
+      ctx.fillRect(x, y, 2, 2); // 2x2 pixels for "chunkier" noise
+    }
+  }
+  const texture = new CanvasTexture(canvas);
+  texture.magFilter = NearestFilter; // Keep it pixelated
+  texture.minFilter = NearestFilter;
+  texture.colorSpace = SRGBColorSpace;
+  return texture;
+};
+
+const voxelTexture = createVoxelTexture();
+
+// --- SOLID MATERIAL CONFIGURATION ---
+// Using a shared material for all solid blocks with custom shader logic
+const solidMaterial = new MeshStandardMaterial({
+  map: voxelTexture,
+  roughness: 0.8,
+  metalness: 0.1,
+  vertexColors: true, // Vital for instanced color tinting
+});
+
+solidMaterial.onBeforeCompile = (shader) => {
+  // Pass the texture map (though map is handled by default, we want to mix it specifically)
+  // We need access to vNormal to detect sides vs top
+  shader.vertexShader = `
+    varying vec3 vWorldNormal;
+    ${shader.vertexShader}
+  `.replace(
+    '#include <begin_vertex>',
+    `
+    #include <begin_vertex>
+    // Calculate world normal for the fragment shader (simplified approach)
+    vWorldNormal = normalize( mat3( instanceMatrix ) * normal );
+    `
+  );
+
+  shader.fragmentShader = `
+    varying vec3 vWorldNormal;
+    ${shader.fragmentShader}
+  `.replace(
+    '#include <map_fragment>',
+    `
+    #include <map_fragment>
+    
+    // 1. TEXTURE NOISE MIX
+    // The map_fragment sets 'diffuseColor' based on the texture. 
+    // We want to blend the noise texture subtly over the vertex color.
+    // Since we set map, 'diffuseColor' already has the texture.
+    
+    // 2. EDGE DARKENING (Fake Ambient Occlusion)
+    // BoxGeometry UVs go 0->1. Edges are near 0 or 1.
+    float edgeWidth = 0.05;
+    float edgeX = step(edgeWidth, vMapUv.x) * step(vMapUv.x, 1.0 - edgeWidth);
+    float edgeY = step(edgeWidth, vMapUv.y) * step(vMapUv.y, 1.0 - edgeWidth);
+    float centerMask = edgeX * edgeY;
+    
+    // Darken edges by 20%
+    float edgeFactor = 0.8 + (0.2 * centerMask);
+    diffuseColor.rgb *= edgeFactor;
+
+    // 3. GRASS SIDE LOGIC (Minecraft Style)
+    // Heuristic: If the block is predominantly green (Grass), but we are looking at the side, make it Dirt.
+    // vColor comes from the vertex shader (instanceColor).
+    // We access it via 'diffuseColor' or 'vColor' depending on THREE version, but diffuseColor has it multiplied.
+    
+    // Let's calculate based on the vertex color passed into the material (before texture)
+    // We can't easily access raw instanceColor here without re-declaring varying.
+    // However, standard material mixes vertex color into diffuseColor before map_fragment.
+    
+    // Check if "Green-ish" (High Green, lower Red/Blue)
+    // This detects Biome Blended Grass
+    bool isGreen = diffuseColor.g > diffuseColor.r * 1.2 && diffuseColor.g > diffuseColor.b * 1.2;
+    
+    // Check if looking at side (Normal Y is near 0)
+    bool isSide = abs(vWorldNormal.y) < 0.5;
+
+    if (isGreen && isSide) {
+        // Replace color with Dirt Brown, preserving the noise texture intensity
+        vec3 dirtColor = vec3(0.36, 0.25, 0.22); // #5D4037 converted roughly to linear
+        
+        // Keep the texture variation (luminance)
+        float luminance = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+        // Apply dirt color
+        diffuseColor.rgb = dirtColor * edgeFactor; 
+        
+        // Re-apply a bit of the original texture noise
+        diffuseColor.rgb *= (texelColor.rgb + 0.2); 
+    }
+    `
+  );
+};
+
 // --- WATER MATERIAL CONFIGURATION ---
-// Created globally to share shader compilation and uniforms across all chunks
 const waterMaterial = new MeshStandardMaterial({
-  color: 0xffffff, // Base white, tinted by instanceColor
+  color: 0xffffff, 
   transparent: true,
   opacity: 0.75,
   roughness: 0.1,
@@ -31,7 +139,6 @@ const waterMaterial = new MeshStandardMaterial({
   flatShading: true
 });
 
-// Inject custom wave logic into the standard material
 waterMaterial.onBeforeCompile = (shader) => {
   shader.uniforms.uTime = { value: 0 };
   waterMaterial.userData.shader = shader;
@@ -41,20 +148,14 @@ waterMaterial.onBeforeCompile = (shader) => {
     ${shader.vertexShader}
   `;
 
-  // Replace the vertex transformation logic to add waves
   shader.vertexShader = shader.vertexShader.replace(
     '#include <begin_vertex>',
     `
     vec3 transformed = vec3( position );
     #ifdef USE_INSTANCING
-      // Get absolute world position from the instance matrix (4th column is translation)
       float wx = instanceMatrix[3][0];
       float wz = instanceMatrix[3][2];
-      
-      // Combine sine waves for organic movement
       float wave = sin(wx * 0.5 + uTime) * 0.2 + cos(wz * 0.4 + uTime * 1.2) * 0.15;
-      
-      // Apply to Y axis
       transformed.y += wave;
     #endif
     `
@@ -79,7 +180,6 @@ const Chunk: React.FC<{ chunkX: number; chunkZ: number; lodLevel: LodLevel }> = 
         
         const groundH = getTerrainHeight(worldX, worldZ);
         
-        // FIX: Scan deeper to prevent seeing void/skybox under the world
         const minScan = -30; 
         const maxScan = groundH + 65; 
 
@@ -147,7 +247,6 @@ const Chunk: React.FC<{ chunkX: number; chunkZ: number; lodLevel: LodLevel }> = 
 
         // Color Handling with Biome Blending
         if (instance.type === BlockType.GRASS || instance.type === BlockType.LEAVES) {
-            // Calculate distance to zone centers
             const dSAO = Math.sqrt(instance.x*instance.x + instance.z*instance.z);
             const dTempest = Math.sqrt(Math.pow(instance.x - 3 * MILE, 2) + Math.pow(instance.z, 2));
             const dAmestris = Math.sqrt(Math.pow(instance.x - (-3 * MILE), 2) + Math.pow(instance.z, 2));
@@ -155,7 +254,6 @@ const Chunk: React.FC<{ chunkX: number; chunkZ: number; lodLevel: LodLevel }> = 
             const dFremme = Math.sqrt(Math.pow(instance.x - 1600, 2) + Math.pow(instance.z - (-1600), 2));
             const dMagnolia = Math.sqrt(Math.pow(instance.x - (-1600), 2) + Math.pow(instance.z - 1600, 2));
 
-            // Inverse distance weighting
             const eps = 1;
             const wSAO = 1 / (dSAO + eps);
             const wTempest = 1 / (dTempest + eps);
@@ -176,13 +274,12 @@ const Chunk: React.FC<{ chunkX: number; chunkZ: number; lodLevel: LodLevel }> = 
             tempColor.add(C_MAGNOLIA.clone().multiplyScalar(wMagnolia / totalW));
 
             if (instance.type === BlockType.LEAVES) {
-            tempColor.multiplyScalar(0.7); 
+              tempColor.multiplyScalar(0.7); 
             }
             
             mesh.setColorAt(index, tempColor);
 
         } else {
-            // Standard Colors
             let colorHex = '#ffffff';
             switch (instance.type) {
                 case BlockType.DIRT: colorHex = COLORS.DIRT; break;
@@ -259,22 +356,17 @@ const Chunk: React.FC<{ chunkX: number; chunkZ: number; lodLevel: LodLevel }> = 
             args={[undefined, undefined, solidInstances.length]} 
             castShadow 
             receiveShadow
+            material={solidMaterial}
         >
             <boxGeometry args={[1, 1, 1]} />
-            <meshStandardMaterial 
-                attach="material" 
-                roughness={0.8} 
-                metalness={0.1} 
-            />
         </instancedMesh>
       )}
       {waterInstances.length > 0 && (
         <instancedMesh 
             ref={waterMeshRef} 
             args={[undefined, undefined, waterInstances.length]} 
-            // Water doesn't typically cast heavy shadows in simple engines, but receiving is good
             receiveShadow
-            material={waterMaterial} // Use the custom shader material
+            material={waterMaterial} 
         >
             <boxGeometry args={[1, 1, 1]} />
         </instancedMesh>
@@ -287,7 +379,6 @@ const World: React.FC<WorldProps> = ({ playerPosition }) => {
   const playerChunkX = Math.floor(playerPosition.x / CHUNK_SIZE);
   const playerChunkZ = Math.floor(playerPosition.z / CHUNK_SIZE);
 
-  // Animate the water shader globally
   useFrame(({ clock }) => {
     if (waterMaterial.userData.shader) {
         waterMaterial.userData.shader.uniforms.uTime.value = clock.getElapsedTime();

@@ -129,7 +129,7 @@ const Player: React.FC<PlayerProps> = ({ setPlayerPos }) => {
     
     if (checkCollision(position.current)) {
       position.current.x = originalPos.x; // Revert X
-      velocity.current.x = 0;
+      velocity.current.x *= 0.85;
     }
 
     // Z Movement
@@ -137,7 +137,7 @@ const Player: React.FC<PlayerProps> = ({ setPlayerPos }) => {
     
     if (checkCollision(position.current)) {
       position.current.z = originalPos.z; // Revert Z
-      velocity.current.z = 0;
+      velocity.current.z *= 0.85;
     }
 
     // Y Movement

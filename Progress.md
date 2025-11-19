@@ -12,16 +12,40 @@
 - [x] **Dynamic Atmosphere:** Implement zone-specific `AtmosphereSettings` (fog color, sky tint) and ensure smooth transitions between them.
 - [x] **Biome Blending:** Smooth transitions for ground blocks and foliage colors based on zones.
 - [x] **Road Refinement:** Organic dithering edges and material transitions.
+- [x] **Visual Fidelity:**
+    - [x] Procedural noise textures for all blocks.
+    - [x] Edge darkening (Ambient Occlusion simulation).
+    - [x] "Grass Top / Dirt Side" shader logic.
 
-## Stage 2: Structural Complexity (Current Focus)
-**Goal:** Cities should feel organic and lived-in, not just placed on a grid.
+## Stage 2: Zone Detailing & Visual Polish (Current Focus)
+**Goal:** Approach each zone sequentially to define its identity with specific props, architecture, and organic details.
 
-- [x] **Road Networks (Advanced):** 
-    - [x] Implemented **"Random Walker"** algorithm for organic winding streets (Tempest).
-    - [x] Implemented **"Procedural Grid"** with varied density for industrial districts (Amestris).
-- [ ] **Density Maps:** Use noise to determine city centers (tall buildings) vs outskirts (cottages).
-- [ ] **Interiors:** Logic to carve out hollow rooms inside procedural houses.
-- [ ] **Props:** Fences, lamp posts, and market stalls.
+### Zone 1: Greensom Village (Spawn)
+- [ ] **Vegetation:** 3D crops (wheat stages), varying tall grass density, lily pads in river.
+- [ ] **Architecture:** Porches, chimneys, flower boxes, well details.
+- [ ] **Props:** Wooden fences, lanterns on posts, crates.
+
+### Zone 2: Town of Beginnings (SAO)
+- [ ] **Plaza:** Market stalls, central fountain, benches, paving patterns.
+- [ ] **The Great Tower:** Intricate entrance arch, procedural interior (ground floor).
+- [ ] **Walls:** Gate mechanisms, battlements, flags.
+
+### Zone 3: Federation of Tempest
+- [ ] **Roads:** Paved stone texture with custom patterns.
+- [ ] **Architecture:** Japanese-style curved roofs, sliding doors, tatami mats.
+- [ ] **Lighting:** Magic ore lanterns (glowing blue/green).
+
+### Zone 4: Amestris District
+- [ ] **Industry:** Smokestacks with particle effects, piping systems, storage tanks.
+- [ ] **Atmosphere:** Dense smog, darker lighting.
+
+### Zone 5: Kingdom of Bosse
+- [ ] **Royalty:** Marble textures, gold trim, giant pillars.
+- [ ] **Terrain:** Perched on a high plateau/cliff.
+
+### Zone 6: Fremmevilla & Magnolia
+- [ ] **Fremmevilla:** Massive hangar doors, steel scaffolding, cranes.
+- [ ] **Magnolia:** Canal systems, bridges, guild flags.
 
 ## Stage 3: The "Living" World (NPCs)
 **Goal:** Populate the world with inhabitants relevant to their zones.

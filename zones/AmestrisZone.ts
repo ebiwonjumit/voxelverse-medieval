@@ -6,21 +6,21 @@ import { noise } from '../utils/perlin';
 
 export class AmestrisZone extends Zone {
   name = "Amestris District";
-  centerX = -1.5 * MILE; 
+  centerX = -3 * MILE; // Moved to -1500
   centerZ = 0;
   
   private roadMap: RoadMap;
 
   constructor() {
       super();
-      // 400x400 Grid, 36 block blocks, road width 5
-      this.roadMap = generateIndustrialGrid(400, 36, 5);
+      // Expanded to 1000x1000, 36 block blocks, road width 5
+      this.roadMap = generateIndustrialGrid(1000, 36, 5);
   }
 
   isInside(x: number, z: number): boolean {
     const dx = x - this.centerX;
     const dz = z - this.centerZ;
-    return Math.sqrt(dx*dx + dz*dz) < 200;
+    return Math.sqrt(dx*dx + dz*dz) < 700;
   }
 
   getAtmosphere(): AtmosphereSettings {
@@ -38,9 +38,9 @@ export class AmestrisZone extends Zone {
     
     let h = 6;
 
-    // Blend to wilderness at edges (150 -> 200)
-    if (dist > 150) {
-        const t = (dist - 150) / 50;
+    // Blend to wilderness at edges (600 -> 700)
+    if (dist > 600) {
+        const t = (dist - 600) / 100;
         return h * (1 - t) + baseH * t;
     }
     return h;
