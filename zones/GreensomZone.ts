@@ -36,11 +36,32 @@ export class GreensomZone extends Zone {
     // Calculate Village Height
     let h = 7; // Default village flat level
     
-    const streamDist = this.getStreamDistance(x, z);
-    if (streamDist < 3.5) h = 3; // Riverbed
-    else if (streamDist < 6) h = 4 + (streamDist - 3.5); // Banks
-    else if (Math.abs(dx) < 4) h = 7; // Force road to be flat
-    else if (dist > 50) h = 7 + (dist - 50) * 0.2; // Gentle slope out
+    const rawStreamDist = this.getStreamDistance(x, z);
+    
+    // Add organic variation to the bank width/shape
+    const bankNoise = noise.noise2D(x * 0.1, z * 0.1) * 2;
+    const streamDist = rawStreamDist + bankNoise;
+
+    // Stream Logic: Smooth transition from Riverbed (3) to Village (7)
+    if (streamDist < 3) {
+        h = 3; // Deep channel
+    } else if (streamDist < 10) {
+        // Smooth blend out
+        const t = (streamDist - 3) / 7; // 0 to 1
+        const smoothT = t * t * (3 - 2 * t); // Ease-in-out
+        h = 3 + (7 - 3) * smoothT;
+        
+        // Add terrain roughness to banks
+        h += noise.noise2D(x * 0.2, z * 0.2) * 0.5;
+    } else {
+        h = 7;
+    }
+
+    // Flatten for Bridge/Road
+    if (Math.abs(dx) < 4) h = 7; 
+    
+    // Gentle slope out from village center
+    else if (dist > 50) h = 7 + (dist - 50) * 0.2;
 
     // BLENDING LOGIC:
     // As we get closer to the edge (70), blend 'h' with 'baseH' (Wilderness)
@@ -71,8 +92,9 @@ export class GreensomZone extends Zone {
     const dz = z - this.centerZ;
     const streamDist = this.getStreamDistance(x, z);
 
-    // --- STREAM & VEGETATION ---
-    if (streamDist < 4.5) {
+    // --- STREAM AREA ---
+    // Check if we are within influence of the stream (approx < 12 due to noise/width)
+    if (streamDist < 12) {
         // Bridge Intersection
         if (Math.abs(dx) < 3) {
             if (y === 7) return BlockType.WOOD_PLANK; 
@@ -81,6 +103,7 @@ export class GreensomZone extends Zone {
         }
 
         // Water & Decor
+        // Local water level is 6
         if (y <= 6 && y > groundH) {
             // Lily Pads on surface (y=6)
             if (y === 6 && lod === LodLevel.HIGH) {
@@ -90,11 +113,18 @@ export class GreensomZone extends Zone {
             }
             return BlockType.WATER; 
         }
+        
+        // Riverbed / Shoreline
         if (y === groundH) {
-            if (streamDist > 3 && lod === LodLevel.HIGH && noise.hash(x, z) > 0.85) return BlockType.SUGARCANE;
-            return BlockType.SAND; 
+            // If submerged or just at water level, use Sand
+            if (groundH <= 6) {
+                if (streamDist > 3 && lod === LodLevel.HIGH && noise.hash(x, z) > 0.85 && groundH === 6) return BlockType.SUGARCANE;
+                return BlockType.SAND; 
+            }
+            // If higher (Bank), fall through to Grass/Vegetation logic below
         }
-        return BlockType.AIR;
+        
+        // If air above water/ground, fall through
     }
 
     // --- MAIN ROAD & STREET LIGHTS ---
@@ -201,6 +231,7 @@ export class GreensomZone extends Zone {
         const tdz = centerTreeZ - this.centerZ;
         const tsDist = this.getStreamDistance(centerTreeX, centerTreeZ);
         
+        // Don't put trees in the middle of the river
         if (tsDist > 6 && Math.abs(tdx) > 6 && Math.abs(tdz) > 6 && !(tdx < -20 && tdx > -60 && Math.abs(tdz) < 25)) {
             const treeNoise = noise.noise2D(centerTreeX * 0.1, centerTreeZ * 0.1);
             if (treeNoise > 0.5) {

@@ -31,8 +31,8 @@
 
 ### Zone 2: Town of Beginnings (SAO)
 - [ ] **Plaza:** Market stalls, central fountain, benches, paving patterns.
-- [ ] **The Great Tower:** Intricate entrance arch, procedural interior (ground floor).
-- [ ] **Walls:** Gate mechanisms, battlements, flags.
+- [x] **The Great Tower:** Intricate entrance arch, procedural interior (ground floor).
+- [ ] **Walls:** Gate mechanisms, flags.
 
 ### Zone 3: Federation of Tempest
 - [x] **Landmarks:** Fixed bounding boxes for Coliseum and Town Hall to prevent rendering voids.

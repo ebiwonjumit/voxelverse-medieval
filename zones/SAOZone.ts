@@ -41,14 +41,23 @@ export class SAOZone extends Zone {
 
     // --- FLOOR LAYER (y == groundH) ---
     if (ly === 0) {
-        // 1. Center Tower Floor
-        if (dist < 25) return BlockType.OBSIDIAN;
+        // 1. Center Tower Floor (Intricate Pattern)
+        if (dist < 25) {
+            if (dist < 22) {
+                // Central Altar Base
+                if (dist < 3) return BlockType.OBSIDIAN;
+                // Radial Pattern
+                if (Math.floor(dist) % 2 === 0) return BlockType.STONE_BRICK;
+                return BlockType.OBSIDIAN;
+            }
+            // Wall Base
+            return BlockType.OBSIDIAN;
+        }
         
         // 2. Plaza
         if (dist < 40) return BlockType.COBBLESTONE;
 
         // 3. South Road Extension (Connects to Wilderness Road)
-        // Widened to +/- 12 to catch players slightly off center (e.g. x=-11)
         if (z > 0 && Math.abs(x) < 12) return BlockType.COBBLESTONE;
         
         // North/East/West Roads
@@ -65,19 +74,77 @@ export class SAOZone extends Zone {
     if (ly > 0) {
         // 1. The Iron Great Dungeon (Center Tower)
         if (dist < 25) {
+            // WALLS (Outer Shell)
             if (dist > 22 && ly < 60) {
+                // South Entrance Arch (Parabolic)
+                if (z > 0 && Math.abs(x) < 7) {
+                    // Arch logic: Height = MaxH * (1 - (x/Width)^2)
+                    const archH = 12 * (1 - Math.pow(x / 6, 2));
+                    if (ly < archH) return BlockType.AIR;
+                }
+                
+                // Wall Texture
                 if ((y % 10 === 0) || (Math.abs(x) % 4 === 0)) return BlockType.OBSIDIAN;
                 return BlockType.STONE_BRICK;
             }
-            // Entrance Arch
-            if (z > 20 && Math.abs(x) < 4 && ly < 8) return BlockType.AIR;
+
+            // INTERIOR (Ground Floor Details)
+            if (dist <= 22) {
+                // Central Altar
+                if (dist < 4) {
+                    if (ly === 1) return BlockType.OBSIDIAN;
+                    if (ly === 2 && dist < 2) return BlockType.MAGIC_CRYSTAL; // Floating Crystal
+                    if (ly === 3) return BlockType.AIR; // Clear space above
+                }
+
+                // Central Chandelier
+                if (dist < 1) {
+                    if (ly > 10 && ly < 15) return BlockType.IRON_BLOCK; // Chain
+                    if (ly === 10) return BlockType.LANTERN; // Light
+                }
+
+                // Radial Pillars (8 around the center at radius 12-13)
+                if (dist > 11 && dist < 14) {
+                    const angle = Math.atan2(z, x);
+                    // Normalize angle to 0-8 sectors
+                    const sector = ((angle + Math.PI) / (2 * Math.PI)) * 8;
+                    const distFromSectorCenter = Math.abs(sector - Math.round(sector));
+                    
+                    if (distFromSectorCenter < 0.12) {
+                        if (ly < 15) {
+                            if (ly === 4) return BlockType.LANTERN; // Eye-level lighting
+                            return BlockType.OBSIDIAN;
+                        }
+                        if (ly === 15) return BlockType.LANTERN; // Light on top
+                    }
+                }
+
+                // Spiral Staircase (Along inner wall radius 19-21)
+                if (dist > 18 && dist < 22) {
+                     // Angle 0 to 2PI
+                     const angle = Math.atan2(z, x) + Math.PI;
+                     // 1 Full rotation = 12 blocks high
+                     const stairHeight = (angle / (2 * Math.PI)) * 12;
+                     
+                     // Generate stairs for first 2 loops (up to height 24)
+                     const h1 = Math.floor(stairHeight);
+                     const h2 = Math.floor(stairHeight + 12);
+
+                     if (ly === h1 || ly === h2) return BlockType.STONE_BRICK;
+                }
+
+                // Second Floor Balcony / Ceiling
+                if (ly === 20) {
+                     if (dist > 10) return BlockType.STONE_BRICK;
+                }
+            }
+            
             return BlockType.AIR;
         }
 
         // 2. Town Wall & Gate (Radius 85)
         if (dist > 83 && dist < 87) {
             // Gate Opening at South (z > 0, x near 0)
-            // Widened to +/- 12 to match road
             if (z > 0 && Math.abs(x) < 12) {
                 if (ly > 6 && ly <= 8) return BlockType.STONE_BRICK; // Arch top
                 if (ly === 6 && (Math.abs(x) === 10 || Math.abs(x) === 11) && lod === LodLevel.HIGH) return BlockType.LANTERN;
@@ -88,7 +155,7 @@ export class SAOZone extends Zone {
             if (ly < 10) return BlockType.STONE_BRICK;
             if (ly === 10 && (Math.abs(x) + Math.abs(z)) % 2 === 0) return BlockType.STONE_BRICK; // Battlements
             
-            // Gate Towers (Shifted out to accommodate wider gate)
+            // Gate Towers
             if (z > 0 && Math.abs(x) >= 12 && Math.abs(x) < 18 && dist > 84 && dist < 86) {
                 if (ly >= 10 && ly < 15) return BlockType.STONE_BRICK;
             }
