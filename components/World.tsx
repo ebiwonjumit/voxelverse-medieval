@@ -68,10 +68,11 @@ solidMaterial.onBeforeCompile = (shader) => {
     #include <begin_vertex>
     // Calculate world normal for side-detection in fragment shader
     #ifdef USE_INSTANCING
-      // For instanced meshes, transform normal properly
-      vWorldNormal = normalize( normalMatrix * normal );
+      // Use instanceMatrix to rotate normal to World Space
+      // Note: This assumes non-uniform scaling isn't extreme, otherwise we need inverse-transpose
+      vWorldNormal = normalize( (instanceMatrix * vec4(normal, 0.0)).xyz );
     #else
-      vWorldNormal = normalize( normalMatrix * normal );
+      vWorldNormal = normalize( (modelMatrix * vec4(normal, 0.0)).xyz );
     #endif
     `
   );
@@ -96,6 +97,7 @@ solidMaterial.onBeforeCompile = (shader) => {
     diffuseColor.rgb *= edgeFactor;
 
     // Grass Side Logic
+    // Since vWorldNormal is now truly World Space, this is stable against camera rotation
     bool isGreen = diffuseColor.g > diffuseColor.r * 1.2 && diffuseColor.g > diffuseColor.b * 1.2;
     bool isSide = abs(vWorldNormal.y) < 0.5;
 

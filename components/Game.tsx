@@ -10,7 +10,6 @@ import { getCurrentZoneName, getZone } from '../utils/terrain';
 const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number }) => {
   const { scene } = useThree();
   const dirLight = useRef<DirectionalLight>(null);
-  const ambientLight = useRef<any>(null);
   const skyRef = useRef<Mesh>(null);
   
   // Create a persistent target object for the directional light
@@ -40,7 +39,7 @@ const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number 
     const atmosphere = zone.getAtmosphere();
     const targetFogHex = atmosphere.fogColor;
 
-    if (dirLight.current && ambientLight.current) {
+    if (dirLight.current) {
       dirLight.current.position.copy(camera.position).add(relativeSunPos);
       
       // Update the target position to follow camera but stay grounded relative to light direction
@@ -49,9 +48,6 @@ const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number 
 
       dirLight.current.intensity = 1.5;
       dirLight.current.color.setHSL(0.1, 1, 0.95);
-
-      ambientLight.current.intensity = 0.6; // Increased base brightness
-      ambientLight.current.color.setHSL(0.6, 0.1, 0.6);
     }
 
     if (scene.fog) {
@@ -65,7 +61,10 @@ const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number 
   return (
     <>
       <Sky ref={skyRef as any} sunPosition={sunPosition} turbidity={0.2} rayleigh={0.5} mieCoefficient={0.005} mieDirectionalG={0.8} />
-      <ambientLight ref={ambientLight} intensity={0.5} />
+      
+      {/* Hemisphere Light provides natural fill light (Sky Color + Ground Color) */}
+      <hemisphereLight args={['#ffffff', '#444444', 0.6]} />
+      
       <directionalLight 
         ref={dirLight}
         target={lightTarget}
