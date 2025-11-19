@@ -26,7 +26,16 @@ const Player: React.FC<PlayerProps> = ({ setPlayerPos }) => {
   // Helper to check if a voxel is solid
   const isSolid = (x: number, y: number, z: number): boolean => {
     const block = getBlockAt(Math.round(x), Math.round(y), Math.round(z));
-    return block !== BlockType.AIR && block !== BlockType.WATER && block !== BlockType.SUGARCANE && block !== BlockType.TALL_GRASS && block !== BlockType.FLOWER_RED && block !== BlockType.FLOWER_YELLOW;
+    return block !== BlockType.AIR && 
+           block !== BlockType.WATER && 
+           block !== BlockType.SUGARCANE && 
+           block !== BlockType.TALL_GRASS && 
+           block !== BlockType.FLOWER_RED && 
+           block !== BlockType.FLOWER_YELLOW &&
+           block !== BlockType.WHEAT &&
+           block !== BlockType.WHEAT_STAGE_1 &&
+           block !== BlockType.WHEAT_STAGE_2 &&
+           block !== BlockType.LILY_PAD;
   };
 
   // Check if the player's bounding box overlaps with any solid blocks

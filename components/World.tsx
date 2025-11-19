@@ -188,6 +188,11 @@ const Chunk: React.FC<{ chunkX: number; chunkZ: number; lodLevel: LodLevel }> = 
            if (block !== BlockType.AIR) {
                if (block === BlockType.WATER) {
                    water.push({ x: worldX, y, z: worldZ, type: block });
+               } else if (block === BlockType.LILY_PAD) {
+                   // Special case: Lily pads are decoration but act like a block in getBlock.
+                   // We want water UNDER them.
+                   solid.push({ x: worldX, y, z: worldZ, type: block });
+                   water.push({ x: worldX, y, z: worldZ, type: BlockType.WATER });
                } else {
                    solid.push({ x: worldX, y, z: worldZ, type: block });
                }
@@ -220,14 +225,21 @@ const Chunk: React.FC<{ chunkX: number; chunkZ: number; lodLevel: LodLevel }> = 
         } else if (instance.type === BlockType.WOOD_FENCE) {
             tempObject.scale.set(0.25, 1, 0.25); 
         } else if (instance.type === BlockType.WHEAT) {
-            tempObject.scale.set(0.8, 0.5, 0.8);
+            tempObject.scale.set(0.8, 0.7, 0.8);
+            tempObject.position.set(instance.x, instance.y - 0.15, instance.z);
+        } else if (instance.type === BlockType.WHEAT_STAGE_1) {
+            tempObject.scale.set(0.5, 0.3, 0.5);
+            tempObject.position.set(instance.x, instance.y - 0.35, instance.z);
+        } else if (instance.type === BlockType.WHEAT_STAGE_2) {
+            tempObject.scale.set(0.6, 0.5, 0.6);
             tempObject.position.set(instance.x, instance.y - 0.25, instance.z);
         } else if (instance.type === BlockType.FARMLAND) {
             tempObject.scale.set(1, 0.9, 1);
             tempObject.position.set(instance.x, instance.y - 0.05, instance.z);
         } else if (instance.type === BlockType.LILY_PAD) {
             tempObject.scale.set(0.6, 0.05, 0.6);
-            tempObject.position.set(instance.x, instance.y - 0.48, instance.z);
+            // Float slightly above the water block surface (y+0.5 is top of block)
+            tempObject.position.set(instance.x, instance.y + 0.51, instance.z);
             tempObject.rotation.y = Math.random() * Math.PI;
         } else if (instance.type === BlockType.SUGARCANE) {
             tempObject.scale.set(0.2, 1, 0.2);
@@ -326,6 +338,8 @@ const Chunk: React.FC<{ chunkX: number; chunkZ: number; lodLevel: LodLevel }> = 
                 case BlockType.WOOD_FENCE: colorHex = COLORS.WOOD_FENCE; break;
                 case BlockType.FARMLAND: colorHex = COLORS.FARMLAND; break;
                 case BlockType.WHEAT: colorHex = COLORS.WHEAT; break;
+                case BlockType.WHEAT_STAGE_1: colorHex = COLORS.WHEAT_GREEN; break;
+                case BlockType.WHEAT_STAGE_2: colorHex = COLORS.WHEAT_GROWING; break;
                 
                 case BlockType.LILY_PAD: colorHex = COLORS.LILY_PAD; break;
                 case BlockType.SUGARCANE: colorHex = COLORS.SUGARCANE; break;

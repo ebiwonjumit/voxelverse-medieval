@@ -21,7 +21,7 @@
 **Goal:** Approach each zone sequentially to define its identity with specific props, architecture, and organic details.
 
 ### Zone 1: Greensom Village (Spawn)
-- [ ] **Vegetation:** 3D crops (wheat stages), varying tall grass density, lily pads in river.
+- [x] **Vegetation:** 3D crops (wheat stages), varying tall grass density, lily pads in river.
 - [ ] **Architecture:** Porches, chimneys, flower boxes, well details.
 - [ ] **Props:** Wooden fences, lanterns on posts, crates.
 

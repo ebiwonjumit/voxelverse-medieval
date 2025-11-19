@@ -52,7 +52,7 @@ The world is generated procedurally using noise functions and a custom "Zone Sys
 ### Stage 2: Zone Detailing & Visual Polish (Current Focus)
 **Goal:** Approach each zone sequentially to define its identity with specific props and details.
 
-- [ ] **Greensom Village:** Crops, fences, well details.
+- [x] **Greensom Village:** Crops, fences, well details.
 - [ ] **Town of Beginnings:** Market stalls, fountains, tower interior.
 - [ ] **Federation of Tempest:** Japanese roofing, stone pavements, lanterns.
 - [ ] **Amestris District:** Smokestacks, pipes, storage tanks.

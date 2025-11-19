@@ -82,7 +82,12 @@ export class GreensomZone extends Zone {
 
         // Water & Decor
         if (y <= 6 && y > groundH) {
-            if (y === 6 && lod === LodLevel.HIGH && noise.hash(x, z) > 0.95) return BlockType.LILY_PAD;
+            // Lily Pads on surface (y=6)
+            if (y === 6 && lod === LodLevel.HIGH) {
+                const padNoise = noise.noise2D(x * 0.2, z * 0.2);
+                // Clusters where noise is high
+                if (padNoise > 0.4 && noise.hash(x, z) > 0.7) return BlockType.LILY_PAD;
+            }
             return BlockType.WATER; 
         }
         if (y === groundH) {
@@ -176,7 +181,12 @@ export class GreensomZone extends Zone {
             return BlockType.FARMLAND;
         }
         if (y === groundH + 1) {
-            if (Math.abs(dx) % 3 !== 0) return BlockType.WHEAT;
+            if (Math.abs(dx) % 3 !== 0) {
+                const growNoise = noise.hash(x, z);
+                if (growNoise < 0.3) return BlockType.WHEAT_STAGE_1;
+                if (growNoise < 0.6) return BlockType.WHEAT_STAGE_2;
+                return BlockType.WHEAT;
+            }
         }
         return BlockType.AIR;
     }
@@ -213,10 +223,21 @@ export class GreensomZone extends Zone {
     // --- GROUND VEGETATION ---
     if (y === groundH) return BlockType.GRASS;
     if (y === groundH + 1 && lod === LodLevel.HIGH) {
-        const n = noise.hash(x, z);
-        if (n > 0.95) return BlockType.TALL_GRASS;
-        if (n > 0.92) return BlockType.FLOWER_YELLOW;
-        if (n > 0.90) return BlockType.SMALL_ROCK;
+        const density = noise.noise2D(x * 0.1, z * 0.1); // Smooth variations
+        const n = noise.hash(x, z); // Individual placement
+        
+        // High density areas (density > 0)
+        if (density > 0) {
+            if (n > 0.6) return BlockType.TALL_GRASS;
+            if (n > 0.55) return BlockType.FLOWER_YELLOW;
+            if (n > 0.53) return BlockType.FLOWER_RED;
+        } else {
+            // Low density areas
+            if (n > 0.95) return BlockType.TALL_GRASS;
+            if (n > 0.94) return BlockType.FLOWER_YELLOW;
+        }
+
+        if (n > 0.98) return BlockType.SMALL_ROCK;
     }
 
     return BlockType.AIR;

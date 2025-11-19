@@ -78,6 +78,8 @@ export const COLORS = {
   WOOD_FENCE: '#8D6E63',
   FARMLAND: '#4E342E',
   WHEAT: '#E4D00A',
+  WHEAT_GREEN: '#7cb342',   // Stage 1
+  WHEAT_GROWING: '#aed581', // Stage 2
 
   // Greensom Polish
   LILY_PAD: '#2e7d32',
@@ -153,7 +155,10 @@ export enum BlockType {
   SUGARCANE = 42,
   TALL_GRASS = 43,
   LANTERN = 44,
-  RED_APPLE = 45
+  RED_APPLE = 45,
+  
+  WHEAT_STAGE_1 = 46,
+  WHEAT_STAGE_2 = 47
 }
 
 // Start at Greensom (South of SAO)
