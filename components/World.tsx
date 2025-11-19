@@ -59,8 +59,6 @@ const solidMaterial = new MeshStandardMaterial({
 });
 
 solidMaterial.onBeforeCompile = (shader) => {
-  // Pass the texture map (though map is handled by default, we want to mix it specifically)
-  // We need access to vNormal to detect sides vs top
   shader.vertexShader = `
     varying vec3 vWorldNormal;
     ${shader.vertexShader}
@@ -68,7 +66,6 @@ solidMaterial.onBeforeCompile = (shader) => {
     '#include <begin_vertex>',
     `
     #include <begin_vertex>
-    // Calculate world normal for the fragment shader (simplified approach)
     vWorldNormal = normalize( mat3( instanceMatrix ) * normal );
     `
   );
@@ -81,49 +78,21 @@ solidMaterial.onBeforeCompile = (shader) => {
     `
     #include <map_fragment>
     
-    // 1. TEXTURE NOISE MIX
-    // The map_fragment sets 'diffuseColor' based on the texture. 
-    // We want to blend the noise texture subtly over the vertex color.
-    // Since we set map, 'diffuseColor' already has the texture.
-    
-    // 2. EDGE DARKENING (Fake Ambient Occlusion)
-    // BoxGeometry UVs go 0->1. Edges are near 0 or 1.
     float edgeWidth = 0.05;
     float edgeX = step(edgeWidth, vMapUv.x) * step(vMapUv.x, 1.0 - edgeWidth);
     float edgeY = step(edgeWidth, vMapUv.y) * step(vMapUv.y, 1.0 - edgeWidth);
     float centerMask = edgeX * edgeY;
-    
-    // Darken edges by 20%
     float edgeFactor = 0.8 + (0.2 * centerMask);
     diffuseColor.rgb *= edgeFactor;
 
-    // 3. GRASS SIDE LOGIC (Minecraft Style)
-    // Heuristic: If the block is predominantly green (Grass), but we are looking at the side, make it Dirt.
-    // vColor comes from the vertex shader (instanceColor).
-    // We access it via 'diffuseColor' or 'vColor' depending on THREE version, but diffuseColor has it multiplied.
-    
-    // Let's calculate based on the vertex color passed into the material (before texture)
-    // We can't easily access raw instanceColor here without re-declaring varying.
-    // However, standard material mixes vertex color into diffuseColor before map_fragment.
-    
-    // Check if "Green-ish" (High Green, lower Red/Blue)
-    // This detects Biome Blended Grass
     bool isGreen = diffuseColor.g > diffuseColor.r * 1.2 && diffuseColor.g > diffuseColor.b * 1.2;
-    
-    // Check if looking at side (Normal Y is near 0)
     bool isSide = abs(vWorldNormal.y) < 0.5;
 
     if (isGreen && isSide) {
-        // Replace color with Dirt Brown, preserving the noise texture intensity
-        vec3 dirtColor = vec3(0.36, 0.25, 0.22); // #5D4037 converted roughly to linear
-        
-        // Keep the texture variation (luminance)
+        vec3 dirtColor = vec3(0.36, 0.25, 0.22);
         float luminance = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-        // Apply dirt color
-        diffuseColor.rgb = dirtColor * edgeFactor; 
-        
-        // Re-apply a bit of the original texture noise
-        diffuseColor.rgb *= (texelColor.rgb + 0.2); 
+        diffuseColor.rgb = dirtColor * edgeFactor;
+        diffuseColor.rgb *= (texelColor.rgb + 0.2);
     }
     `
   );
