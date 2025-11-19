@@ -7,6 +7,7 @@ export const useKeyboardControls = () => {
     moveLeft: false,
     moveRight: false,
     jump: false,
+    sprint: false, // Added sprint
   });
 
   useEffect(() => {
@@ -31,6 +32,10 @@ export const useKeyboardControls = () => {
         case 'Space':
           setMovement((m) => ({ ...m, jump: true }));
           break;
+        case 'ShiftLeft':
+        case 'ShiftRight':
+          setMovement((m) => ({ ...m, sprint: true }));
+          break;
       }
     };
 
@@ -54,6 +59,10 @@ export const useKeyboardControls = () => {
           break;
         case 'Space':
           setMovement((m) => ({ ...m, jump: false }));
+          break;
+        case 'ShiftLeft':
+        case 'ShiftRight':
+          setMovement((m) => ({ ...m, sprint: false }));
           break;
       }
     };

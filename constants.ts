@@ -1,11 +1,13 @@
 import { Vector3 } from 'three';
 
 export const CHUNK_SIZE = 32;
-export const RENDER_DISTANCE = 4; 
+export const RENDER_DISTANCE = 3; 
 export const BLOCK_SIZE = 1;
 export const WORLD_HEIGHT = 60; // Increased for towers
 export const WATER_LEVEL = 3;
 export const MILE = 500; 
+export const MAX_BUILD_HEIGHT = 60;  // Use this to limit vertical scanning
+export const MIN_BUILD_HEIGHT = -30; // Use this too
 
 // Physics
 export const GRAVITY = 30;
