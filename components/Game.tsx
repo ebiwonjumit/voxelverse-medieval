@@ -46,8 +46,9 @@ const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number 
       lightTarget.position.copy(camera.position);
       lightTarget.updateMatrixWorld();
 
-      dirLight.current.intensity = 1.5;
-      dirLight.current.color.setHSL(0.1, 1, 0.95);
+      // CRITICAL FIX: Higher intensity for proper scene lighting
+      dirLight.current.intensity = 2.5;
+      dirLight.current.color.setHex(0xffffff); // Pure white light
     }
 
     if (scene.fog) {
@@ -62,8 +63,11 @@ const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number 
     <>
       <Sky ref={skyRef as any} sunPosition={sunPosition} turbidity={0.2} rayleigh={0.5} mieCoefficient={0.005} mieDirectionalG={0.8} />
       
+      {/* Ambient light for overall scene brightness */}
+      <ambientLight intensity={0.5} />
+      
       {/* Hemisphere Light provides natural fill light (Sky Color + Ground Color) */}
-      <hemisphereLight args={['#ffffff', '#444444', 0.6]} />
+      <hemisphereLight args={['#87CEEB', '#4a4a4a', 0.8]} />
       
       <directionalLight 
         ref={dirLight}
@@ -71,9 +75,13 @@ const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number 
         castShadow 
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.0005}
-      >
-         <orthographicCamera attach="shadow-camera" args={[-50, 50, 50, -50]} />
-      </directionalLight>
+        shadow-camera-left={-100}
+        shadow-camera-right={100}
+        shadow-camera-top={100}
+        shadow-camera-bottom={-100}
+        shadow-camera-near={0.5}
+        shadow-camera-far={500}
+      />
     </>
   );
 };
