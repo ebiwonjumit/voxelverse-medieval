@@ -49,68 +49,66 @@ const createVoxelTexture = () => {
 
 const voxelTexture = createVoxelTexture();
 
-// --- SOLID MATERIAL CONFIGURATION ---
-// Using a shared material for all solid blocks with custom shader logic
+// --- IMPROVED SOLID MATERIAL CONFIGURATION ---
 const solidMaterial = new MeshStandardMaterial({
   map: voxelTexture,
   roughness: 0.8,
   metalness: 0.1,
-  vertexColors: true, // Vital for instanced color tinting
+  vertexColors: true,
 });
 
 solidMaterial.onBeforeCompile = (shader) => {
   shader.vertexShader = `
     varying vec3 vWorldNormal;
+    varying vec3 vWorldPosition;
     ${shader.vertexShader}
   `.replace(
     '#include <begin_vertex>',
     `
     #include <begin_vertex>
-    // Calculate world normal for side-detection in fragment shader
     #ifdef USE_INSTANCING
-      // Use instanceMatrix to rotate normal to World Space
-      // Note: This assumes non-uniform scaling isn't extreme, otherwise we need inverse-transpose
       vWorldNormal = normalize( (instanceMatrix * vec4(normal, 0.0)).xyz );
+      vWorldPosition = (instanceMatrix * vec4(transformed, 1.0)).xyz;
     #else
       vWorldNormal = normalize( (modelMatrix * vec4(normal, 0.0)).xyz );
+      vWorldPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;
     #endif
     `
   );
 
   shader.fragmentShader = `
     varying vec3 vWorldNormal;
+    varying vec3 vWorldPosition;
     ${shader.fragmentShader}
   `.replace(
     '#include <map_fragment>',
     `
     #include <map_fragment>
-    
-    vec2 localUv = vMapUv; 
-    
-    // Edge Darkening (Fake AO)
-    float edgeWidth = 0.05;
-    float edgeX = step(edgeWidth, localUv.x) * step(localUv.x, 1.0 - edgeWidth);
-    float edgeY = step(edgeWidth, localUv.y) * step(localUv.y, 1.0 - edgeWidth);
+    vec2 localUv = vMapUv;
+    float edgeWidth = 0.08;
+    float edgeX = smoothstep(0.0, edgeWidth, localUv.x) * smoothstep(1.0, 1.0 - edgeWidth, localUv.x);
+    float edgeY = smoothstep(0.0, edgeWidth, localUv.y) * smoothstep(1.0, 1.0 - edgeWidth, localUv.y);
     float centerMask = edgeX * edgeY;
-    float edgeFactor = 0.8 + (0.2 * centerMask);
-    
-    diffuseColor.rgb *= edgeFactor;
-
-    // Grass Side Logic
-    // Since vWorldNormal is now truly World Space, this is stable against camera rotation
+    float aoFactor = 0.95 + (0.05 * centerMask);
+    vec3 noiseVal = vec3(1.0);
+    #ifdef USE_MAP
+      noiseVal = texture2D(map, localUv).rgb;
+    #endif
+    vec3 noiseVariation = mix(vec3(0.92), vec3(1.08), noiseVal);
+    float topness = vWorldNormal.y;
+    float faceBrightness = 1.0 + (topness * 0.08);
     bool isGreen = diffuseColor.g > diffuseColor.r * 1.2 && diffuseColor.g > diffuseColor.b * 1.2;
     bool isSide = abs(vWorldNormal.y) < 0.5;
-
     if (isGreen && isSide) {
-        vec3 dirtColor = vec3(0.36, 0.25, 0.22);
-        
-        vec3 noiseVal = vec3(1.0);
-        #ifdef USE_MAP
-          noiseVal = texture2D( map, localUv ).rgb;
-        #endif
-
-        diffuseColor.rgb = dirtColor * edgeFactor * (noiseVal + 0.2);
+        vec3 dirtColor = vec3(0.55, 0.40, 0.32);
+        vec3 noiseTerm = clamp(noiseVal * 1.1, vec3(0.85), vec3(1.15));
+        diffuseColor.rgb = dirtColor * aoFactor * noiseTerm;
+    } else {
+        diffuseColor.rgb *= aoFactor * noiseVariation * faceBrightness;
     }
+    vec3 viewDir = normalize(cameraPosition - vWorldPosition);
+    float fresnel = pow(1.0 - abs(dot(viewDir, vWorldNormal)), 2.0);
+    diffuseColor.rgb += vec3(0.02) * fresnel;
     `
   );
 };
