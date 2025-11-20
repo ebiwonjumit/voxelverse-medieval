@@ -3,17 +3,32 @@ import { Vector3 } from 'three';
 export const CHUNK_SIZE = 32;
 export const RENDER_DISTANCE = 3; 
 export const BLOCK_SIZE = 1;
-export const WORLD_HEIGHT = 60; // Increased for towers
+export const WORLD_HEIGHT = 70; // Increased for towers
 export const WATER_LEVEL = 3;
 export const MILE = 500; 
 export const MAX_BUILD_HEIGHT = 60;  // Use this to limit vertical scanning
 export const MIN_BUILD_HEIGHT = -30; // Use this too
 
+// Zone Test Locations
+export const ZONE_LOCATIONS = {
+  SAO: new Vector3(0, 15, 0),                    // Town of Beginnings (center)
+  GREENSOM: new Vector3(0, 15, 300),             // Greensom Village (south of SAO)
+  TEMPEST: new Vector3(3 * MILE, 15, 0),         // Federation of Tempest (east, 1500 blocks)
+  AMESTRIS: new Vector3(-3 * MILE, 15, 0),       // Amestris District (west, -1500 blocks)
+  BOSSE: new Vector3(0, 40, -3 * MILE),          // Kingdom of Bosse (north, -1500 blocks, elevated)
+  FREMMEVILLA: new Vector3(1600, 15, -1600),     // Kingdom of Fremmevilla (northeast)
+  MAGNOLIA: new Vector3(-1600, 15, 1600),        // Magnolia Town (southwest)
+  WILDERNESS: new Vector3(500, 15, 500),         // Wilderness area
+  WILDERNESS_MOUNTAINS: new Vector3(20 * MILE, 15, 0),  // Mountains (east)
+  WILDERNESS_COAST: new Vector3(-4 * MILE, 15, 0),      // Coast (west)
+  WILDERNESS_FOREST: new Vector3(0, 15, 10 * MILE),     // Forest (south)
+};
+
 // Physics
-export const GRAVITY = 30;
-export const JUMP_FORCE = 10;
-export const MOVE_SPEED = 14; 
-export const PLAYER_HEIGHT = 1.8;
+export const GRAVITY = 18;
+export const JUMP_FORCE = 8;
+export const MOVE_SPEED = 7; 
+export const PLAYER_HEIGHT = 1.82;
 export const PLAYER_RADIUS = 0.4;
 
 // Colors
@@ -22,7 +37,7 @@ export const COLORS = {
   DIRT: '#5D4037',        
   STONE: '#64748b',       
   SAND: '#fde047',        
-  WATER: '#3b82f6',       
+  WATER: '#5194ffff',       
   SNOW: '#f8fafc',        
   
   // Biome Variations (Grass)
@@ -164,4 +179,4 @@ export enum BlockType {
 }
 
 // Start at Greensom (South of SAO)
-export const INITIAL_SPAWN = new Vector3(0, 15, 300);
+export const INITIAL_SPAWN = ZONE_LOCATIONS.GREENSOM;

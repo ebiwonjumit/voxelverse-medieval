@@ -9,14 +9,29 @@ export class WildernessZone extends Zone {
   
   getAtmosphere(): AtmosphereSettings {
     return {
-      fogColor: '#87CEEB', // Standard Blue
-      skyTint: '#ffffff',
+      fogColor: '#4a3358', // Dark purple fog
+      skyTint: '#6b4b7a', // Deep purple sky
       fogDensity: 0.015
     };
   }
 
   getHeight(x: number, z: number, baseH: number): number {
-     let h = baseH;
+     // Start with a reasonable base height for wilderness (slightly above water level)
+     let h = 6;
+     
+     // Add rolling hills and terrain variance for visual interest
+     // Large-scale hills (creates broad elevation changes)
+     const largeHills = noise.octaveNoise(x * 0.008, z * 0.008, 2) * 6;
+     h += largeHills;
+     
+     // Medium rolling terrain (creates medium-sized features)
+     const mediumTerrain = noise.octaveNoise(x * 0.015, z * 0.015, 3) * 4;
+     h += mediumTerrain;
+     
+     // Small details (creates local variation)
+     const smallDetails = noise.noise2D(x * 0.03, z * 0.03) * 2;
+     h += smallDetails;
+     
      // Mountains (East > 20 Miles)
      const mountainStart = 20 * MILE;
      if (x > mountainStart) { 
@@ -24,18 +39,29 @@ export class WildernessZone extends Zone {
         h += noise.octaveNoise(x * 0.01, z * 0.01, 4) * 80 * Math.min(factor, 1);
         h += Math.max(0, factor * 50);
      }
-    // Coast (West < 3 Miles)
+     
+    // Coast (West < 3 Miles) - flatten towards water
     const coastStart = -3.5 * MILE;
     if (x < coastStart) {
         const factor = (coastStart - x) / 500;
         h -= factor * 20;
     }
-    // Forest (South > 8 Miles)
+    
+    // Forest (South > 8 Miles) - add more roughness
     const forestStart = 8 * MILE;
-    if (z > forestStart) h += noise.noise2D(x * 0.02, z * 0.02) * 5;
+    if (z > forestStart) {
+        h += noise.noise2D(x * 0.02, z * 0.02) * 5;
+        // Add extra roughness to forest terrain
+        h += noise.octaveNoise(x * 0.025, z * 0.025, 2) * 6;
+    }
     
     const roadInfo = this.getRoadInfo(x, z);
-    if (roadInfo.isRoad) return h * 0.2 + 6 * 0.8;
+    if (roadInfo.isRoad) {
+      // Flatten road but don't create dramatic height differences
+      // Blend towards 7 (slightly above water level) but keep some terrain variation
+      const targetRoadHeight = 7;
+      return h * 0.5 + targetRoadHeight * 0.5; // Smoother blend
+    }
     
     return h;
   }

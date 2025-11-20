@@ -22,6 +22,9 @@ const Player: React.FC<PlayerProps> = ({ setPlayerPos }) => {
   const isGrounded = useRef(false);
   const controlsRef = useRef<any>(null);
   const bobTime = useRef(0);
+  const jumpPressed = useRef(false);
+  const jumpCooldown = useRef(0); 
+  const wasGroundedLastFrame = useRef(false); // Track if we were grounded last frame
 
   useEffect(() => {
     camera.position.copy(INITIAL_SPAWN);
@@ -31,8 +34,8 @@ const Player: React.FC<PlayerProps> = ({ setPlayerPos }) => {
   const isSolid = (x: number, y: number, z: number): boolean => {
     const key = `${Math.round(x)},${Math.round(y)},${Math.round(z)}`;
     
-    // Clear cache every 60 frames (1 second at 60fps)
-    if (cacheFrameCount > 60) {
+    // Clear cache every 120 frames (2 seconds at 60fps) - reduced frequency
+    if (cacheFrameCount > 120) {
       collisionCache.clear();
       cacheFrameCount = 0;
     }
@@ -67,11 +70,6 @@ const Player: React.FC<PlayerProps> = ({ setPlayerPos }) => {
       const checkPoints = [
         { x: pos.x, y: feetY, z: pos.z },
         { x: pos.x, y: headY, z: pos.z },
-        // Check corners for better collision
-        { x: pos.x + PLAYER_RADIUS, y: feetY, z: pos.z },
-        { x: pos.x - PLAYER_RADIUS, y: feetY, z: pos.z },
-        { x: pos.x, y: feetY, z: pos.z + PLAYER_RADIUS },
-        { x: pos.x, y: feetY, z: pos.z - PLAYER_RADIUS },
       ];
       
       for (const point of checkPoints) {
@@ -80,18 +78,16 @@ const Player: React.FC<PlayerProps> = ({ setPlayerPos }) => {
         }
       }
     } else {
-      // For horizontal movement, check a cylinder of points
-      const angles = 8; // Check 8 points around the player
+      // For horizontal movement, check 4 cardinal points (reduced from 8)
+      const angles = 4;
       for (let i = 0; i < angles; i++) {
         const angle = (i / angles) * Math.PI * 2;
         const x = pos.x + Math.cos(angle) * PLAYER_RADIUS;
         const z = pos.z + Math.sin(angle) * PLAYER_RADIUS;
         
-        // Check at multiple heights
-        for (let y = feetY; y <= headY; y += 0.5) {
-          if (isSolid(x, y, z)) {
-            return true;
-          }
+        // Check at fewer heights (2 instead of 4+)
+        if (isSolid(x, feetY, z) || isSolid(x, headY, z)) {
+          return true;
         }
       }
     }
@@ -103,13 +99,11 @@ const Player: React.FC<PlayerProps> = ({ setPlayerPos }) => {
   const checkGrounded = (pos: Vector3): boolean => {
     const feetY = pos.y - PLAYER_HEIGHT - 0.1; // Slightly below feet
     
-    // Check center and corners
+    // Check center and 2 corner points (reduced from 5)
     const points = [
       { x: pos.x, z: pos.z },
-      { x: pos.x + PLAYER_RADIUS * 0.8, z: pos.z },
-      { x: pos.x - PLAYER_RADIUS * 0.8, z: pos.z },
-      { x: pos.x, z: pos.z + PLAYER_RADIUS * 0.8 },
-      { x: pos.x, z: pos.z - PLAYER_RADIUS * 0.8 },
+      { x: pos.x + PLAYER_RADIUS * 0.7, z: pos.z + PLAYER_RADIUS * 0.7 },
+      { x: pos.x - PLAYER_RADIUS * 0.7, z: pos.z - PLAYER_RADIUS * 0.7 },
     ];
     
     for (const point of points) {
@@ -140,6 +134,12 @@ const Player: React.FC<PlayerProps> = ({ setPlayerPos }) => {
   useFrame((state, delta) => {
     cacheFrameCount++;
     
+    // Decrement jump cooldown 
+    // At 60fps, we need ~30 frames for 0.5s
+    if (jumpCooldown.current > 0) {
+      jumpCooldown.current--;
+    }
+    
     // 1. Input Handling
     const inputVector = new Vector3(0, 0, 0);
     
@@ -165,11 +165,14 @@ const Player: React.FC<PlayerProps> = ({ setPlayerPos }) => {
       direction.addScaledVector(right, inputVector.x);
       
       // Sprint modifier
-      const speed = sprint ? MOVE_SPEED * 1.5 : MOVE_SPEED;
-      direction.multiplyScalar(speed * delta);
-
-      velocity.current.x = direction.x;
-      velocity.current.z = direction.z;
+      const speed = sprint ? MOVE_SPEED * 2 : MOVE_SPEED;
+      const targetVelocityX = direction.x * speed;
+      const targetVelocityZ = direction.z * speed;
+      
+      // Smooth acceleration using lerp
+      const acceleration = 0.15;
+      velocity.current.x += (targetVelocityX - velocity.current.x) * acceleration;
+      velocity.current.z += (targetVelocityZ - velocity.current.z) * acceleration;
       
       // Camera bobbing when moving
       if (isGrounded.current) {
@@ -179,38 +182,82 @@ const Player: React.FC<PlayerProps> = ({ setPlayerPos }) => {
         camera.position.y = position.current.y + bob;
       }
     } else {
-      velocity.current.x *= 0.9; // Friction
-      velocity.current.z *= 0.9;
+      // Smooth deceleration
+      velocity.current.x *= 0.85;
+      velocity.current.z *= 0.85;
       bobTime.current = 0;
     }
 
     // 2. Physics
     
-    // Check grounded state
-    isGrounded.current = checkGrounded(position.current);
+    // Apply Gravity (Minecraft uses -0.08 per tick with 0.98 drag)
+    velocity.current.y -= GRAVITY * delta;
     
-    // Apply Gravity
-    if (!isGrounded.current) {
-      velocity.current.y -= GRAVITY * delta;
-    } else {
-      if (velocity.current.y < 0) {
-        velocity.current.y = 0;
-      }
-    }
-    
-    // Jump (only when grounded)
-    if (jump && isGrounded.current) {
-      velocity.current.y = JUMP_FORCE;
-      isGrounded.current = false;
-    }
-
     // Terminal velocity
     velocity.current.y = Math.max(velocity.current.y, -50);
 
     const originalPos = position.current.clone();
     
+    // Store grounded state from last frame for Minecraft-style jump logic
+    wasGroundedLastFrame.current = isGrounded.current;
+    
+    // Y Movement first (so we can check grounded state after)
+    position.current.y += velocity.current.y * delta;
+    if (checkCollision(position.current, true)) {
+      position.current.y = originalPos.y;
+      velocity.current.y = 0;
+      // Only set grounded when we hit something from above (falling down)
+      isGrounded.current = true;
+    } else {
+      // In air, check if we're actually on ground
+      isGrounded.current = checkGrounded(position.current);
+    }
+    
+   
+    const canJump = (wasGroundedLastFrame.current || isGrounded.current) && 
+                    jumpCooldown.current === 0;
+    
+    if (jump && canJump && !jumpPressed.current) {
+      velocity.current.y = JUMP_FORCE;
+      
+      // Sprint-jumping bonus (Minecraft adds 0.2 units horizontal momentum)
+      if (sprint && inputVector.length() > 0) {
+        const forward = new Vector3();
+        camera.getWorldDirection(forward);
+        forward.y = 0;
+        forward.normalize();
+        
+        const right = new Vector3();
+        right.crossVectors(forward, new Vector3(0, 1, 0));
+        right.normalize();
+        
+        const direction = new Vector3();
+        direction.addScaledVector(forward, -inputVector.z); 
+        direction.addScaledVector(right, inputVector.x);
+        direction.normalize();
+        
+        // Add sprint-jump boost (scaled appropriately for our game)
+        velocity.current.x += direction.x * 0.2;
+        velocity.current.z += direction.z * 0.2;
+      }
+      
+      isGrounded.current = false;
+      jumpPressed.current = true;
+      jumpCooldown.current = 30; // ~0.5 seconds at 60fps (Minecraft uses 10 ticks at 20tps)
+    }
+    
+    // Reset jump when key is released
+    if (!jump) {
+      jumpPressed.current = false;
+    }
+    
+    // Reset cooldown when we land (Minecraft does this)
+    if (isGrounded.current && !wasGroundedLastFrame.current) {
+      jumpCooldown.current = 0;
+    }
+    
     // X Movement
-    position.current.x += velocity.current.x;
+    position.current.x += velocity.current.x * delta;
     if (checkCollision(position.current, false)) {
       // Try step-up
       if (!tryStepUp(position.current, originalPos)) {
@@ -220,7 +267,7 @@ const Player: React.FC<PlayerProps> = ({ setPlayerPos }) => {
     }
 
     // Z Movement  
-    position.current.z += velocity.current.z;
+    position.current.z += velocity.current.z * delta;
     if (checkCollision(position.current, false)) {
       // Try step-up
       if (!tryStepUp(position.current, originalPos)) {
@@ -228,18 +275,14 @@ const Player: React.FC<PlayerProps> = ({ setPlayerPos }) => {
         velocity.current.z = 0;
       }
     }
-
-    // Y Movement
-    position.current.y += velocity.current.y * delta;
-    if (checkCollision(position.current, true)) {
-      position.current.y = originalPos.y;
-      velocity.current.y = 0;
-    }
     
     // Void protection
     if (position.current.y < -20) {
       position.current.copy(INITIAL_SPAWN);
       velocity.current.set(0, 0, 0);
+      isGrounded.current = false;
+      wasGroundedLastFrame.current = false;
+      jumpCooldown.current = 0;
     }
 
     // Update Camera (with smooth following)

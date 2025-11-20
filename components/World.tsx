@@ -49,70 +49,6 @@ const createVoxelTexture = () => {
 
 const voxelTexture = createVoxelTexture();
 
-// --- IMPROVED SOLID MATERIAL CONFIGURATION ---
-const solidMaterial = new MeshStandardMaterial({
-  map: voxelTexture,
-  roughness: 0.8,
-  metalness: 0.1,
-  vertexColors: true,
-});
-
-solidMaterial.onBeforeCompile = (shader) => {
-  shader.vertexShader = `
-    varying vec3 vWorldNormal;
-    varying vec3 vWorldPosition;
-    ${shader.vertexShader}
-  `.replace(
-    '#include <begin_vertex>',
-    `
-    #include <begin_vertex>
-    #ifdef USE_INSTANCING
-      vWorldNormal = normalize( (instanceMatrix * vec4(normal, 0.0)).xyz );
-      vWorldPosition = (instanceMatrix * vec4(transformed, 1.0)).xyz;
-    #else
-      vWorldNormal = normalize( (modelMatrix * vec4(normal, 0.0)).xyz );
-      vWorldPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;
-    #endif
-    `
-  );
-
-  shader.fragmentShader = `
-    varying vec3 vWorldNormal;
-    varying vec3 vWorldPosition;
-    ${shader.fragmentShader}
-  `.replace(
-    '#include <map_fragment>',
-    `
-    #include <map_fragment>
-    vec2 localUv = vMapUv;
-    float edgeWidth = 0.08;
-    float edgeX = smoothstep(0.0, edgeWidth, localUv.x) * smoothstep(1.0, 1.0 - edgeWidth, localUv.x);
-    float edgeY = smoothstep(0.0, edgeWidth, localUv.y) * smoothstep(1.0, 1.0 - edgeWidth, localUv.y);
-    float centerMask = edgeX * edgeY;
-    float aoFactor = 0.95 + (0.05 * centerMask);
-    vec3 noiseVal = vec3(1.0);
-    #ifdef USE_MAP
-      noiseVal = texture2D(map, localUv).rgb;
-    #endif
-    vec3 noiseVariation = mix(vec3(0.92), vec3(1.08), noiseVal);
-    float topness = vWorldNormal.y;
-    float faceBrightness = 1.0 + (topness * 0.08);
-    bool isGreen = diffuseColor.g > diffuseColor.r * 1.2 && diffuseColor.g > diffuseColor.b * 1.2;
-    bool isSide = abs(vWorldNormal.y) < 0.5;
-    if (isGreen && isSide) {
-        vec3 dirtColor = vec3(0.55, 0.40, 0.32);
-        vec3 noiseTerm = clamp(noiseVal * 1.1, vec3(0.85), vec3(1.15));
-        diffuseColor.rgb = dirtColor * aoFactor * noiseTerm;
-    } else {
-        diffuseColor.rgb *= aoFactor * noiseVariation * faceBrightness;
-    }
-    vec3 viewDir = normalize(cameraPosition - vWorldPosition);
-    float fresnel = pow(1.0 - abs(dot(viewDir, vWorldNormal)), 2.0);
-    diffuseColor.rgb += vec3(0.02) * fresnel;
-    `
-  );
-};
-
 // --- WATER MATERIAL CONFIGURATION ---
 const waterMaterial = new MeshStandardMaterial({
   color: 0xffffff, 
@@ -151,9 +87,31 @@ const Chunk: React.FC<{
   chunkZ: number; 
   lodLevel: LodLevel;
   playerY: number;
-}> = React.memo(({ chunkX, chunkZ, lodLevel, playerY }) => {
+  distance: number;
+}> = React.memo(({ chunkX, chunkZ, lodLevel, playerY, distance }) => {
   const solidMeshRef = useRef<InstancedMesh>(null);
   const waterMeshRef = useRef<InstancedMesh>(null);
+  
+  // Calculate opacity based on distance - fade chunks at render distance edge
+  const opacity = useMemo(() => {
+    if (distance < RENDER_DISTANCE - 1) return 1.0; // Full opacity for close chunks
+    // Fade from 1.0 to 0.3 for chunks at the edge
+    const fadeStart = RENDER_DISTANCE - 1;
+    const fadeEnd = RENDER_DISTANCE;
+    const fadeProgress = (distance - fadeStart) / (fadeEnd - fadeStart);
+    return Math.max(0.3, 1.0 - fadeProgress * 0.7); // Never fully transparent
+  }, [distance]);
+  
+  // Create material instance per chunk with appropriate opacity
+  const solidMaterial = useMemo(() => {
+    return new MeshStandardMaterial({
+      roughness: 0.8,
+      metalness: 0.1,
+      flatShading: true,
+      transparent: opacity < 1.0,
+      opacity: opacity,
+    });
+  }, [opacity]);
   
   const { solidInstances, waterInstances } = useMemo(() => {
     const solid: { x: number; y: number; z: number; type: BlockType }[] = [];
@@ -385,8 +343,6 @@ const Chunk: React.FC<{
         <instancedMesh 
           ref={solidMeshRef} 
           args={[undefined, undefined, solidInstances.length]} 
-          castShadow 
-          receiveShadow
           material={solidMaterial}
           frustumCulled={true}
         >
@@ -397,7 +353,6 @@ const Chunk: React.FC<{
         <instancedMesh 
           ref={waterMeshRef} 
           args={[undefined, undefined, waterInstances.length]} 
-          receiveShadow
           material={waterMaterial}
           frustumCulled={true}
         >
@@ -409,55 +364,36 @@ const Chunk: React.FC<{
 });
 
 const World: React.FC<WorldProps> = ({ playerPosition }) => {
-  const { camera } = useThree();
-  const [visibleChunks, setVisibleChunks] = useState<Array<{x: number, z: number, lod: LodLevel}>>([]);
+  const [visibleChunks, setVisibleChunks] = useState<Array<{x: number, z: number, lod: LodLevel, distance: number}>>([]);
   
-  // Update visible chunks based on camera direction
+  // Update visible chunks based on player chunk position only
   useEffect(() => {
     const playerChunkX = Math.floor(playerPosition.x / CHUNK_SIZE);
     const playerChunkZ = Math.floor(playerPosition.z / CHUNK_SIZE);
     
-    const chunks: Array<{x: number, z: number, lod: LodLevel}> = [];
-    
-    // Get camera forward direction
-    const forward = new Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    const chunks: Array<{x: number, z: number, lod: LodLevel, distance: number}> = [];
     
     for (let cx = playerChunkX - RENDER_DISTANCE; cx <= playerChunkX + RENDER_DISTANCE; cx++) {
       for (let cz = playerChunkZ - RENDER_DISTANCE; cz <= playerChunkZ + RENDER_DISTANCE; cz++) {
         const dist = Math.sqrt(Math.pow(cx - playerChunkX, 2) + Math.pow(cz - playerChunkZ, 2));
         
-        // Distance culling
+        // Distance culling only - let Three.js handle frustum culling automatically
         if (dist > RENDER_DISTANCE) continue;
         
-        // Simple frustum culling - check if chunk is roughly in front of camera
-        const chunkWorldX = cx * CHUNK_SIZE + CHUNK_SIZE / 2;
-        const chunkWorldZ = cz * CHUNK_SIZE + CHUNK_SIZE / 2;
-        
-        const toChunk = new Vector3(
-          chunkWorldX - camera.position.x,
-          0,
-          chunkWorldZ - camera.position.z
-        ).normalize();
-        
-        const dot = toChunk.dot(forward);
-        
-        // Skip chunks behind camera (with some margin for peripheral vision)
-        if (dot < -0.3) continue;
-        
         const lod = dist < 2 ? LodLevel.HIGH : LodLevel.LOW;
-        chunks.push({x: cx, z: cz, lod});
+        chunks.push({x: cx, z: cz, lod, distance: dist});
       }
     }
     
     // Sort by distance for progressive loading
     chunks.sort((a, b) => {
-      const distA = Math.sqrt(Math.pow(a.x - playerChunkX, 2) + Math.pow(a.z - playerChunkZ, 2));
-      const distB = Math.sqrt(Math.pow(b.x - playerChunkX, 2) + Math.pow(b.z - playerChunkZ, 2));
+      const distA = a.distance;
+      const distB = b.distance;
       return distA - distB;
     });
     
     setVisibleChunks(chunks);
-  }, [playerPosition, camera]);
+  }, [playerPosition.x, playerPosition.z]);
 
   useFrame(({ clock }) => {
     if (waterMaterial.userData.shader) {
@@ -467,13 +403,14 @@ const World: React.FC<WorldProps> = ({ playerPosition }) => {
 
   return (
     <group>
-      {visibleChunks.map(({x, z, lod}) => (
+      {visibleChunks.map(({x, z, lod, distance}) => (
         <Chunk 
           key={`${x}-${z}`} 
           chunkX={x} 
           chunkZ={z} 
           lodLevel={lod}
           playerY={playerPosition.y}
+          distance={distance}
         />
       ))}
     </group>

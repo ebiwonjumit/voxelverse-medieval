@@ -30,6 +30,7 @@ export const useKeyboardControls = () => {
           setMovement((m) => ({ ...m, moveRight: true }));
           break;
         case 'Space':
+          e.preventDefault();
           setMovement((m) => ({ ...m, jump: true }));
           break;
         case 'ShiftLeft':
@@ -58,6 +59,7 @@ export const useKeyboardControls = () => {
           setMovement((m) => ({ ...m, moveRight: false }));
           break;
         case 'Space':
+          e.preventDefault();
           setMovement((m) => ({ ...m, jump: false }));
           break;
         case 'ShiftLeft':

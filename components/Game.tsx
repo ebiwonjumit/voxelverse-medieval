@@ -11,6 +11,7 @@ const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number 
   const { scene } = useThree();
   const dirLight = useRef<DirectionalLight>(null);
   const skyRef = useRef<Mesh>(null);
+  const ambientLightRef = useRef<any>(null);
   
   // Create a persistent target object for the directional light
   const lightTarget = useMemo(() => {
@@ -25,8 +26,8 @@ const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number 
     };
   }, [scene, lightTarget]);
   
-  const [sunPosition] = useState(new Vector3(50, 100, 50));
-  const currentFogColor = useRef(new Color('#87CEEB'));
+  const [sunPosition] = useState(new Vector3(50, -20, 50)); // Low sun position for twilight purple sky
+  const currentFogColor = useRef(new Color('#385865ca'));
 
   useFrame(({ camera }) => {
     if (skyRef.current) {
@@ -46,9 +47,14 @@ const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number 
       lightTarget.position.copy(camera.position);
       lightTarget.updateMatrixWorld();
 
-      // CRITICAL FIX: Higher intensity for proper scene lighting
-      dirLight.current.intensity = 2.5;
+      // Proper daytime lighting
+      dirLight.current.intensity = 1.0;
       dirLight.current.color.setHex(0xffffff); // Pure white light
+    }
+
+    if (ambientLightRef.current) {
+      ambientLightRef.current.intensity = 0.4;
+      ambientLightRef.current.color.setHex(0xffffff);
     }
 
     if (scene.fog) {
@@ -61,26 +67,25 @@ const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number 
 
   return (
     <>
-      <Sky ref={skyRef as any} sunPosition={sunPosition} turbidity={0.2} rayleigh={0.5} mieCoefficient={0.005} mieDirectionalG={0.8} />
+      <Sky ref={skyRef as any} sunPosition={sunPosition} turbidity={10} rayleigh={2} mieCoefficient={0.005} mieDirectionalG={0.8} />
       
       {/* Ambient light for overall scene brightness */}
-      <ambientLight intensity={0.5} />
+      <ambientLight ref={ambientLightRef} intensity={0.4} />
       
       {/* Hemisphere Light provides natural fill light (Sky Color + Ground Color) */}
-      <hemisphereLight args={['#87CEEB', '#4a4a4a', 0.8]} />
+      <hemisphereLight args={['#6b4b7a', '#4a3358', 0.4]} />
       
       <directionalLight 
         ref={dirLight}
         target={lightTarget}
-        castShadow 
+        intensity={1.0}
+        castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.0005}
-        shadow-camera-left={-100}
-        shadow-camera-right={100}
-        shadow-camera-top={100}
-        shadow-camera-bottom={-100}
-        shadow-camera-near={0.5}
-        shadow-camera-far={500}
+        shadow-camera-left={-50}
+        shadow-camera-right={50}
+        shadow-camera-top={50}
+        shadow-camera-bottom={-50}
       />
     </>
   );
@@ -120,12 +125,25 @@ const Game: React.FC = () => {
     
     const currentZone = getCurrentZoneName(x, z);
     
-    const distSAO = (Math.sqrt(x*x + z*z) / MILE).toFixed(1);
-    const distTempest = (Math.sqrt(Math.pow(x - 3 * MILE, 2) + Math.pow(z, 2)) / MILE).toFixed(1);
-    const distAmestris = (Math.sqrt(Math.pow(x - (-3 * MILE), 2) + Math.pow(z, 2)) / MILE).toFixed(1);
-    const distBosse = (Math.sqrt(Math.pow(x, 2) + Math.pow(z - (-3 * MILE), 2)) / MILE).toFixed(1);
-    const distFremme = (Math.sqrt(Math.pow(x - 1600, 2) + Math.pow(z - (-1600), 2)) / MILE).toFixed(1);
-    const distMagnolia = (Math.sqrt(Math.pow(x - (-1600), 2) + Math.pow(z - 1600, 2)) / MILE).toFixed(1);
+    // Calculate distance to zone EDGE (distance to center - radius)
+    // If negative (inside zone), show 0.0
+    const distToCenter_SAO = Math.sqrt(x*x + z*z);
+    const distSAO = (Math.max(0, distToCenter_SAO - 200) / MILE).toFixed(1);
+    
+    const distToCenter_Tempest = Math.sqrt(Math.pow(x - 3 * MILE, 2) + Math.pow(z, 2));
+    const distTempest = (Math.max(0, distToCenter_Tempest - 700) / MILE).toFixed(1);
+    
+    const distToCenter_Amestris = Math.sqrt(Math.pow(x - (-3 * MILE), 2) + Math.pow(z, 2));
+    const distAmestris = (Math.max(0, distToCenter_Amestris - 700) / MILE).toFixed(1);
+    
+    const distToCenter_Bosse = Math.sqrt(Math.pow(x, 2) + Math.pow(z - (-3 * MILE), 2));
+    const distBosse = (Math.max(0, distToCenter_Bosse - 700) / MILE).toFixed(1);
+    
+    const distToCenter_Fremme = Math.sqrt(Math.pow(x - 1600, 2) + Math.pow(z - (-1600), 2));
+    const distFremme = (Math.max(0, distToCenter_Fremme - 250) / MILE).toFixed(1);
+    
+    const distToCenter_Magnolia = Math.sqrt(Math.pow(x - (-1600), 2) + Math.pow(z - 1600, 2));
+    const distMagnolia = (Math.max(0, distToCenter_Magnolia - 250) / MILE).toFixed(1);
 
     return { x, y, z, currentZone, distSAO, distTempest, distAmestris, distBosse, distFremme, distMagnolia };
   }
@@ -220,7 +238,7 @@ const Game: React.FC = () => {
         {showStats && <Stats className="!left-auto !right-4 !top-32" />}
         
         <DayNightCycle playerX={playerPos.x} playerZ={playerPos.z} />
-        <fog attach="fog" args={['#87CEEB', 20, 80]} /> 
+        <fog attach="fog" args={['#5a4a6a', 40, 120]} /> 
 
         <Suspense fallback={null}>
           <World playerPosition={playerPos} />
