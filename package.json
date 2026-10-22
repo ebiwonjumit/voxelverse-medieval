@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "bench": "node bench/run.mjs"
+    "bench": "node bench/run.mjs",
+    "textures:sheet": "vite-node bench/textureSheet.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",

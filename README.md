@@ -46,6 +46,7 @@ npm run dev         # start the game at http://localhost:3000
 npm run typecheck   # TypeScript, no emit
 npm test            # Vitest unit tests (tests/)
 npm run bench       # scripted flythrough in headless Chrome, needs the dev server running
+npm run textures:sheet   # dump the texture catalog to docs/screens/p3/catalog.png
 npm run bench -- --smoke   # loads the real game, lands the player, walks forward, reports page errors
 npm run bench -- --soak    # 90 s closed-loop walk, prints geometry and triangle counts every 5 s
 npm run bench -- --shot docs/screens/p2/spawn.png --url "http://localhost:3000/?shot=0,10,300,0,0"
