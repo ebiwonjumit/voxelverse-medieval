@@ -1,0 +1,101 @@
+{
+  "mode": "full",
+  "startedAt": "2026-10-22T19:17:24.414Z",
+  "env": {
+    "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
+    "devicePixelRatio": 1,
+    "viewport": "1280x713",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36"
+  },
+  "legs": [
+    {
+      "name": "load",
+      "seconds": 6,
+      "frames": 344,
+      "avgFps": 57.32,
+      "p50": 16.7,
+      "p95": 18.4,
+      "p99": 18.8,
+      "max": 285,
+      "hitches": 1,
+      "drawCallsMax": 17,
+      "trianglesMax": 1962312,
+      "geometries": 17,
+      "textures": 2,
+      "heapMB": 146
+    },
+    {
+      "name": "idle",
+      "seconds": 6,
+      "frames": 361,
+      "avgFps": 60.07,
+      "p50": 16.6,
+      "p95": 18.3,
+      "p99": 18.7,
+      "max": 18.8,
+      "hitches": 0,
+      "drawCallsMax": 17,
+      "trianglesMax": 1962312,
+      "geometries": 17,
+      "textures": 2,
+      "heapMB": 147
+    },
+    {
+      "name": "jump",
+      "seconds": 6,
+      "frames": 35,
+      "avgFps": 5.82,
+      "p50": 259.4,
+      "p95": 290.4,
+      "p99": 312.2,
+      "max": 312.2,
+      "hitches": 22,
+      "drawCallsMax": 17,
+      "trianglesMax": 1962312,
+      "geometries": 17,
+      "textures": 2,
+      "heapMB": 100
+    },
+    {
+      "name": "greensom-to-sao",
+      "seconds": 23.6,
+      "frames": 1324,
+      "avgFps": 56.17,
+      "p50": 16.6,
+      "p95": 18.5,
+      "p99": 50.7,
+      "max": 264.5,
+      "hitches": 14,
+      "drawCallsMax": 19,
+      "trianglesMax": 2738748,
+      "geometries": 27,
+      "textures": 2,
+      "heapMB": 89
+    },
+    {
+      "name": "sao-to-tempest",
+      "seconds": 98.6,
+      "frames": 5585,
+      "avgFps": 56.65,
+      "p50": 16.6,
+      "p95": 18.4,
+      "p99": 66,
+      "max": 214,
+      "hitches": 61,
+      "drawCallsMax": 17,
+      "trianglesMax": 2575272,
+      "geometries": 28,
+      "textures": 2,
+      "heapMB": 129
+    }
+  ],
+  "overall": {
+    "frames": 7649,
+    "avgFps": 54.56,
+    "p50": 16.6,
+    "p95": 18.4,
+    "p99": 75.1,
+    "max": 312.2,
+    "hitches": 98
+  }
+}

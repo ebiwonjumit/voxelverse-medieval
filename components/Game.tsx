@@ -6,6 +6,8 @@ import World from './World';
 import Player from './Player';
 import { INITIAL_SPAWN, MILE } from '../constants';
 import { getCurrentZoneName, getZone } from '../utils/terrain';
+import Benchmark, { BenchResult } from '../bench/Benchmark';
+import BenchResults from '../bench/BenchResults';
 
 const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number }) => {
   const { scene } = useThree();
@@ -95,6 +97,14 @@ const Game: React.FC = () => {
   const [playerPos, setPlayerPos] = useState<Vector3>(INITIAL_SPAWN);
   const [showControls, setShowControls] = useState(true);
   const [showStats, setShowStats] = useState(false);
+
+  // ?bench runs a scripted flythrough instead of the player; ?bench=quick is a short smoke run.
+  const benchMode = useMemo(() => {
+    const value = new URLSearchParams(window.location.search).get('bench');
+    return value === null ? null : value === 'quick' ? 'quick' : 'full';
+  }, []);
+  const [benchLeg, setBenchLeg] = useState<string | null>(null);
+  const [benchResult, setBenchResult] = useState<BenchResult | null>(null);
 
   // Hide controls after 10 seconds
   useEffect(() => {
@@ -227,6 +237,8 @@ const Game: React.FC = () => {
         </div>
       )}
       
+      {benchMode && <BenchResults running={benchLeg} result={benchResult} />}
+
       {/* Crosshair */}
       <div className="absolute top-1/2 left-1/2 w-4 h-4 -ml-2 -mt-2 pointer-events-none z-10">
         <div className="w-full h-0.5 bg-white/80 absolute top-1/2 transform -translate-y-1/2"></div>
@@ -244,7 +256,16 @@ const Game: React.FC = () => {
           <World playerPosition={playerPos} />
         </Suspense>
         
-        <Player setPlayerPos={setPlayerPos} />
+        {benchMode ? (
+          <Benchmark
+            quick={benchMode === 'quick'}
+            setPlayerPos={setPlayerPos}
+            onProgress={setBenchLeg}
+            onDone={setBenchResult}
+          />
+        ) : (
+          <Player setPlayerPos={setPlayerPos} />
+        )}
       </Canvas>
     </div>
   );

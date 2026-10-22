@@ -39,6 +39,17 @@ The world is generated procedurally using noise functions and a custom "Zone Sys
     *   **Custom Shaders**: Procedural noise textures, edge darkening (AO), and directional material logic (Dirt sides on Grass blocks).
     *   **Optimized Rendering**: Column-Major generation and InstancedMesh for high performance.
 
+## 🛠️ Development
+
+```bash
+npm run dev         # start the game at http://localhost:3000
+npm run typecheck   # TypeScript, no emit
+npm test            # Vitest unit tests (tests/)
+npm run bench       # scripted flythrough in headless Chrome, needs the dev server running
+```
+
+Open `/?bench` in a browser to run the same flythrough by hand. Baseline numbers and how to read them are in [docs/perf-baseline.md](docs/perf-baseline.md).
+
 ## 🗺️ Development Roadmap
 
 ### Stage 1: Environmental Distinctiveness (Completed)
