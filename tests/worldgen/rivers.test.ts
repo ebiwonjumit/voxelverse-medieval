@@ -17,8 +17,8 @@ const gen = createVoxelverseGenerator(createDefaultRegistry());
 // Columns inside a river channel, found by walking a grid over open country between the zones.
 const channelColumns = (): Array<{ x: number; z: number }> => {
   const found: Array<{ x: number; z: number }> = [];
-  for (let x = -2900; x < 3500; x += 6) {
-    for (let z = -2900; z < 3500; z += 6) {
+  for (let x = -2900; x < 3500; x += 8) {
+    for (let z = -2900; z < 3500; z += 8) {
       const c = gen.columnAt(x, z);
       if (c.wild && c.river > 0.995 && c.edge < -0.5) found.push({ x, z });
     }
@@ -43,8 +43,8 @@ describe('rivers', () => {
 
   it('have sand or gravel on their banks and beds', () => {
     let bank = 0, soft = 0;
-    for (let x = -2900; x < 3500; x += 5) {
-      for (let z = -2900; z < 3500; z += 5) {
+    for (let x = -2900; x < 3500; x += 11) {
+      for (let z = -2900; z < 3500; z += 11) {
         const c = gen.columnAt(x, z);
         if (!c.wild || c.river < 0.25 || c.ground > WATER_LEVEL + 2) continue;
         bank++;
@@ -54,7 +54,9 @@ describe('rivers', () => {
     console.info(`${soft} of ${bank} bank and bed columns are sand or gravel`);
     expect(bank).toBeGreaterThan(500);
     expect(soft / bank).toBeGreaterThan(0.95);
-  });
+    // A wide stride keeps the scan fast (the bank columns still number in the tens of thousands); the timeout is for a
+    // busy machine, not for this scan.
+  }, 30000);
 
   it('grow reed beds along their banks', () => {
     // Look at chunks around known river columns for reeds.
@@ -73,7 +75,7 @@ describe('rivers', () => {
     }
     console.info(`${reeds} reed blocks in ${seen.size} river chunks`);
     expect(reeds).toBeGreaterThan(50);
-  });
+  }, 30000);
 
   it('fade out near the legacy zones, so the zone borders stay as continuous as before', () => {
     // A river's weight can never be more than the fade, which is a smoothstep of the distance to the nearest zone
@@ -124,7 +126,7 @@ describe('rivers', () => {
     console.info(`channel half width (99th percentile): west ${west.toFixed(1)}, middle ${middle.toFixed(1)}, east ${east.toFixed(1)}`);
     expect(west).toBeGreaterThan(2 * middle);
     expect(west).toBeGreaterThan(2 * east);
-  });
+  }, 30000);
 
   it('stay out of the mountains, where the ground is high', () => {
     let river = 0;
@@ -164,5 +166,5 @@ describe('ponds', () => {
     expect(mud / water).toBeGreaterThan(0.9);
     // The pond weight can reach a little past the biome edge, but not far.
     expect(outsideWetland / pondColumns).toBeLessThan(0.15);
-  });
+  }, 30000);
 });

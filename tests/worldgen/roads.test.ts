@@ -194,6 +194,38 @@ describe('the height of a road', () => {
   });
 });
 
+describe('the ground beside the roads', () => {
+  // Every column within 24 blocks of any vertex of the road, bridges and their approaches included, against its
+  // 4-neighbours. The random cross sections above cannot be relied on to land on a bridge abutment.
+  for (const e of net.edges) {
+    it(`${e.name}: no height step above 2 in a 24 block corridor round every vertex`, () => {
+      const R = 24;
+      const seen = new Set<number>();
+      const bad: string[] = [];
+      let worst = 0, columns = 0;
+      for (let i = 0; i < e.x.length; i++) {
+        const cx = Math.round(e.x[i]), cz = Math.round(e.z[i]);
+        for (let x = cx - R; x <= cx + R; x++) {
+          for (let z = cz - R; z <= cz + R; z++) {
+            const key = x * 65536 + z;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            columns++;
+            const h = gen.terrainHeight(x, z);
+            for (const d of [gen.terrainHeight(x + 1, z), gen.terrainHeight(x, z + 1)]) {
+              const step = Math.abs(h - d);
+              worst = Math.max(worst, step);
+              if (step > 2 && bad.length < 5) bad.push(`${x},${z} step ${step} near vertex ${i}`);
+            }
+          }
+        }
+      }
+      console.info(`${e.name}: ${columns} corridor columns, ${e.bridge.reduce((a, b) => a + b, 0)} bridge vertices, steepest step ${worst}`);
+      expect(bad).toEqual([]);
+    }, 60000);
+  }
+});
+
 describe('walking the roads', () => {
   for (const name of [
     'Town of Beginnings - Tempest', 'Tempest - Fremmevilla', 'Town of Beginnings - Greensom',
