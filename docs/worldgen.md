@@ -1,6 +1,6 @@
 # World generation
 
-Phase 6 of the rebuild replaces the wilderness and the land between the zones with a seeded generator. The legacy zones keep their interiors. This page describes what exists so far and grows with each step of the phase.
+Phase 6 of the rebuild replaces the wilderness and the land between the zones with a seeded generator. The legacy zones keep their interiors. This page describes what is built: seeded noise, the zone blender, biomes, vegetation and rivers, and the road network.
 
 ## Seed
 
@@ -153,7 +153,7 @@ A `Feature` describes itself as a `BlockList`: offsets from its origin, each wit
 
 `FeaturePlacer` places them on one jittered grid per layer (undergrowth, reeds, logs, boulders, bamboo, trees, in that order, which is also the order they win overlaps). There is one candidate origin per grid cell, its position and the decision depending only on the cell, the layer and the seed. A chunk asks for the cells within the layer's largest radius of its edges, so a tree that crosses a chunk border is found by both chunks and clipped by each. `sampleBlock` asks for the cells around one block and gets the same trees. What may overwrite what depends only on the block already in the cell (`blockClass.ts`: a trunk grows through leaves and plants, leaves over plants, nothing replaces terrain, water or logs), so the order chunks are generated in does not matter. Built features are cached (16,384 entries, cleared when full; the answers never depend on the cache).
 
-A feature is placed only if its origin is on soil above the water (trees at least 2 blocks above it), farther than its radius plus 2 from every legacy zone footprint, and not within its radius plus 1 of a road. Roads come through the `RoadField` interface (`isRoad(x, z, margin)`); `createVoxelverseGenerator(registry, seed, roads)` takes one and defaults to `NO_ROADS` until step 6.4. A last check in `paint` and `blockAt` refuses any block in a column a zone owns.
+A feature is placed only if its origin is on soil above the water (trees at least 2 blocks above it), farther than its radius plus 2 from every legacy zone footprint, and not within its radius plus 1 of a road. Roads come through the `RoadMask` interface (`isRoad(x, z, margin)`); the generator hands the placer the road network, and `createVoxelverseGenerator(registry, seed, keepClear)` takes an optional extra mask (a test clears a circle with it). A last check in `paint` and `blockAt` refuses any block in a column a zone owns.
 
 Tree density by biome is a chance per 5 x 5 cell: 0.30 in birch, cedar and pine woods, 0.27 in oak woods, 0.17 in sakura groves, 0.02 in meadow, times the climate's density multiplier. Species by biome are weighted tables in `Vegetation.ts`.
 
@@ -161,18 +161,91 @@ Tree density by biome is a chance per 5 x 5 cell: 0.30 in birch, cedar and pine 
 
 By biome, with patches of noise: grass in meadows and woods; moss and podzol patches in cedar forest, podzol and gravel in pine forest; mud, moss and grass in wetland; sand on beaches; sand and gravel on river banks and beds, mud on pond beds; stone, granite, gravel and some grass in rocky hills; snow, stone and gravel in the alpine biome. Under the surface is dirt for 3 blocks (sand for 3 under sand, gravel for 2 under gravel), then stone.
 
+## Roads (`worldgen/roads/`)
+
+Six roads link the zones: Town of Beginnings to Greensom, Tempest, Amestris and Bosse, Tempest to Fremmevilla (out by Tempest's north avenue, then bending towards it) and Greensom to Magnolia. About 5,000 blocks of road in all. The network is built once from the seed (about 20 ms) and shared by every generator with that seed.
+
+| File | What it is |
+| --- | --- |
+| `layout.ts` | The gates (where a road meets a zone) and the six edges, with their importance, how far they wander and at what wavelength. |
+| `RoadNetwork.ts` | Builds each road as a Hermite curve between its gates plus a wandering sideways offset, sampled every 2 blocks, with its half width, level and bridge flags; a grid-bucket spatial index; and the waypoints. `query(x, z, out)` is the RoadField. |
+| `RoadProfile.ts` | `buildProfile`: the road height along a road, and where it is a bridge. Pure arithmetic. |
+| `RoadSurface.ts` | What a road is paved with. |
+| `RoadField.ts` | `RoadField` (`query` and `isRoad`), `RoadHit` (what a query returns), `levelHeight` (how a road changes the ground). |
+
+### Gates
+
+A gate is the point on a zone's own road where the network takes over. The legacy roads, which the network meets exactly:
+
+| Zone | Legacy road | Gate |
+| --- | --- | --- |
+| Town of Beginnings | axis roads with `|x| < 12` or `|z| < 12`, to distance 150; the south road to the edge | east (150, 0), west (-150, 0), north (0, -150) inside the footprint; south (0, 200) at the edge |
+| Greensom | `|x| < 3`, through the village | (0, 230) north and (0, 370) south, both at the footprint's edge |
+| Tempest | avenues `|x| < 5` or `|z| < 5` to 600 blocks from the centre | west (900, 0), north (1500, -600) |
+| Amestris | streets 5 wide; the one along z = 0 stops 500 blocks from the centre, inside the core (550) | (-950, 0), on the core's rim |
+| Bosse, Fremmevilla, Magnolia | none | on the core's rim, towards the zone the road comes from |
+
+The road at a gate is as wide as the legacy road (23, 9, 5 blocks) and narrows to its own width over 70 blocks. Its wandering and its edge jitter fade to nothing at the gate, so it arrives square and head on, and it ends square (a cell behind the gate belongs to the zone).
+
+Inside a zone's core nothing changes: the zone is exactly the legacy zone. Between the core and the footprint's edge the road is painted onto the zone's own ground: the surface block is replaced with the paving and everything above it cleared (so the Amestris factories either side of the road are cut, never on it). Heights there are the zone's, as ever. Where the legacy road stops short of the gate, the road is painted from the gate on and the legacy ground between is left alone: Amestris' street ends 50 blocks inside the core rim, and the three zones without roads have only a gate on the rim.
+
+### Path, width and surface
+
+- The path: a Hermite curve leaving the first gate heading away from its zone and arriving at the second heading into its zone, plus a sideways offset of two noise octaves (14 blocks at most, wavelength about 300) that fades to nothing over 90 blocks at each end. The tightest bend measured has a radius of 53 blocks. Town to Greensom (30 blocks, the old straight road) has no wandering.
+- Width: 3 to 4 blocks plus the importance (so 3 to 5), from a noise along the road. The edge of the road is jittered by up to 0.55 blocks with a noise on the position, so it is never a straight line.
+- Paving: cobblestone (some mossy) within about 130 blocks of a zone, packed path to about 520, dirt (some gravel) beyond, with a 70 block noise added to the distance so the changes are ragged. The outermost columns wear away to path or dirt. This is the old wilderness road's three steps, measured from the nearest zone instead of from the origin. Road columns have no soil, so nothing grows on them.
+
+### Levelling
+
+The height of each road is worked out when the network is built, from the wilderness height without roads (`RoadProfile.ts`): the natural height is lifted to the deck height where it is lower, smoothed with two box filters of about 16 blocks, and then limited to a grade of one block in four (the phase asks for one in three at most), with both ends pinned to the natural height, which is where a zone's own ground starts. Terrain is then blended to the road's level: fully across the road's width, easing out over a 6 block shoulder (`levelHeight`). Within 24 blocks of a zone the hold is eased off so the ground reaches the footprint edge as the natural height and meets the zone with no step, even where a wide legacy road meets a sloping edge. Measured: along all six roads no centreline step above 1; across 400 cross sections of the roads no step above 1 within 16 blocks of the centreline.
+
+### Bridges
+
+Where the natural ground along a road is below the water line the road is a bridge: the stretch of water plus 4 blocks of dry ground at each end, and stretches closer than 14 blocks are joined. The deck is planks one block above the water (never lower than that), five blocks wide, with fence rails on both edges, a log beam under each edge and a log pier every 8 blocks down to the bed. The approaches are the road's own grade (at most one in four), so the ramps are earth. Beside a bridge the ground is only ever cut, never filled, so a river is never dammed. The ground under the deck is never higher than one block below it. The Greensom to Magnolia road has 58 bridge vertices (about 116 blocks) over its rivers.
+
+### Waypoints
+
+A fence post (three fence blocks) with a lantern on top stands about every 64 blocks along each road, on alternating sides and 2.2 blocks beyond the road's edge, and one just inside the wilderness at each end of every road. 71 in all. They replace air, plants and leaves only.
+
+### The query
+
+`RoadField.query(x, z, out)` returns `{ onRoad, distance, width, importance, bridge }` plus `level`, `weight` (how much terrain is pulled to the level), `gap`, `arc` and `edge`. The index is a grid of 8 block buckets; each holds every road segment that could be within a half width plus 11 blocks of any point of it, so a query is one hash lookup and, near a road, at most 26 distance tests (the fullest bucket). Measured 0.1 to 0.2 microseconds per query averaged over a mixed set of positions. `isRoad(x, z, margin)` is the same query, true when the column is within `margin` blocks of a road's edge, and is what keeps trees off the roads.
+
 ## `worldgen/VoxelverseGenerator.ts`
 
-`createVoxelverseGenerator(registry, seed = WORLD_SEED, roads = NO_ROADS)` returns a `WorldGenerator`. It is not wired into the game yet.
+`createVoxelverseGenerator(registry, seed = WORLD_SEED, keepClear?)` returns a `WorldGenerator`. It is not wired into the game yet (see below).
 
-- `ColumnSampler` decides for each column which zone owns it, the ground height, and for the wilderness the biome and the surface. `generateChunk` and `sampleBlock` both go through it.
-- Zone columns: stone below the ground, water above it up to `WATER_LEVEL`, and whatever the legacy zone's `getBlock` says for the blended ground height, up to 64 blocks above it.
-- Wilderness columns: stone, soil, the surface block, water, then the features.
-- `generateChunk(chunk, { lod })`: `lod: 0` is far away. Zones are asked for their low detail blocks and the wilderness leaves out undergrowth and reeds (about 90 percent of its plant blocks) but keeps trees, boulders, bamboo and logs. Any other value is full detail. `sampleBlock` always answers at full detail, so it matches `generateChunk` exactly except for those plants in a chunk made at LOD 0.
+- `ColumnSampler` decides for each column which zone owns it, the ground height (roads included), and for the wilderness the biome and the surface. `generateChunk` and `sampleBlock` both go through it.
+- Zone columns: stone below the ground, water above it up to `WATER_LEVEL`, and whatever the legacy zone's `getBlock` says for the blended ground height, up to 64 blocks above it. Where a road is painted onto the zone: the paving, and air above it.
+- Wilderness columns: stone, soil, the surface block (the paving on a road), water, then the bridge, then the features, then the waypoints.
+- `generateChunk(chunk, { lod })`: `lod: 0` is far away. Zones are asked for their low detail blocks and the wilderness leaves out undergrowth and reeds (about 90 percent of its plant blocks) but keeps trees, boulders, bamboo and logs. Any other value is full detail. Roads, bridges and waypoints are the same at every level. `sampleBlock` always answers at full detail, so it matches `generateChunk` exactly except for those plants in a chunk made at LOD 0.
 - `sampleBlock`, `terrainHeight` and `zoneNameAt` share their code with `generateChunk`, so they cannot drift apart.
-- `columnAt(x, z)` and `biomeAt(x, z)` describe a column for tools and tests.
+- `columnAt(x, z)` and `biomeAt(x, z)` describe a column for tools and tests; `generator.roads` is the `RoadNetwork`.
 
-Not done yet: the roads and bridges (step 6.4) and the wiring into the game.
+## Adding a biome
+
+1. Add it to the `Biome` enum in `biomes/Biome.ts` (and bump `BIOME_COUNT`). Every table keyed by biome is a `Record<Biome, ...>`, so the compiler lists what is missing.
+2. Decide where it is in `BiomeMap.classify`: an `if` on the climate and the height, placed before the checks it should win against. Use the jitter noise (`j`) on every threshold so the border is ragged.
+3. Give it a surface in `ColumnSampler.surface` (a `case` in the biome switch).
+4. Give it plants in `features/Vegetation.ts`: a weighted species table in `TREES`, and its entries in the undergrowth, log, boulder and bamboo chance tables.
+5. Give `tools/render-map.ts` a colour in `BIOME_COLOR`, regenerate the maps and look at them, and extend `tests/worldgen/biomes.test.ts` so the biome has to appear somewhere.
+
+## Adding a feature
+
+1. Subclass `Feature` in `features/` with a name and its radius (the furthest any block reaches along x or z; a test checks it). `build(ctx, rng, out)` adds blocks to the `BlockList` as offsets from the origin, using only the `Rng` it is given. Use `Place.ORIGIN` for things that keep their shape on a slope and `SOIL`, `LAND` or `SHORE` for things that follow the ground of their own column.
+2. Add it to a layer in `features/Vegetation.ts` (`LAYERS`), or add a layer: a grid cell size, the largest radius of its features, a salt, a maximum chance, and `pick(column, roll, rng)`. A layer's position in the list is its priority when features overlap.
+3. If it needs a block, add it to `content/blocksNature.ts` (ids 48 to 79; 71 to 79 are free) and, if it is a plant or a leaf, to the tables in `features/blockClass.ts` so overlaps resolve.
+4. Add it to the seam and radius tests in `tests/worldgen/features.test.ts`.
+
+A feature must never depend on anything but its origin, the column at its origin and the seed. That is what makes a tree that crosses a chunk border come out the same in both chunks.
+
+## Wiring the generator into the game (not done yet)
+
+The integration waits for the renderer branch to merge. When it does:
+
+1. `gameWorld.ts`: replace `new LegacyZoneAdapter(blockRegistry)` with `createVoxelverseGenerator(blockRegistry)` (imported from `./worldgen/VoxelverseGenerator`). Nothing else on the main thread changes: `VoxelWorld` only knows the `WorldGenerator` interface, and `terrainHeight` and `zoneNameAt` keep their meaning.
+2. The worker: wherever chunks are generated off the main thread, build the generator there with `createDefaultRegistry()` and `createVoxelverseGenerator(registry)` once at start-up (it needs the same seed as the main thread, `WORLD_SEED` unless the game passes one in the worker's init message), and call `generateChunk(chunk, { lod })` per request, passing `lod: 0` for far chunks. `engine/WorldGenerator.ts` needs `generateChunk(chunk, options?: { lod?: number })`, which the renderer branch adds; the generator already accepts it. Nothing under `worldgen/`, `content/` or `engine/` imports Three.js, React or the DOM, so it runs in a worker as is.
+3. Keep `LegacyZoneAdapter` and its parity tests: they are the reference the zone cores are checked against.
 
 ## Tools
 
@@ -180,12 +253,12 @@ Node-side only (they use `node:fs` and `node:zlib`). Run them with `vite-node`.
 
 | Command | What it does |
 | --- | --- |
-| `npm run map` | Writes every preset to `docs/maps/`: `overview` (x, z -3000 to 3000, 4 blocks per pixel), `corridor` (x 0 to 2200, z -400 to 400, 1 block per pixel), `tempest` (around Tempest, 1 block per pixel), `corridor-blocks` and `tempest-blocks` (topmost blocks, so trees, boulders and reeds show), `east-mountains`, `south-forest`, `west-coast`. About 25 seconds. |
+| `npm run map` | Writes every preset to `docs/maps/`: `overview` (x, z -3000 to 3000, 4 blocks per pixel), `roads` (the whole network, 3 blocks per pixel), `greensom-magnolia` (the longest road, 2 blocks per pixel), `corridor` (x 0 to 2200, z -400 to 400, 1 block per pixel), `tempest` (around Tempest, 1 block per pixel), `corridor-blocks` and `tempest-blocks` (topmost blocks, so trees, boulders and reeds show), `bridge-blocks` (the first bridge), `gate-town-blocks` and `gate-tempest-blocks` (a road meeting a zone road, blown up 5 times), `east-mountains`, `south-forest`, `west-coast`. About 35 seconds. |
 | `npm run map -- --preset corridor` | One preset. |
 | `npm run map -- --cx 0 --cz 0 --size 1024 --step 4 --out map.png [--blocks] [--height 512] [--seed 1]` | A custom view. |
-| `npm run bench:chunks` | Time per generated chunk in node. On a laptop, about 9 ms for hills, woods and belt, 10 ms in the mountains, 6 ms for open sea, 7 to 9 ms in the Town and Tempest. |
+| `npm run bench:chunks` | Time per generated chunk in node. On a laptop, about 8 to 9 ms for hills, woods and belt, 10 ms in the mountains, 6 ms for open sea, 7 ms in the Town and Tempest (roads included). |
 
-The biome maps paint each biome in its own colour, shaded by slope, water by depth, zone footprints as outlined grey discs. Roads will be drawn once the generator has them. `tools/png.ts` is the small PNG writer.
+The biome maps paint each biome in its own colour, shaded by slope, water by depth, zone footprints as outlined grey discs. Roads are drawn along their centrelines in the colour of their paving, darkened (at least 2 or 3 pixels wide on the coarse maps), bridges brown and waypoints yellow; the block maps show the real blocks. `tools/png.ts` is the small PNG writer.
 
 What the maps show, judged by looking at them:
 
@@ -193,11 +266,15 @@ What the maps show, judged by looking at them:
 - Dense mixed forest with wetland pockets in the south, pine woods in the north, beaches along a ragged west coast, and rocky hills with snow on the ridges in the east.
 - Rivers meander and widen to the west and stop at springs in the hills. There are no rivers in the mountains and none touching a zone.
 
+- The roads are continuous from gate to gate, bend gently, run straight at the gates and cut through the cedar and sakura belt on the way to Tempest. At the gates they are as wide as the legacy road (the Town's 23 blocks, Tempest's 9) and narrow over 70 blocks (`gate-town-blocks`, `gate-tempest-blocks`). The Greensom to Magnolia road crosses a river on a bridge with its approaches either side (`bridge-blocks`).
+
 Known weak spots: the rivers are many and thin on the overview and read a little like spaghetti, and the mountain front east of x = 10000 is roughly a north-south line (it comes from `TerrainField`'s uplift, which step 6.2 owns).
 
 ## Tests
 
 `tests/worldgen/blender.test.ts` checks: no height step above 2 along rays that cross every zone border (120 crossing rays per zone at many angles and positions plus sweeps along the border across the road strips), the open wilderness being walkable (rivers and ponds included), the cores of the Town, Greensom, Tempest and Amestris matching `LegacyZoneAdapter` at 3,000 random points and cell for cell in seven landmark chunks, `sampleBlock` equal to `generateChunk` at 3,000 random points and down whole columns, heights inside the terrain bounds with nothing piled on them, the same seed giving the same chunk hash, LOD 0 only dropping plants, wilderness chunks averaging under 40 ms, and `ZoneInfo` agreeing with the legacy zones. `terrain.test.ts` covers `softLimit` and the geography of `TerrainField`.
+
+`tests/worldgen/roads.test.ts`: the six roads run gate to gate and the Greensom road is straight; the tightest bend; the bucket size and query time; the network is the same when built twice and differs by seed; `buildProfile` keeps its grade, its ends and lifts the road to the deck over water; terrain stays walkable (no step above 2, measured 1) across 400 cross sections of the roads; walking each road's centreline in whole-block steps, every step is road (paving or deck), the height step is at most 1, there is no water on the road or under it except under a deck, and nothing stands in the way; at every gate with a legacy road, the legacy cells and ours across the whole width are side by side at the same height and the cells beside are not road; the roads that end on the rim of a core zone; the road painted onto zone footprints with air above; zone cores identical to `LegacyZoneAdapter` around every gate (more than 1,000 points); paving by distance; bridges (planks, water below, rails, log beams, ramps within the grade, none at a road's end); waypoints (post, lantern, never on the road); the same chunk hash twice from one seed in any order and another for another seed; `sampleBlock` equal to `generateChunk` at 3,000 random points on and beside roads, bridges and posts; chunks with a road averaging under 40 ms. `chunkHash.ts` is the hash helper.
 
 `tests/worldgen/biomes.test.ts`: every biome appears over a wide area; cedar, bamboo and sakura dominate x 1000 to 1500, z 100 to 600; the home country stays meadow and oak; the south is woodier and denser; rocky hills and alpine in the east; beaches in the west; wetland pockets; the biomes change on the way from the Town to Tempest; borders are ragged (mean step 45 blocks between rows); determinism; the climate fields are smooth.
 
@@ -209,4 +286,4 @@ Known weak spots: the rivers are many and thin on the overview and read a little
 
 `tests/worldgen/noise.test.ts` checks: determinism per seed, different seeds being uncorrelated, output bounds, mean and spread over large samples, no step at simplex cell edges, no lattice artefacts (neighbour differences from integer and half-integer points agree within 5%), a chi-square test of `hash2` and `hash3` for uniformity, no link between neighbouring hashes, and negative coordinates.
 
-Measured on the development machine: a wilderness chunk with biomes, rivers and features averages 8.7 ms over 20 chunks (dense forest, belt, open country; limit 40 ms).
+Measured on the development machine: a wilderness chunk with biomes, rivers and features averages 9 to 12 ms over 20 chunks (dense forest, belt, open country; limit 40 ms), and chunks that carry a road about the same.

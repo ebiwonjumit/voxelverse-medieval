@@ -50,6 +50,14 @@ export const insetFromEdge = (shape: ZoneShape, x: number, z: number): number =>
   return shape.half - Math.max(Math.abs(dx), Math.abs(dz));
 };
 
+// True inside the core, where the generator leaves the legacy zone exactly as it was.
+export const insideCore = (info: ZoneInfo, x: number, z: number): boolean => {
+  const dx = x - info.shape.cx;
+  const dz = z - info.shape.cz;
+  if (info.shape.kind === 'circle') return Math.sqrt(dx * dx + dz * dz) < info.core;
+  return Math.abs(dx) < info.core && Math.abs(dz) < info.core;
+};
+
 export const zoneContains = (info: ZoneInfo, x: number, z: number): boolean => {
   const dx = x - info.shape.cx;
   const dz = z - info.shape.cz;

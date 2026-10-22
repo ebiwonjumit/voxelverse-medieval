@@ -5,14 +5,19 @@ import { Zone } from '../../zones/Zone';
 import { Biome } from '../biomes/Biome';
 import { BiomeMap } from '../biomes/BiomeMap';
 import { SimplexNoise, hash2 } from '../noise';
+import { DECK_HALF, RoadHit, clearRoadHit, levelHeight, newRoadHit } from '../roads/RoadField';
+import { RoadNetwork, roadNetworkFor } from '../roads/RoadNetwork';
+import { RoadSurface } from '../roads/RoadSurface';
 import { RiverField } from '../water/RiverField';
-import { WILDERNESS_NAME } from '../zones/ZoneInfo';
+import { WILDERNESS_NAME, insideCore, zoneInfoByName } from '../zones/ZoneInfo';
+import { clearanceFromZones } from '../zones/ZoneClearance';
 import { TerrainField } from './TerrainField';
 import { WildernessTerrain, WildSample, newWildSample } from './WildernessTerrain';
 import { ZoneBlender } from './ZoneBlender';
 
 // Everything the generator needs to know about one column, computed once and shared by terrain, surface and
-// features. In a zone only zone, wild (false) and ground are filled in; the zone places its own blocks.
+// features. In a zone only zone, wild (false), ground and road are filled in; the zone places its own blocks, except
+// where a road is painted onto it (road.onRoad, only outside the zone's core), where surface is the road's.
 export interface Column {
   zone: Zone;
   wild: boolean;          // the wilderness owns this column (not a legacy zone)
@@ -27,12 +32,16 @@ export interface Column {
   river: number;          // 0..1 river valley weight
   edge: number;           // blocks from the nearest river channel edge, negative inside
   pond: number;           // 0..1 pond weight
+  road: RoadHit;          // what the road network says about the column; the ground is already levelled by it
 }
 
 export const newColumn = (zone: Zone): Column => ({
   zone, wild: false, ground: 0, biome: Biome.MEADOW, density: 1, surface: BlockType.GRASS,
-  subsoil: BlockType.DIRT, depth: 0, soil: false, shore: false, river: 0, edge: 1e9, pond: 0,
+  subsoil: BlockType.DIRT, depth: 0, soil: false, shore: false, river: 0, edge: 1e9, pond: 0, road: newRoadHit(),
 });
+
+const LEVEL_FADE = 24;
+const smoothstep = (t: number): number => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 
 const clampGround = (h: number): number => {
   const g = Math.floor(h);
@@ -51,9 +60,12 @@ export class ColumnSampler {
   readonly rivers: RiverField;
   readonly terrain: WildernessTerrain;
   readonly blender: ZoneBlender;
+  readonly roads: RoadNetwork;
+  private readonly paving: RoadSurface;
   private readonly patchA: SimplexNoise;
   private readonly patchB: SimplexNoise;
   private readonly wild = newWildSample();
+  private readonly hit = newRoadHit();
 
   constructor(readonly seed: number) {
     this.field = new TerrainField(seed);
@@ -61,6 +73,11 @@ export class ColumnSampler {
     this.rivers = new RiverField(seed);
     this.terrain = new WildernessTerrain(this.field, this.biomes, this.rivers, seed);
     this.blender = new ZoneBlender(this.field);
+    // The roads are levelled against the ground as it is without them, which is why they take a function that
+    // reads the terrain, and why the network is built before anything is asked of it.
+    const natural = newWildSample();
+    this.roads = roadNetworkFor(seed, (x, z) => this.terrain.sample(x, z, natural).height);
+    this.paving = new RoadSurface(seed);
     this.patchA = new SimplexNoise(hash2(61, 0x5f1c, seed) | 0);
     this.patchB = new SimplexNoise(hash2(62, 0x5f1c, seed) | 0);
   }
@@ -69,7 +86,8 @@ export class ColumnSampler {
   height(x: number, z: number): number {
     const zone = this.blender.zoneAt(x, z);
     if (zone.name !== WILDERNESS_NAME) return this.blender.height(x, z, zone);
-    return clampGround(this.terrain.sample(x, z, this.wild).height);
+    const base = this.terrain.sample(x, z, this.wild).height;
+    return clampGround(levelHeight(base, this.level(x, z, this.roads.query(x, z, this.hit))));
   }
 
   sample(x: number, z: number, out: Column): Column {
@@ -78,10 +96,12 @@ export class ColumnSampler {
     if (zone.name !== WILDERNESS_NAME) {
       out.wild = false;
       out.ground = this.blender.height(x, z, zone);
+      this.paint(x, z, zone, out);
       return out;
     }
     const s = this.terrain.sample(x, z, this.wild);
-    const ground = clampGround(s.height);
+    const road = this.roads.query(x, z, out.road);
+    const ground = clampGround(levelHeight(s.height, this.level(x, z, road)));
     out.wild = true;
     out.ground = ground;
     out.biome = this.terrain.biome(x, z, s);
@@ -90,7 +110,41 @@ export class ColumnSampler {
     out.edge = s.edge;
     out.pond = s.pond;
     this.surface(x, z, out, s);
+    this.pave(x, z, out);
     return out;
+  }
+
+  // Within LEVEL_FADE blocks of a zone the road's hold on the terrain is eased off, so the ground arrives at the
+  // footprint's edge as the natural height, which is the height the zone's own ground starts from. A wide legacy road
+  // (the Town's is 23 blocks across) would otherwise carry its flat cross-section up to a zone edge that slopes.
+  private level(x: number, z: number, road: RoadHit): RoadHit {
+    if (road.weight > 0) road.weight *= smoothstep(clearanceFromZones(x, z) / LEVEL_FADE);
+    return road;
+  }
+
+  // A road reaches into a zone's footprint, from the gate on the zone's own road to the edge, but never into its core.
+  private paint(x: number, z: number, zone: Zone, out: Column): void {
+    const road = this.roads.query(x, z, out.road);
+    if (road.edge < 0) return;
+    const info = zoneInfoByName(zone.name);
+    if (!road.onRoad || road.bridge || !info || insideCore(info, x, z)) { clearRoadHit(road); return; }
+    out.surface = this.paving.blockAt(x, z, road.gap);
+  }
+
+  // The road's own surface, and nothing growing in it.
+  private pave(x: number, z: number, c: Column): void {
+    const road = c.road;
+    if (road.edge < 0) return;
+    if (road.onRoad && !road.bridge) {
+      c.surface = this.paving.blockAt(x, z, road.gap);
+      c.subsoil = BlockType.DIRT;
+      c.depth = 3;
+      c.soil = false;
+      c.shore = false;
+    } else if (road.bridge && road.distance <= DECK_HALF + 1) {
+      c.soil = false;
+      c.shore = false;
+    }
   }
 
   // Surface block by biome, then the special cases: river banks and beds, ponds, beaches.

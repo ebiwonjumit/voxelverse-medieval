@@ -11,7 +11,7 @@ import { BambooClump } from '../../worldgen/features/BambooClump';
 import { Boulder } from '../../worldgen/features/Boulder';
 import { FallenLog } from '../../worldgen/features/FallenLog';
 import { ReedBed } from '../../worldgen/features/ReedBed';
-import { RoadField } from '../../worldgen/features/RoadField';
+import { RoadMask } from '../../worldgen/features/RoadField';
 import { UndergrowthPatch } from '../../worldgen/features/UndergrowthPatch';
 import { canReplace } from '../../worldgen/features/blockClass';
 import { BirchTree, CedarTree, OakTree, PineTree, SakuraTree } from '../../worldgen/features/trees';
@@ -208,7 +208,7 @@ describe('where features may grow', () => {
     // same place is full of trees.
     const centre = { x: 10 * CHUNK_SIZE + 40, z: 140 * CHUNK_SIZE + 40 };
     const radius = 70;
-    const roads: RoadField = { isRoad: (x, z, margin = 0) => Math.hypot(x - centre.x, z - centre.z) < radius + margin };
+    const roads: RoadMask = { isRoad: (x, z, margin = 0) => Math.hypot(x - centre.x, z - centre.z) < radius + margin };
     const blocked = createVoxelverseGenerator(registry, undefined, roads);
     let withRoad = 0, without = 0;
     for (let cz = 137; cz <= 143; cz++) for (let cx = 7; cx <= 13; cx++) {

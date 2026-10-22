@@ -3,8 +3,9 @@
 //   npx vite-node tools/render-map.ts -- --preset corridor one preset
 //   npx vite-node tools/render-map.ts -- --cx 0 --cz 0 --size 1024 --step 4 --out /tmp/map.png [--blocks] [--seed 1]
 // Biome mode (the default) paints each column in its biome's colour, shaded by slope; open water darkens with depth,
-// rivers and ponds show as water, roads (once the generator has them) as grey, zone footprints as outlines.
-// Blocks mode generates the chunks and paints the topmost visible block, so trees, boulders and reeds show.
+// rivers and ponds show as water, roads in the colour of their paving (bridges brown, waypoints yellow), zone
+// footprints as outlines. Blocks mode generates the chunks and paints the topmost visible block, so trees, boulders,
+// reeds, roads, bridges and waypoints show.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { createDefaultRegistry } from '../content/blocks';
@@ -33,6 +34,8 @@ const BIOME_COLOR: Record<Biome, Rgb> = {
   [Biome.BEACH]: [236, 216, 150],
 };
 const ZONE_TINT: Rgb = [200, 190, 175];
+const BRIDGE: Rgb = [150, 96, 44];
+const WAYPOINT: Rgb = [255, 235, 40];
 
 interface View { name: string; cx: number; cz: number; width: number; height: number; step: number; blocks?: boolean }
 
@@ -41,6 +44,8 @@ const PRESETS: View[] = [
   { name: 'overview', cx: 0, cz: 0, width: 6000, height: 6000, step: 4 },
   { name: 'corridor', cx: 1100, cz: 0, width: 2200, height: 800, step: 1 },
   { name: 'tempest', cx: 1500, cz: 0, width: 1600, height: 1600, step: 1 },
+  { name: 'roads', cx: 300, cz: -100, width: 3600, height: 3800, step: 3 },
+  { name: 'greensom-magnolia', cx: -750, cz: 950, width: 1900, height: 1500, step: 2 },
   { name: 'corridor-blocks', cx: 700, cz: 0, width: 800, height: 320, step: 1, blocks: true },
   { name: 'tempest-blocks', cx: 1300, cz: 960, width: 640, height: 320, step: 1, blocks: true },
   { name: 'east-mountains', cx: 11500, cz: 0, width: 5000, height: 5000, step: 8 },
@@ -62,6 +67,20 @@ const str = (name: string, fallback: string): string => {
 const registry = createDefaultRegistry();
 const seed = has('seed') ? num('seed', 0) : undefined;
 const gen: VoxelverseGenerator = createVoxelverseGenerator(registry, seed);
+
+// Block views of places the roads make interesting: the first bridge, and the joins with the Town and Tempest.
+const firstBridge = ((): { x: number; z: number } => {
+  for (const e of gen.roads.edges) {
+    const v = e.bridge.indexOf(1);
+    if (v >= 0) return { x: Math.round(e.x[v]), z: Math.round(e.z[v]) };
+  }
+  return { x: 0, z: 0 };
+})();
+PRESETS.push(
+  { name: 'bridge-blocks', cx: firstBridge.x, cz: firstBridge.z, width: 192, height: 128, step: 1, blocks: true },
+  { name: 'gate-town-blocks', cx: 175, cz: 0, width: 160, height: 96, step: 1, blocks: true },
+  { name: 'gate-tempest-blocks', cx: 880, cz: 0, width: 160, height: 96, step: 1, blocks: true },
+);
 
 const hex = (c: string): Rgb => [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
 const clamp255 = (v: number): number => (v < 0 ? 0 : v > 255 ? 255 : v);
@@ -184,12 +203,51 @@ const renderBlocks = (view: View): { w: number; h: number; rgb: Uint8Array } => 
   return { w, h, rgb };
 };
 
+// Roads over the biome map: a line of squares along each centreline, as wide as the road, at least a pixel.
+const drawRoads = (rgb: Uint8Array, view: View, w: number, h: number): void => {
+  const x0 = view.cx - view.width / 2;
+  const z0 = view.cz - view.height / 2;
+  const plot = (x: number, z: number, size: number, c: Rgb): void => {
+    const i0 = Math.floor((x - x0) / view.step - (size - 1) / 2);
+    const j0 = Math.floor((z - z0) / view.step - (size - 1) / 2);
+    for (let j = j0; j < j0 + size; j++) {
+      for (let i = i0; i < i0 + size; i++) {
+        if (i < 0 || j < 0 || i >= w || j >= h) continue;
+        const o = (j * w + i) * 3;
+        rgb[o] = c[0]; rgb[o + 1] = c[1]; rgb[o + 2] = c[2];
+      }
+    }
+  };
+  for (const edge of gen.roads.edges) {
+    for (let v = 0; v < edge.x.length; v++) {
+      const x = edge.x[v], z = edge.z[v];
+      const size = Math.max(view.step >= 3 ? 3 : view.step > 1 ? 2 : 1, Math.round((edge.half[v] * 2) / view.step));
+      let c: Rgb;
+      if (edge.bridge[v]) c = BRIDGE;
+      else c = hex(registry.get(gen.columnAt(Math.round(x), Math.round(z)).surface).color);
+      // Darken a little so a road of cobblestone stays visible against grey zone ground.
+      plot(x, z, size, [c[0] * 0.65, c[1] * 0.65, c[2] * 0.65]);
+    }
+  }
+  for (const p of gen.roads.waypoints) plot(p.x, p.z, view.step > 1 ? 2 : 1, WAYPOINT);
+};
+
 const write = (view: View, out: string): void => {
   const t0 = performance.now();
   const { w, h, rgb } = view.blocks ? renderBlocks(view) : renderBiomes(view);
-  if (!view.blocks) outline(rgb, view, w, h);
+  if (!view.blocks) { outline(rgb, view, w, h); drawRoads(rgb, view, w, h); }
   mkdirSync(dirname(out), { recursive: true });
-  writeFileSync(out, encodePng(w, h, rgb));
+  // Small block views are blown up so a single block is easy to see.
+  const zoom = view.blocks && w <= 200 ? 5 : 1;
+  if (zoom === 1) writeFileSync(out, encodePng(w, h, rgb));
+  else {
+    const big = new Uint8Array(w * zoom * h * zoom * 3);
+    for (let j = 0; j < h * zoom; j++) for (let i = 0; i < w * zoom; i++) {
+      const src = (Math.floor(j / zoom) * w + Math.floor(i / zoom)) * 3;
+      big.set(rgb.subarray(src, src + 3), (j * w * zoom + i) * 3);
+    }
+    writeFileSync(out, encodePng(w * zoom, h * zoom, big));
+  }
   console.log(`wrote ${out} (${w}x${h}, ${view.step} block${view.step === 1 ? '' : 's'} per pixel, centre ${view.cx},${view.cz}) in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
 };
 

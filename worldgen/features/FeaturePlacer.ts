@@ -7,7 +7,7 @@ import { Column } from '../terrain/ColumnSampler';
 import { clearanceFromZones } from '../zones/ZoneClearance';
 import { BlockList, Place } from './BlockList';
 import { Feature } from './Feature';
-import { RoadField } from './RoadField';
+import { RoadMask } from './RoadField';
 import { LAYERS, LayerDef } from './Vegetation';
 import { canReplace } from './blockClass';
 
@@ -39,7 +39,7 @@ export class FeaturePlacer {
   constructor(
     private readonly seed: number,
     private readonly sample: (x: number, z: number, out: Column) => Column,
-    private readonly roads: RoadField,
+    private readonly roads: RoadMask,
     column: Column,
   ) {
     this.column = column;
