@@ -1,5 +1,6 @@
 import { BlockRegistry } from '../engine/BlockRegistry';
 import { BlockType, COLORS } from '../worldConstants';
+import { registerNatureBlocks } from './blocksNature';
 
 // The legacy blocks, registered under their old BlockType numbers so the existing zones keep working.
 // Flat colours come from COLORS until blocks get textures in Phase 3.
@@ -89,5 +90,6 @@ export const createDefaultRegistry = (): BlockRegistry => {
       emits: EMITS.get(type) ?? 0,
     });
   }
+  registerNatureBlocks(registry);
   return registry;
 };
