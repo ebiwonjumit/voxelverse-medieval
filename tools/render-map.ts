@@ -42,7 +42,7 @@ const PRESETS: View[] = [
   { name: 'corridor', cx: 1100, cz: 0, width: 2200, height: 800, step: 1 },
   { name: 'tempest', cx: 1500, cz: 0, width: 1600, height: 1600, step: 1 },
   { name: 'corridor-blocks', cx: 700, cz: 0, width: 800, height: 320, step: 1, blocks: true },
-  { name: 'tempest-blocks', cx: 1300, cz: 480, width: 640, height: 320, step: 1, blocks: true },
+  { name: 'tempest-blocks', cx: 1300, cz: 960, width: 640, height: 320, step: 1, blocks: true },
   { name: 'east-mountains', cx: 11500, cz: 0, width: 5000, height: 5000, step: 8 },
   { name: 'south-forest', cx: 500, cz: 5200, width: 5000, height: 3500, step: 6 },
   { name: 'west-coast', cx: -3200, cz: 0, width: 3000, height: 3000, step: 4 },

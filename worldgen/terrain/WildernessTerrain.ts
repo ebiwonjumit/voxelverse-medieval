@@ -60,13 +60,13 @@ export class WildernessTerrain {
     const wet = c.wetness;
     if (wet > 0) {
       const target = WET_BASE + WET_RELIEF * this.micro.noise2(x / 45, z / 45);
-      // Pull the ground towards the marsh level, by at most 7 blocks down and 3 up, so a hill a marsh happens to
-      // overlap is lowered a little instead of dug out.
+      // Pull the ground towards the marsh level, by at most 14 blocks down and 3 up, so a hill a marsh happens to
+      // overlap is lowered a good way but not dug out of the mountains.
       const delta = h - target;
-      h -= wet * (delta > 7 ? 7 : delta < -3 ? -3 : delta);
+      h -= wet * (delta > 14 ? 14 : delta < -3 ? -3 : delta);
       // Wide ramps again: a pond's rim must be a slope a player can walk.
       const pondShape = smoothstep((fbm(this.pondNoise, x / 70, z / 70, { octaves: 2 }) - 0.1) / 0.8);
-      out.pond = pondShape * smoothstep((wet - 0.55) / 0.4);
+      out.pond = pondShape * smoothstep((wet - 0.55) / 0.35);
       // At most 4 blocks deep, so a pond dug into ground the marsh has not flattened yet is still a gentle bowl.
       if (out.pond > 0) h += Math.max(-4, POND_FLOOR - h) * out.pond;
     }

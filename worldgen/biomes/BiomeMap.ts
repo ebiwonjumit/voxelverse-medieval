@@ -133,7 +133,7 @@ export class BiomeMap {
     if (high > 86 - 4 * Math.min(1.5, Math.max(0, -c.temperature))) return Biome.ALPINE;
     if (high > 31) return Biome.ROCKY_HILLS;
 
-    if (c.wetness + 0.05 * j > 0.55 && elev < 14) return Biome.WETLAND;
+    if (c.wetness + 0.05 * j > 0.55 && elev < 18) return Biome.WETLAND;
 
     // The belt, with its own patches of cedar, bamboo and sakura.
     if (c.belt * (1 - 0.8 * c.home) + 0.12 * j > 0.5) {

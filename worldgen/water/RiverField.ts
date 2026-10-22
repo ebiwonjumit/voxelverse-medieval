@@ -28,6 +28,7 @@ export class RiverField {
   private readonly minor: SimplexNoise;
   private readonly streamMask: SimplexNoise;
   private readonly scratch = { x: 0, z: 0 };
+  private readonly probe: RiverSample = { carve: 0, edge: 0 };
 
   constructor(readonly seed: number) {
     const make = (salt: number) => new SimplexNoise(hash2(salt, 0x51ee, seed) | 0);
@@ -57,7 +58,7 @@ export class RiverField {
     // The warp makes the field up to 0.03 per block steep in places (the median is 0.003), so |f| alone says
     // little about distance, except that a value this large is far from any contour.
     if (Math.abs(f0) > 0.9) return { carve: 0, edge: 1e9 };
-    const e = 10;
+    const e = 20;
     const gx = (this.fieldAt(n, warp, x + e, z, freq, amount) - f0) / e;
     const gz = (this.fieldAt(n, warp, x, z + e, freq, amount) - f0) / e;
     // Rounded off at the bottom: where the field is nearly flat (near a saddle) the estimate would otherwise blow up.
@@ -73,7 +74,23 @@ export class RiverField {
 
   // `ground` is the terrain height before the river is cut. Rivers only run through low ground and peter out
   // as it rises, so a spring and a dry gully sit where the hills are. Widening towards the coast in the west.
+  // Near a river the weight is the average of five samples 2 blocks apart. The distance estimate is rough close to
+  // a point where two contours meet, and the average turns the odd sharp jump into a slope a player can walk.
   sample(x: number, z: number, ground: number, out: RiverSample): RiverSample {
+    this.raw(x, z, ground, out);
+    if (out.edge > 60) return out;
+    const edge = out.edge;
+    let sum = out.carve;
+    for (let i = 0; i < 4; i++) {
+      this.raw(x + (i === 0 ? 2 : i === 1 ? -2 : 0), z + (i === 2 ? 2 : i === 3 ? -2 : 0), ground, this.probe);
+      sum += this.probe.carve;
+    }
+    out.carve = sum / 5;
+    out.edge = edge;
+    return out;
+  }
+
+  private raw(x: number, z: number, ground: number, out: RiverSample): RiverSample {
     out.carve = 0;
     out.edge = 1e9;
     // A wide ramp: the weight changes with the height, so a narrow one would multiply any roughness in the ground.

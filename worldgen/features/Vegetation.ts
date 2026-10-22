@@ -103,7 +103,7 @@ export interface LayerDef {
 export const LAYERS: readonly LayerDef[] = [
   {
     name: 'undergrowth', salt: 11, cell: 6, radius: 6, detail: true, maxChance: max(UNDERGROWTH_P),
-    pick: (c, u) => (c.soil && u < UNDERGROWTH_P[c.biome] ? undergrowth : null),
+    pick: (c, u) => ((c.soil || (c.ground > WATER_LEVEL + 1 && (c.biome === Biome.ROCKY_HILLS || c.biome === Biome.ALPINE))) && u < UNDERGROWTH_P[c.biome] ? undergrowth : null),
   },
   {
     name: 'reeds', salt: 12, cell: 6, radius: 5, detail: true, maxChance: 0.5,

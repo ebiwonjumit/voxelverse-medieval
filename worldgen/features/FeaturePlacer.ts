@@ -3,7 +3,7 @@ import { cellId, packCell } from '../../engine/cell';
 import { CHUNK_SIZE, WORLD_MAX_Y, WORLD_MIN_Y } from '../../engine/coords';
 import { WATER_LEVEL } from '../../worldConstants';
 import { Rng, hash2, hash3 } from '../noise';
-import { Column, newColumn } from '../terrain/ColumnSampler';
+import { Column } from '../terrain/ColumnSampler';
 import { clearanceFromZones } from '../zones/ZoneClearance';
 import { BlockList, Place } from './BlockList';
 import { Feature } from './Feature';
@@ -142,5 +142,3 @@ export class FeaturePlacer {
     return cur;
   }
 }
-
-export { newColumn };

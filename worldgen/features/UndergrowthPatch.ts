@@ -53,7 +53,8 @@ export class UndergrowthPatch extends Feature {
             if (roll <= 0) { id = block; break; }
           }
         }
-        out.add(dx, 1, dz, id, Place.SOIL);
+        // Small rocks sit on bare ground too; everything else needs soil to root in.
+        out.add(dx, 1, dz, id, id === BlockType.SMALL_ROCK ? Place.LAND : Place.SOIL);
       }
     }
   }
