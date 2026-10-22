@@ -55,3 +55,34 @@ Loaded chunks answer from their stored cells. Anything else, which means a chunk
 - 10,000 random points across 50 chunks, including the coast and mountains.
 - Every block above the ground in 12 landmark chunks (the Great Tower, Tempest's Coliseum and Town Hall, Greensom, Bosse, Fremmevilla, Magnolia), more than 500,000 comparisons.
 - 5,000 points in chunks that are not loaded.
+
+## Meshing and rendering architecture
+
+The whole path from block data to pixels, as of the end of Phase 2:
+
+```
+main thread                                   worker (1 to 4)
+-----------                                   ---------------
+Player / bench / shot camera
+  writes playerState {x, y, z}
+World (React) -> ChunkRenderer.update(x, z)
+  chunk of the player changed?
+  yes: wanted ring = 8 chunks, LOD by ring
+       MeshWorkerPool.request(cx, cz, lod) -->  mesh.worker.ts
+                                                 LegacyZoneAdapter.generateChunk (lod)
+                                                 PaddedChunkReader (chunk + 1 block ring)
+                                                 meshChunk -> opaque / cutout / water
+  <-- MeshData, 12 buffers transferred      <--
+  upload queue, 2 geometries per frame
+  Mesh per bucket in ChunkRenderer.group
+  collision and HUD: voxelWorld (main thread, never generates chunks for rendering)
+```
+
+- **Two copies of the world, on purpose.** Workers generate the chunk they mesh. The main thread keeps its own `VoxelWorld` for collision and the HUD, answered by the generator block by block, so physics never waits on rendering. Both use the same `LegacyZoneAdapter`, and the parity tests keep the generator's `sampleBlock` and `generateChunk` identical, which is why chunk borders meet without a seam.
+- **Nothing on the main thread depends on height.** The renderer recomputes only when the player's chunk changes, so a jump sends no job and rebuilds nothing. The old renderer rebuilt every visible chunk because `playerY` was a React dependency.
+- **Meshes are plain Three.js objects, not React.** `components/World.tsx` creates one `ChunkRenderer` and calls `update` from a frame hook. There is no per-chunk component, no instancing and no per-chunk material.
+- **Faces are culled in the mesher** (a face is drawn unless the block beside it is opaque), vertex ambient occlusion is baked into vertex colour, and the lights, fog colours and water wave are unchanged apart from fog distances, which scale with the render distance.
+- **Budgets keep frames even.** At most 2 geometries are uploaded per frame, nearest chunk first. The job queue is ranked by distance to the player when a worker frees up. Chunks are dropped one chunk beyond the render distance (hysteresis) and their geometries disposed.
+- **Layers.** `meshing/` and `engine/` import neither Three.js nor React (a test checks both), so a worker can load them. `render/` and `components/` are the only places that touch Three.js; `mesh.worker.ts` is the only file in `meshing/` that imports `content/` and `worldgen/`.
+
+Details: [meshing.md](meshing.md) for the mesher, [renderer.md](renderer.md) for the pool and the Three.js side. Measured results against the baseline, with the soak and before and after screenshots, are in [perf-after-p2.md](perf-after-p2.md).

@@ -59,15 +59,4 @@ Three.js sends a geometry to the GPU the first time it is drawn, so the number o
 
 ## Measured
 
-Apple M4, headless Chrome, 1280x800, render distance 8, production build, raw results in [`bench-p2-prod.json`](bench-p2-prod.json) and [`bench-soak-p2-prod.json`](bench-soak-p2-prod.json). The browser caps at 60 fps, so these runs show the frame budget is met, not how much is left over.
-
-| Leg | fps | p50 | p99 | max | frames over 50 ms |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| load | 60.0 | 16.7 | 17.8 | 18.2 | 0 |
-| idle | 60.0 | 16.7 | 17.8 | 19.2 | 0 |
-| jump | 60.0 | 16.7 | 17.6 | 18.1 | 0 |
-| greensom-to-sao | 60.0 | 16.7 | 17.8 | 18.8 | 0 |
-| sao-to-tempest | 60.0 | 16.7 | 18.5 | 20.4 | 0 |
-| overall | 60.0 | 16.7 | 18.2 | 20.4 | 0 |
-
-Soak (closed loop, 90 s): 224 chunks tracked, 374 to 428 meshes in the scene and the same number of geometries from 20 s on (`geometries` in `getStats()`); `gl.info.memory.geometries` climbs from 159 to about 350 in the first 25 s and then stays between 343 and 376, because Three.js only uploads a geometry once the camera has had it in view. JS heap stays between 74 and 103 MB. About 100 to 160 draw calls and 190,000 to 315,000 triangles per frame.
+Production build, render distance 8, headless Chrome on an Apple M4. Every leg of the flythrough holds 60 fps (the browser's cap) with p99 under 18.5 ms and no frame over 25 ms, the jump leg builds nothing, and the geometry count is flat over a 90 s soak. The tables, the soak samples and the before and after screenshots are in [perf-after-p2.md](perf-after-p2.md); raw results are in [`bench-p2-prod.json`](bench-p2-prod.json), [`bench-p2-dev.json`](bench-p2-dev.json) and [`bench-soak-p2-prod.json`](bench-soak-p2-prod.json). Typical load is 100 to 160 draw calls and 190,000 to 330,000 triangles per frame, up to 560,000 on the long road leg.

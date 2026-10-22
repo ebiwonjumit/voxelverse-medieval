@@ -21,7 +21,7 @@ npm run bench -- --quick            # short smoke test of the harness, numbers a
 The same flythrough runs in any browser at `http://localhost:3000/?bench` and shows a results panel when it finishes.
 Keep the window visible and in front for the whole run, because browsers pause rendering for hidden pages.
 
-The route is a fixed camera path that replaces the player. It writes `playerState` every frame, as `Player` does. (The baseline numbers below were taken before Phase 2, when this went through React state every frame, which was part of the cost. The results after the rebuild are in [renderer.md](renderer.md).)
+The route is a fixed camera path that replaces the player. It writes `playerState` every frame, as `Player` does. (The baseline numbers below were taken before Phase 2, when this went through React state every frame, which was part of the cost. The results after the rebuild are in [perf-after-p2.md](perf-after-p2.md).)
 
 | Leg | What it does |
 | --- | --- |
@@ -77,11 +77,13 @@ Added in Phase 2 step 2.1, before the renderer changes, so the new renderer can 
 
 ## Phase 2 targets
 
-| Measure | Now (production) | Target |
-| --- | --- | --- |
-| Render distance | 3 chunks | 8 chunks |
-| jump leg p99 | 189 ms | under 20 ms |
-| Walking legs p99 | 47 to 56 ms | under 25 ms |
-| Frames over 50 ms while walking | 15 to 56 per leg | 0 |
-| Overall fps | 56 | 60 |
-| Geometry count after a 5 minute walk | not tracked | flat |
+Achieved values are from the end of Phase 2 (production build, render distance 8), in full in [perf-after-p2.md](perf-after-p2.md).
+
+| Measure | Now (production) | Target | Achieved |
+| --- | --- | --- | --- |
+| Render distance | 3 chunks | 8 chunks | 8 chunks |
+| jump leg p99 | 189 ms | under 20 ms | 17.6 ms |
+| Walking legs p99 | 47 to 56 ms | under 25 ms | 17.7 ms |
+| Frames over 50 ms while walking | 15 to 56 per leg | 0 | 0 (worst walking frame 24.9 ms) |
+| Overall fps | 56 | 60 | 60.0 (the browser caps at 60) |
+| Geometry count after a 5 minute walk | not tracked | flat | flat over the 90 s soak: 355 at 30 s, 352 at the end (a 5 minute walk was not run) |
