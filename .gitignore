@@ -26,3 +26,4 @@ dist-ssr
 # Benchmark output that is regenerated locally
 docs/bench-latest.json
 docs/bench-quick.json
+docs/bench-soak.json

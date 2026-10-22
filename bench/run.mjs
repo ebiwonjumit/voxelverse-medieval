@@ -5,6 +5,19 @@
 //   npm run bench -- --quick       (harness smoke test)
 //   npm run bench -- --url http://localhost:4173/?bench --out docs/bench-prod.json
 //   npm run bench -- --smoke       (loads the real game, drops the player, walks forward, reports console errors)
+//   npm run bench -- --soak        (90 s closed-loop walk, prints geometry and triangle counts every 5 s)
+//   npm run bench -- --shot docs/screens/p2/spawn.png --url "http://localhost:3000/?shot=0,10,300,0,0"
+//                                  (screenshot at 1280x800 once the world reports window.__SHOT_READY__)
+//
+// Options:
+//   --url <url>       page to load (defaults to port 3000; use --url for any other port)
+//   --out <file>      where the JSON result goes (default docs/bench-latest.json, docs/bench-soak.json with --soak)
+//   --timeout <ms>    give up after this long (screenshots wait for __SHOT_READY__ for up to 3 minutes)
+//   --width/--height  window size, default 1280x800
+//   --chrome <path>   Chrome binary
+//
+// Screenshot URLs use ?shot=x,y,z,yawDeg,pitchDeg: yaw 0 looks toward -z, positive turns left, positive pitch looks up.
+// bench/shots.mjs takes the whole viewpoint list in bench/viewpoints.json in one go.
 //
 // Chrome is driven over --remote-debugging-pipe, so there are no extra dependencies.
 import { spawn } from 'node:child_process';
@@ -21,11 +34,14 @@ const option = (name, fallback) => {
 
 const quick = flag('quick');
 const smoke = flag('smoke');
-const url = option('url', smoke ? 'http://localhost:3000/' : `http://localhost:3000/?bench${quick ? '=quick' : ''}`);
-const out = option('out', quick ? 'docs/bench-quick.json' : 'docs/bench-latest.json');
+const soak = flag('soak');
+const shotFile = option('shot', null);
+const defaultMode = quick ? '=quick' : soak ? '=soak' : '';
+const url = option('url', smoke ? 'http://localhost:3000/' : `http://localhost:3000/?bench${defaultMode}`);
+const out = option('out', quick ? 'docs/bench-quick.json' : soak ? 'docs/bench-soak.json' : 'docs/bench-latest.json');
 const width = Number(option('width', 1280));
 const height = Number(option('height', 800));
-const timeoutMs = Number(option('timeout', quick ? 120000 : 480000));
+const timeoutMs = Number(option('timeout', quick ? 120000 : shotFile ? 180000 : 480000));
 const chromePath = option('chrome', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
 
 const profile = mkdtempSync(join(tmpdir(), 'voxelverse-bench-'));
@@ -80,6 +96,19 @@ const send = (method, params = {}, sessionId) =>
     toChrome.write(JSON.stringify({ id, method, params, sessionId }) + '\0');
   });
 
+const printSoak = (samples) => {
+  if (samples.length === 0) return;
+  const statKeys = Object.keys(samples[0].stats ?? {});
+  const col = (v, w) => String(v ?? '').padStart(w);
+  console.log('Soak (closed loop, sprint speed):');
+  console.log(`  ${col('t(s)', 5)} ${col('geometries', 11)} ${col('triangles', 10)} ${col('calls', 6)} ${col('heapMB', 7)}${statKeys.map((k) => ' ' + col(k, Math.max(k.length, 8))).join('')}`);
+  for (const s of samples) {
+    console.log(`  ${col(s.t, 5)} ${col(s.geometries, 11)} ${col(s.triangles, 10)} ${col(s.drawCalls, 6)} ${col(s.heapMB, 7)}${statKeys.map((k) => ' ' + col(s.stats?.[k], Math.max(k.length, 8))).join('')}`);
+  }
+  const geo = samples.map((s) => s.geometries);
+  console.log(`  geometries min ${Math.min(...geo)}, max ${Math.max(...geo)}, last ${geo[geo.length - 1]}`);
+};
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const shutdown = (code) => {
   chrome.kill('SIGKILL');
@@ -92,6 +121,10 @@ try {
   const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
   await send('Page.enable', {}, sessionId);
   await send('Runtime.enable', {}, sessionId);
+  // The window size alone leaves the viewport a bit short once the browser chrome is subtracted.
+  if (shotFile) {
+    await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }, sessionId);
+  }
   await send('Page.navigate', { url }, sessionId);
   console.log(`Running ${url} in headless Chrome at ${width}x${height}`);
 
@@ -130,6 +163,24 @@ try {
     shutdown(problems.length ? 1 : 0);
   }
 
+  if (shotFile) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      await sleep(500);
+      const { result } = await send('Runtime.evaluate', { expression: 'window.__SHOT_READY__ === true', returnByValue: true }, sessionId);
+      if (result.value === true) {
+        await sleep(500); // let one more frame reach the compositor
+        const { data } = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
+        mkdirSync(dirname(shotFile), { recursive: true });
+        writeFileSync(shotFile, Buffer.from(data, 'base64'));
+        console.log(`Wrote ${shotFile} after ${((Date.now() - started) / 1000).toFixed(1)}s, page errors: ${pageErrors.length}`);
+        shutdown(0);
+      }
+    }
+    console.error(`Timed out after ${timeoutMs / 1000}s waiting for window.__SHOT_READY__.`);
+    shutdown(1);
+  }
+
   const started = Date.now();
   let lastLeg = '';
   while (Date.now() - started < timeoutMs) {
@@ -157,6 +208,7 @@ try {
         console.log(`  ${l.name.padEnd(16)} fps ${String(l.avgFps).padStart(6)}  p50 ${String(l.p50).padStart(7)}  p95 ${String(l.p95).padStart(7)}  p99 ${String(l.p99).padStart(7)}  max ${String(l.max).padStart(7)}  >50ms ${l.hitches}`);
       }
       console.log(`  ${'overall'.padEnd(16)} fps ${String(o.avgFps).padStart(6)}  p50 ${String(o.p50).padStart(7)}  p95 ${String(o.p95).padStart(7)}  p99 ${String(o.p99).padStart(7)}  max ${String(o.max).padStart(7)}  >50ms ${o.hitches}`);
+      if (state.result.soak) printSoak(state.result.soak);
       console.log(`Wrote ${out}`);
       shutdown(0);
     }

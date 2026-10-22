@@ -64,6 +64,13 @@ Renderer load, which is the same in both runs: 17 to 19 draw calls and about 2 t
 - **Walking causes hitches.** Crossing chunk borders generates chunks synchronously on the main thread. There are 14 to 15 frames over 50 ms on the short leg and 56 to 61 on the long one, with the worst frames at 140 to 265 ms.
 - **The dev server is slower than production** mainly in the jump leg. Use production numbers for performance claims and dev numbers for what you feel while working.
 
+## Soak baseline and screenshots
+
+Added in Phase 2 step 2.1, before the renderer changes, so the new renderer can be compared with the old one.
+
+- Soak: `npm run bench -- --soak` walks a closed loop (Greensom, south road, plaza, west and east roads, home) at sprint speed for 90 s and samples `gl.info` every 5 s. The old renderer on the production build, [`bench-baseline-soak-prod.json`](bench-baseline-soak-prod.json): 59.1 fps, soak leg p99 31 ms with 39 frames over 50 ms, geometries 27 to 36 (the instanced chunks share one box geometry, so this was never the leak risk), 1.7 to 2.7 million triangles per frame, 29 live chunks and 337 chunk mounts in 90 s.
+- Screenshots: `docs/screens/p2/before-*.png` come from the old renderer on the production build at 1280x800 (`node bench/shots.mjs --prefix before`). The Phase 2 end step takes `after-*.png` at the same five viewpoints in `bench/viewpoints.json`. The old world is about 100 blocks of visible terrain because of the fog, so expect the after shots to differ mainly in distance.
+
 ## Console noise found while measuring
 
 `DayNightCycle` calls `new Color('#385865ca')` inside `useRef(...)`, which runs on every render. Three.js does not accept 8-digit hex and logs a warning, so the console receives one warning per frame (more than 25,000 in a few minutes). `COLORS.WATER` (`'#5194ffff'`) has the same problem. This is not fixed in Phase 0 so the baseline matches current behaviour. `DayNightCycle` is replaced in Phase 5 and the colour constants move into the block registry in Phase 1.

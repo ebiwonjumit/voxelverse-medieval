@@ -7,8 +7,10 @@ import Player from './Player';
 import { INITIAL_SPAWN, MILE } from '../constants';
 import { getZone } from '../utils/terrain';
 import { voxelWorld } from '../gameWorld';
-import Benchmark, { BenchResult } from '../bench/Benchmark';
+import Benchmark, { BenchMode, BenchResult } from '../bench/Benchmark';
 import BenchResults from '../bench/BenchResults';
+import ShotCamera from '../bench/ShotCamera';
+import { parseShot } from '../bench/shot';
 
 const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number }) => {
   const { scene } = useThree();
@@ -95,15 +97,19 @@ const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number 
 };
 
 const Game: React.FC = () => {
-  const [playerPos, setPlayerPos] = useState<Vector3>(INITIAL_SPAWN);
+  // ?shot=x,y,z,yawDeg,pitchDeg parks the camera for screenshots, hides the HUD and replaces the Player.
+  const shot = useMemo(() => parseShot(window.location.search), []);
+  const [playerPos, setPlayerPos] = useState<Vector3>(() => (shot ? new Vector3(shot.x, shot.y, shot.z) : INITIAL_SPAWN));
   const [showControls, setShowControls] = useState(true);
   const [showStats, setShowStats] = useState(false);
 
-  // ?bench runs a scripted flythrough instead of the player; ?bench=quick is a short smoke run.
-  const benchMode = useMemo(() => {
+  // ?bench runs a scripted flythrough instead of the player; ?bench=quick is a short smoke run
+  // and ?bench=soak walks a closed loop for 90 s while recording geometry counts.
+  const benchMode = useMemo((): BenchMode | null => {
+    if (shot) return null;
     const value = new URLSearchParams(window.location.search).get('bench');
-    return value === null ? null : value === 'quick' ? 'quick' : 'full';
-  }, []);
+    return value === null ? null : value === 'quick' || value === 'soak' ? value : 'full';
+  }, [shot]);
   const [benchLeg, setBenchLeg] = useState<string | null>(null);
   const [benchResult, setBenchResult] = useState<BenchResult | null>(null);
 
@@ -163,6 +169,7 @@ const Game: React.FC = () => {
 
   return (
     <div className="relative w-full h-full">
+      {!shot && <>
       {/* Main HUD */}
       <div className="absolute top-0 left-0 z-10 p-6 text-white pointer-events-none select-none">
         <h1 className="text-4xl font-bold drop-shadow-md mb-2 font-serif">VoxelVerse</h1>
@@ -245,10 +252,11 @@ const Game: React.FC = () => {
         <div className="w-full h-0.5 bg-white/80 absolute top-1/2 transform -translate-y-1/2"></div>
         <div className="h-full w-0.5 bg-white/80 absolute left-1/2 transform -translate-x-1/2"></div>
       </div>
+      </>}
 
       <Canvas shadows camera={{ fov: 75 }}>
         {/* Show FPS stats in corner when debug is on */}
-        {showStats && <Stats className="!left-auto !right-4 !top-32" />}
+        {showStats && !shot && <Stats className="!left-auto !right-4 !top-32" />}
         
         <DayNightCycle playerX={playerPos.x} playerZ={playerPos.z} />
         <fog attach="fog" args={['#5a4a6a', 40, 120]} /> 
@@ -257,9 +265,11 @@ const Game: React.FC = () => {
           <World playerPosition={playerPos} />
         </Suspense>
         
-        {benchMode ? (
+        {shot ? (
+          <ShotCamera shot={shot} />
+        ) : benchMode ? (
           <Benchmark
-            quick={benchMode === 'quick'}
+            mode={benchMode}
             setPlayerPos={setPlayerPos}
             onProgress={setBenchLeg}
             onDone={setBenchResult}

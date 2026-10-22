@@ -4,10 +4,16 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { BlockType, COLORS, RENDER_DISTANCE, CHUNK_SIZE, MILE } from '../constants';
 import { getBlockOptimized, getTerrainHeight } from '../utils/terrain';
 import { LodLevel } from '../zones/Zone';
+import { registerWorldProbe } from '../bench/worldProbe';
 
 interface WorldProps {
   playerPosition: Vector3;
 }
+
+// Readiness for ?shot mode: loaded 5 s ago and no chunk has mounted for the last 2 s.
+const READY_MIN_AGE_MS = 5000;
+const READY_QUIET_MS = 2000;
+const chunkTracker = { live: 0, mounted: 0, lastMountAt: 0 };
 
 const tempObject = new Object3D();
 const tempColor = new Color();
@@ -91,6 +97,13 @@ const Chunk: React.FC<{
 }> = React.memo(({ chunkX, chunkZ, lodLevel, playerY, distance }) => {
   const solidMeshRef = useRef<InstancedMesh>(null);
   const waterMeshRef = useRef<InstancedMesh>(null);
+
+  useEffect(() => {
+    chunkTracker.live++;
+    chunkTracker.mounted++;
+    chunkTracker.lastMountAt = performance.now();
+    return () => { chunkTracker.live--; };
+  }, []);
   
   // Calculate opacity based on distance - fade chunks at render distance edge
   const opacity = useMemo(() => {
@@ -394,6 +407,18 @@ const World: React.FC<WorldProps> = ({ playerPosition }) => {
     
     setVisibleChunks(chunks);
   }, [playerPosition.x, playerPosition.z]);
+
+  useEffect(() => {
+    const loadedAt = performance.now();
+    chunkTracker.lastMountAt = loadedAt;
+    return registerWorldProbe({
+      isReady: () => {
+        const now = performance.now();
+        return now - loadedAt >= READY_MIN_AGE_MS && now - chunkTracker.lastMountAt >= READY_QUIET_MS;
+      },
+      getStats: () => ({ chunks: chunkTracker.live, chunksMounted: chunkTracker.mounted }),
+    });
+  }, []);
 
   useFrame(({ clock }) => {
     if (waterMaterial.userData.shader) {

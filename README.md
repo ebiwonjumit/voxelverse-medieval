@@ -47,7 +47,12 @@ npm run typecheck   # TypeScript, no emit
 npm test            # Vitest unit tests (tests/)
 npm run bench       # scripted flythrough in headless Chrome, needs the dev server running
 npm run bench -- --smoke   # loads the real game, lands the player, walks forward, reports page errors
+npm run bench -- --soak    # 90 s closed-loop walk, prints geometry and triangle counts every 5 s
+npm run bench -- --shot docs/screens/p2/spawn.png --url "http://localhost:3000/?shot=0,10,300,0,0"
+node bench/shots.mjs --prefix before --url http://localhost:3000   # every viewpoint in bench/viewpoints.json
 ```
+
+Screenshot mode: `/?shot=x,y,z,yawDeg,pitchDeg` parks the camera, hides the HUD and sets `window.__SHOT_READY__` when the world has loaded. Yaw 0 looks toward -z and positive yaw turns left; positive pitch looks up. `--shot <file.png>` waits for that flag and saves a 1280x800 PNG. Soak mode: `/?bench=soak` (or `npm run bench -- --soak`) records `gl.info` memory and render counters, plus the world renderer's own stats, into `result.soak`.
 
 Open `/?bench` in a browser to run the same flythrough by hand. Baseline numbers and how to read them are in [docs/perf-baseline.md](docs/perf-baseline.md). The block and chunk layer is described in [docs/engine.md](docs/engine.md).
 
