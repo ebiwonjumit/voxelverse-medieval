@@ -326,8 +326,9 @@ describe('level of detail', () => {
           }
         }
       }
-      // The wilderness has nothing to simplify yet; the zones drop grass, flowers, fences and lanterns.
-      if (cx === 20) expect(changed).toBe(0);
+      // The wilderness drops only its ground cover and reeds at LOD 0, never an opaque block; the zones drop grass,
+      // flowers, fences and lanterns.
+      if (cx === 20) expect(opaqueChanged).toBe(0);
       expect(farBlocks).toBeLessThanOrEqual(fullBlocks);
       expect(opaqueChanged).toBeLessThanOrEqual(opaque * 0.05);
     }

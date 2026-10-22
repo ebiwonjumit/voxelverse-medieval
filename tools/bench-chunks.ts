@@ -21,6 +21,9 @@ const grid = (x0: number, z0: number, n = 8): Array<[number, number]> => {
 };
 
 time('wilderness (hills)', grid(20, 20));
+time('belt forest (cedar etc)', grid(40, 26));
+time('river valleys', grid(8, 3));
+time('south forest (dense)', grid(10, 140));
 time('wilderness (forest)', grid(-20, 200));
 time('wilderness (mountains)', grid(340, -10));
 time('open sea', grid(-130, 0));

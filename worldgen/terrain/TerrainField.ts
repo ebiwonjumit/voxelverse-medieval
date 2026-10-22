@@ -9,12 +9,14 @@ import { SimplexNoise, domainWarp, fbm, hash2, ridged } from '../noise';
 
 const BASE = 11;
 
-const FOREST_START = 8 * MILE;       // z = 4000
+// Exported because the biome map follows the same geography: dense woods south of FOREST_START, mountains east of
+// MOUNTAIN_START and the sea west of SHORE_X.
+export const FOREST_START = 8 * MILE;       // z = 4000
 const FOREST_RAMP = 800;
-const MOUNTAIN_START = 20 * MILE;    // x = 10000
+export const MOUNTAIN_START = 20 * MILE;    // x = 10000
 const MOUNTAIN_RAMP = 1500;
 // Past Amestris (which ends at x = -2200) so the district never meets the sea.
-const SHORE_X = -3000;
+export const SHORE_X = -3000;
 const SHORE_RAMP = 700;
 const OCEAN_DROP = 75;
 

@@ -3,11 +3,12 @@ import { Chunk } from '../engine/Chunk';
 import { WorldGenerator } from '../engine/WorldGenerator';
 import { packCell } from '../engine/cell';
 import { CHUNK_SIZE, WORLD_MAX_Y, WORLD_MIN_Y } from '../engine/coords';
-import { Zone, LodLevel } from '../zones/Zone';
+import { LodLevel } from '../zones/Zone';
 import { BlockType, WATER_LEVEL, WORLD_SEED } from '../worldConstants';
-import { TerrainField } from './terrain/TerrainField';
-import { ZoneBlender } from './terrain/ZoneBlender';
-import { WILDERNESS_NAME } from './zones/ZoneInfo';
+import { Biome } from './biomes/Biome';
+import { FeaturePlacer } from './features/FeaturePlacer';
+import { NO_ROADS, RoadField } from './features/RoadField';
+import { Column, ColumnSampler, newColumn } from './terrain/ColumnSampler';
 
 // How far above the ground a legacy zone is asked for blocks. The Great Tower, the tallest thing the old zones
 // build, reaches 59 above the ground.
@@ -19,33 +20,39 @@ export interface GenerateOptions {
   lod?: number;
 }
 
-// Placeholder until biomes give the wilderness its own surface blocks.
-const wildernessSurface = (ground: number): number => {
-  if (ground > 60) return BlockType.SNOW;
-  if (ground > 45) return BlockType.STONE;
-  if (ground < WATER_LEVEL + 1) return BlockType.SAND;
-  return BlockType.GRASS;
-};
-
 export class VoxelverseGenerator implements WorldGenerator {
-  private readonly blender: ZoneBlender;
+  private readonly columns: ColumnSampler;
+  private readonly pool: Column[];
+  private readonly scratch: Column;
+  private readonly features: FeaturePlacer;
 
-  constructor(registry: BlockRegistry, readonly seed: number = WORLD_SEED) {
+  // `roads` says where trees must not grow. Step 6.4 supplies the real road network; nothing is a road until then.
+  constructor(registry: BlockRegistry, readonly seed: number = WORLD_SEED, readonly roads: RoadField = NO_ROADS) {
     for (const type of Object.values(BlockType)) {
       if (typeof type === 'number' && !registry.has(type)) {
         throw new Error(`VoxelverseGenerator needs block id ${type} (${BlockType[type]}) in the registry`);
       }
     }
-    this.blender = new ZoneBlender(new TerrainField(seed));
+    this.columns = new ColumnSampler(seed);
+    const zone = this.columns.blender.zoneAt(0, 0);
+    this.pool = Array.from({ length: CHUNK_SIZE * CHUNK_SIZE }, () => newColumn(zone));
+    this.scratch = newColumn(zone);
+    this.features = new FeaturePlacer(seed, (x, z, out) => this.columns.sample(x, z, out), roads, newColumn(zone));
   }
 
-  // One rule for every block, so sampleBlock and generateChunk cannot drift apart.
-  private blockAt(x: number, y: number, z: number, ground: number, zone: Zone, lod: LodLevel): number {
+  // One rule for every block of the terrain itself, so sampleBlock and generateChunk cannot drift apart.
+  private terrainBlock(col: Column, x: number, y: number, z: number, lod: LodLevel): number {
+    const ground = col.ground;
+    if (col.wild) {
+      if (y < ground - col.depth) return BlockType.STONE;
+      if (y < ground) return col.subsoil;
+      if (y === ground) return col.surface;
+      return y <= WATER_LEVEL ? BlockType.WATER : BlockType.AIR;
+    }
     if (y < ground) return BlockType.STONE;
     if (y > ground && y <= WATER_LEVEL) return BlockType.WATER;
     if (y - ground > ZONE_SCAN_ABOVE) return BlockType.AIR;
-    if (zone.name === WILDERNESS_NAME) return y === ground ? wildernessSurface(ground) : BlockType.AIR;
-    return zone.getBlock(x, y, z, ground, lod);
+    return col.zone.getBlock(x, y, z, ground, lod);
   }
 
   generateChunk(chunk: Chunk, options?: GenerateOptions): void {
@@ -55,44 +62,66 @@ export class VoxelverseGenerator implements WorldGenerator {
     const stone = packCell(BlockType.STONE);
     const water = packCell(BlockType.WATER);
     const waterTop = Math.min(WATER_LEVEL, WORLD_MAX_Y);
+    let anyWild = false;
 
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
       for (let lx = 0; lx < CHUNK_SIZE; lx++) {
         const x = x0 + lx;
         const z = z0 + lz;
-        const zone = this.blender.zoneAt(x, z);
-        const ground = this.blender.height(x, z, zone);
+        const col = this.columns.sample(x, z, this.pool[lz * CHUNK_SIZE + lx]);
+        const ground = col.ground;
+
+        if (col.wild) {
+          anyWild = true;
+          const soilBottom = ground - col.depth;
+          for (let y = WORLD_MIN_Y; y < soilBottom && y <= WORLD_MAX_Y; y++) chunk.setCell(lx, y, lz, stone);
+          const subsoil = packCell(col.subsoil);
+          for (let y = Math.max(soilBottom, WORLD_MIN_Y); y < ground; y++) chunk.setCell(lx, y, lz, subsoil);
+          chunk.setCell(lx, ground, lz, packCell(col.surface));
+          for (let y = ground + 1; y <= waterTop; y++) chunk.setCell(lx, y, lz, water);
+          continue;
+        }
 
         for (let y = WORLD_MIN_Y; y < ground && y <= WORLD_MAX_Y; y++) chunk.setCell(lx, y, lz, stone);
         for (let y = Math.max(ground + 1, WORLD_MIN_Y); y <= waterTop; y++) chunk.setCell(lx, y, lz, water);
-
-        if (zone.name === WILDERNESS_NAME) {
-          chunk.setCell(lx, ground, lz, packCell(wildernessSurface(ground)));
-          continue;
-        }
         const top = Math.min(ground + ZONE_SCAN_ABOVE, WORLD_MAX_Y);
         for (let y = ground; y <= top; y++) {
           if (y > ground && y <= WATER_LEVEL) continue; // already water
-          const block = this.blockAt(x, y, z, ground, zone, lod);
+          const block = col.zone.getBlock(x, y, z, ground, lod);
           if (block !== BlockType.AIR) chunk.setCell(lx, y, lz, packCell(block));
         }
       }
     }
+
+    if (anyWild) {
+      const placed = this.features.collect(x0, z0, x0 + CHUNK_SIZE - 1, z0 + CHUNK_SIZE - 1, lod === LodLevel.LOW);
+      this.features.paint(chunk, placed, this.pool);
+    }
   }
 
   sampleBlock(x: number, y: number, z: number): number {
-    const zone = this.blender.zoneAt(x, z);
-    return this.blockAt(x, y, z, this.blender.height(x, z, zone), zone, LodLevel.HIGH);
+    const col = this.columns.sample(x, z, this.scratch);
+    const terrain = this.terrainBlock(col, x, y, z, LodLevel.HIGH);
+    return col.wild ? this.features.blockAt(x, y, z, col, terrain) : terrain;
   }
 
   terrainHeight(x: number, z: number): number {
-    return this.blender.height(x, z);
+    return this.columns.height(x, z);
   }
 
   zoneNameAt(x: number, z: number): string {
-    return this.blender.zoneAt(x, z).name;
+    return this.columns.blender.zoneAt(x, z).name;
+  }
+
+  // Full description of one column, for tools and tests (the biome map, the map renderer).
+  columnAt(x: number, z: number): Column {
+    return this.columns.sample(x, z, newColumn(this.scratch.zone));
+  }
+
+  biomeAt(x: number, z: number): Biome {
+    return this.columns.biomes.biomeAt(x, z);
   }
 }
 
-export const createVoxelverseGenerator = (registry: BlockRegistry, seed: number = WORLD_SEED): VoxelverseGenerator =>
-  new VoxelverseGenerator(registry, seed);
+export const createVoxelverseGenerator = (registry: BlockRegistry, seed: number = WORLD_SEED, roads: RoadField = NO_ROADS): VoxelverseGenerator =>
+  new VoxelverseGenerator(registry, seed, roads);
