@@ -46,9 +46,10 @@ npm run dev         # start the game at http://localhost:3000
 npm run typecheck   # TypeScript, no emit
 npm test            # Vitest unit tests (tests/)
 npm run bench       # scripted flythrough in headless Chrome, needs the dev server running
+npm run bench -- --smoke   # loads the real game, lands the player, walks forward, reports page errors
 ```
 
-Open `/?bench` in a browser to run the same flythrough by hand. Baseline numbers and how to read them are in [docs/perf-baseline.md](docs/perf-baseline.md).
+Open `/?bench` in a browser to run the same flythrough by hand. Baseline numbers and how to read them are in [docs/perf-baseline.md](docs/perf-baseline.md). The block and chunk layer is described in [docs/engine.md](docs/engine.md).
 
 ## 🗺️ Development Roadmap
 

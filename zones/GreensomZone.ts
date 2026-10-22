@@ -1,6 +1,6 @@
 
 import { Zone, AtmosphereSettings, LodLevel} from './Zone';
-import { BlockType, WATER_LEVEL } from '../constants';
+import { BlockType, WATER_LEVEL } from '../worldConstants';
 import { noise } from '../utils/perlin';
 
 export class GreensomZone extends Zone {

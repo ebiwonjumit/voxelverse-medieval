@@ -1,4 +1,4 @@
-import { BlockType } from '../constants';
+import { BlockType } from '../worldConstants';
 
 export enum LodLevel {
   LOW = 0,

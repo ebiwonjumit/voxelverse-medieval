@@ -1,5 +1,5 @@
 import { Zone, AtmosphereSettings, LodLevel } from './Zone';
-import { BlockType, WATER_LEVEL, MILE } from '../constants';
+import { BlockType, WATER_LEVEL, MILE } from '../worldConstants';
 import { noise } from '../utils/perlin';
 
 export class WildernessZone extends Zone {

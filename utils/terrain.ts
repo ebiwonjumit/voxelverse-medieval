@@ -1,14 +1,17 @@
-import { BlockType, WATER_LEVEL } from '../constants';
+import { BlockType, WATER_LEVEL } from '../worldConstants';
 import { noise } from './perlin';
 import { getZone } from '../zones';
 import { LodLevel } from '../zones/Zone';
+import { TERRAIN_MAX_Y, TERRAIN_MIN_Y } from '../engine/coords';
 
 export { getZone, getCurrentZoneName } from '../zones';
 
 export const getTerrainHeight = (x: number, z: number): number => {
   const baseHeight = 6 + noise.octaveNoise(x * 0.005, z * 0.005, 3) * 10;
   const zone = getZone(x, z);
-  return Math.floor(zone.getHeight(x, z, baseHeight));
+  const height = Math.floor(zone.getHeight(x, z, baseHeight));
+  // The old mountains and coast kept climbing or sinking without limit. The world has a fixed height now.
+  return Math.min(TERRAIN_MAX_Y, Math.max(TERRAIN_MIN_Y, height));
 };
 
 export const getBlockAt = (x: number, y: number, z: number): BlockType => {

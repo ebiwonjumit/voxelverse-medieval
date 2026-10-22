@@ -1,6 +1,6 @@
 
 import { Zone, AtmosphereSettings, LodLevel } from './Zone';
-import { BlockType, MILE } from '../constants';
+import { BlockType, MILE } from '../worldConstants';
 
 export class RankingZone extends Zone {
   name = "Kingdom of Bosse";

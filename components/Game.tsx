@@ -5,7 +5,8 @@ import { Vector3, Color, DirectionalLight, Fog, Mesh, Object3D } from 'three';
 import World from './World';
 import Player from './Player';
 import { INITIAL_SPAWN, MILE } from '../constants';
-import { getCurrentZoneName, getZone } from '../utils/terrain';
+import { getZone } from '../utils/terrain';
+import { voxelWorld } from '../gameWorld';
 import Benchmark, { BenchResult } from '../bench/Benchmark';
 import BenchResults from '../bench/BenchResults';
 
@@ -133,7 +134,7 @@ const Game: React.FC = () => {
     const y = Math.round(playerPos.y);
     const z = Math.round(playerPos.z);
     
-    const currentZone = getCurrentZoneName(x, z);
+    const currentZone = voxelWorld.zoneNameAt(x, z);
     
     // Calculate distance to zone EDGE (distance to center - radius)
     // If negative (inside zone), show 0.0

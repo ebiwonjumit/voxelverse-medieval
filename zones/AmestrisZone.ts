@@ -1,6 +1,6 @@
 
 import { Zone, AtmosphereSettings, LodLevel } from './Zone';
-import { BlockType, MILE } from '../constants';
+import { BlockType, MILE } from '../worldConstants';
 import { generateIndustrialGrid, RoadMap } from '../utils/roadGenerators';
 import { noise } from '../utils/perlin';
 

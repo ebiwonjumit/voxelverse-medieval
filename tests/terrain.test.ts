@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BlockType, MILE, ZONE_LOCATIONS } from '../constants';
 import { getBlockAt, getCurrentZoneName, getTerrainHeight } from '../utils/terrain';
+import { TERRAIN_MAX_Y, TERRAIN_MIN_Y } from '../engine/coords';
 
 describe('zone lookup', () => {
   const cases: Array<[string, number, number, string]> = [
@@ -52,5 +53,14 @@ describe('terrain', () => {
     const h = getTerrainHeight(0, 300);
     expect(getBlockAt(0, h, 300)).toBe(BlockType.PATH);
     expect(getBlockAt(0, h - 1, 300)).toBe(BlockType.STONE);
+  });
+
+  it('keeps heights inside the world, including the far coast and mountains', () => {
+    const far: Array<[number, number]> = [[-4000, 0], [-9000, 500], [12000, 0], [20000, -300], [60000, 60000], [-60000, -60000]];
+    for (const [x, z] of far) {
+      const h = getTerrainHeight(x, z);
+      expect(h).toBeGreaterThanOrEqual(TERRAIN_MIN_Y);
+      expect(h).toBeLessThanOrEqual(TERRAIN_MAX_Y);
+    }
   });
 });

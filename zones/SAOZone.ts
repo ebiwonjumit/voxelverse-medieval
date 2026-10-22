@@ -1,6 +1,6 @@
 
 import { Zone, AtmosphereSettings, LodLevel } from './Zone';
-import { BlockType } from '../constants';
+import { BlockType } from '../worldConstants';
 import { noise } from '../utils/perlin';
 
 export class SAOZone extends Zone {

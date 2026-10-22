@@ -3,8 +3,8 @@ import { useThree, useFrame } from '@react-three/fiber';
 import { Vector3, Euler } from 'three';
 import { PointerLockControls } from '@react-three/drei';
 import { useKeyboardControls } from '../hooks/useKeyboardControls';
-import { GRAVITY, JUMP_FORCE, MOVE_SPEED, PLAYER_HEIGHT, PLAYER_RADIUS, INITIAL_SPAWN, BlockType } from '../constants';
-import { getBlockAt } from '../utils/terrain';
+import { GRAVITY, JUMP_FORCE, MOVE_SPEED, PLAYER_HEIGHT, PLAYER_RADIUS, INITIAL_SPAWN } from '../constants';
+import { voxelWorld } from '../gameWorld';
 
 interface PlayerProps {
   setPlayerPos: (pos: Vector3) => void;
@@ -44,17 +44,7 @@ const Player: React.FC<PlayerProps> = ({ setPlayerPos }) => {
       return collisionCache.get(key)!;
     }
     
-    const block = getBlockAt(Math.round(x), Math.round(y), Math.round(z));
-    const solid = block !== BlockType.AIR && 
-           block !== BlockType.WATER && 
-           block !== BlockType.SUGARCANE && 
-           block !== BlockType.TALL_GRASS && 
-           block !== BlockType.FLOWER_RED && 
-           block !== BlockType.FLOWER_YELLOW &&
-           block !== BlockType.WHEAT &&
-           block !== BlockType.WHEAT_STAGE_1 &&
-           block !== BlockType.WHEAT_STAGE_2 &&
-           block !== BlockType.LILY_PAD;
+    const solid = voxelWorld.isSolid(Math.round(x), Math.round(y), Math.round(z));
     
     collisionCache.set(key, solid);
     return solid;

@@ -4,6 +4,7 @@
 //   npm run bench                  (full run, about 2.5 minutes)
 //   npm run bench -- --quick       (harness smoke test)
 //   npm run bench -- --url http://localhost:4173/?bench --out docs/bench-prod.json
+//   npm run bench -- --smoke       (loads the real game, drops the player, walks forward, reports console errors)
 //
 // Chrome is driven over --remote-debugging-pipe, so there are no extra dependencies.
 import { spawn } from 'node:child_process';
@@ -19,7 +20,8 @@ const option = (name, fallback) => {
 };
 
 const quick = flag('quick');
-const url = option('url', `http://localhost:3000/?bench${quick ? '=quick' : ''}`);
+const smoke = flag('smoke');
+const url = option('url', smoke ? 'http://localhost:3000/' : `http://localhost:3000/?bench${quick ? '=quick' : ''}`);
 const out = option('out', quick ? 'docs/bench-quick.json' : 'docs/bench-latest.json');
 const width = Number(option('width', 1280));
 const height = Number(option('height', 800));
@@ -50,6 +52,7 @@ const fromChrome = chrome.stdio[4];
 let nextId = 1;
 const pending = new Map();
 let buffer = '';
+const pageErrors = [];
 
 fromChrome.on('data', (chunk) => {
   buffer += chunk.toString('utf8');
@@ -57,6 +60,11 @@ fromChrome.on('data', (chunk) => {
   while ((end = buffer.indexOf('\0')) >= 0) {
     const message = JSON.parse(buffer.slice(0, end));
     buffer = buffer.slice(end + 1);
+    if (message.method === 'Runtime.exceptionThrown') {
+      pageErrors.push(message.params.exceptionDetails.exception?.description ?? message.params.exceptionDetails.text);
+    } else if (message.method === 'Runtime.consoleAPICalled' && message.params.type === 'error') {
+      pageErrors.push(message.params.args.map((a) => a.value ?? a.description).join(' '));
+    }
     if (message.id && pending.has(message.id)) {
       const { resolve, reject } = pending.get(message.id);
       pending.delete(message.id);
@@ -86,6 +94,41 @@ try {
   await send('Runtime.enable', {}, sessionId);
   await send('Page.navigate', { url }, sessionId);
   console.log(`Running ${url} in headless Chrome at ${width}x${height}`);
+
+  if (smoke) {
+    const evaluate = async (expression) =>
+      (await send('Runtime.evaluate', { expression, returnByValue: true }, sessionId)).result.value;
+    const readXYZ = async () => {
+      const text = await evaluate('document.body.innerText');
+      const m = /XYZ: (-?\d+), (-?\d+), (-?\d+)/.exec(text);
+      return m ? { x: +m[1], y: +m[2], z: +m[3] } : null;
+    };
+    const key = (type, code, vk) =>
+      send('Input.dispatchKeyEvent', { type, code, key: code.replace('Key', '').toLowerCase(), windowsVirtualKeyCode: vk }, sessionId);
+
+    await sleep(8000);
+    const landed = await readXYZ();
+    await key('rawKeyDown', 'KeyW', 87);
+    await sleep(3000);
+    await key('keyUp', 'KeyW', 87);
+    await sleep(500);
+    const walked = await readXYZ();
+
+    console.log('  after landing:', landed);
+    console.log('  after 3 s of W:', walked);
+    console.log(`  page errors: ${pageErrors.length}`);
+    for (const e of pageErrors.slice(0, 5)) console.log('   ', String(e).slice(0, 200));
+
+    const problems = [];
+    if (!landed || !walked) problems.push('HUD position not found');
+    else {
+      if (landed.y < 5 || landed.y > 14) problems.push(`did not land on the ground (y ${landed.y})`);
+      if (landed.z - walked.z < 10) problems.push(`did not walk forward (z ${landed.z} to ${walked.z})`);
+    }
+    if (pageErrors.length) problems.push('page errors');
+    console.log(problems.length ? `FAILED: ${problems.join('; ')}` : 'OK');
+    shutdown(problems.length ? 1 : 0);
+  }
 
   const started = Date.now();
   let lastLeg = '';

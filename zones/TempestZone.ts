@@ -1,6 +1,6 @@
 
 import { Zone, AtmosphereSettings, LodLevel } from './Zone';
-import { BlockType, MILE } from '../constants';
+import { BlockType, MILE } from '../worldConstants';
 import { generatePlannedGrid, RoadMap } from '../utils/roadGenerators';
 
 export class TempestZone extends Zone {

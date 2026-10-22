@@ -1,5 +1,5 @@
 import { Zone, AtmosphereSettings, LodLevel } from './Zone';
-import { BlockType } from '../constants';
+import { BlockType } from '../worldConstants';
 
 export class FremmevillaZone extends Zone {
   name = "Kingdom of Fremmevilla";
