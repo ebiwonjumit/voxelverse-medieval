@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect } from 'react';
 import { useThree } from '@react-three/fiber';
+import { playerState } from '../playerState';
 import { getWorldProbe } from './worldProbe';
 import { Shot } from './shot';
 
@@ -15,6 +16,9 @@ const ShotCamera: React.FC<{ shot: Shot }> = ({ shot }) => {
     camera.rotation.order = 'YXZ';
     camera.position.set(shot.x, shot.y, shot.z);
     camera.rotation.set(shot.pitchDeg * rad, shot.yawDeg * rad, 0);
+    playerState.x = shot.x;
+    playerState.y = shot.y;
+    playerState.z = shot.z;
   }, [camera, shot]);
 
   useEffect(() => {

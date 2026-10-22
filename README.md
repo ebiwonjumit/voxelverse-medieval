@@ -37,7 +37,7 @@ The world is generated procedurally using noise functions and a custom "Zone Sys
     *   **Vegetation**: Procedural placement of trees (Oak, Birch, Pine), flowers, and crops.
 *   **Visual Fidelity**:
     *   **Custom Shaders**: Procedural noise textures, edge darkening (AO), and directional material logic (Dirt sides on Grass blocks).
-    *   **Optimized Rendering**: Column-Major generation and InstancedMesh for high performance.
+    *   **Optimized Rendering**: Face-culled chunk meshes built in web workers, 8 chunks of render distance, upload budget per frame (see docs/renderer.md).
 
 ## 🛠️ Development
 
@@ -54,7 +54,9 @@ node bench/shots.mjs --prefix before --url http://localhost:3000   # every viewp
 
 Screenshot mode: `/?shot=x,y,z,yawDeg,pitchDeg` parks the camera, hides the HUD and sets `window.__SHOT_READY__` when the world has loaded. Yaw 0 looks toward -z and positive yaw turns left; positive pitch looks up. `--shot <file.png>` waits for that flag and saves a 1280x800 PNG. Soak mode: `/?bench=soak` (or `npm run bench -- --soak`) records `gl.info` memory and render counters, plus the world renderer's own stats, into `result.soak`.
 
-Open `/?bench` in a browser to run the same flythrough by hand. Baseline numbers and how to read them are in [docs/perf-baseline.md](docs/perf-baseline.md). The block and chunk layer is described in [docs/engine.md](docs/engine.md).
+Open `/?bench` in a browser to run the same flythrough by hand. Baseline numbers and how to read them are in [docs/perf-baseline.md](docs/perf-baseline.md). The block and chunk layer is described in [docs/engine.md](docs/engine.md), the mesher in [docs/meshing.md](docs/meshing.md) and the renderer and workers in [docs/renderer.md](docs/renderer.md).
+
+The world is meshed in web workers, so `npm run dev` and `vite build` both bundle `meshing/mesh.worker.ts`; nothing extra to run. The `--smoke` run also checks that the page reports no errors.
 
 ## 🗺️ Development Roadmap
 

@@ -21,7 +21,7 @@ npm run bench -- --quick            # short smoke test of the harness, numbers a
 The same flythrough runs in any browser at `http://localhost:3000/?bench` and shows a results panel when it finishes.
 Keep the window visible and in front for the whole run, because browsers pause rendering for hidden pages.
 
-The route is a fixed camera path that replaces the player. Position updates go through `setPlayerPos` every frame, as `Player` does, so React cost is included.
+The route is a fixed camera path that replaces the player. It writes `playerState` every frame, as `Player` does. (The baseline numbers below were taken before Phase 2, when this went through React state every frame, which was part of the cost. The results after the rebuild are in [renderer.md](renderer.md).)
 
 | Leg | What it does |
 | --- | --- |

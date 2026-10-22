@@ -1,6 +1,6 @@
 # Voxel core
 
-Phase 1 of the rebuild plan added a block and chunk layer under the game. The old renderer still draws the world the old way. Nothing but the player and the HUD reads from the new layer yet.
+Phase 1 of the rebuild plan added a block and chunk layer under the game. The player and the HUD read from it on the main thread, and since Phase 2 the mesh workers build chunks from the same generator. How they get on screen is in [renderer.md](renderer.md).
 
 ## Layout
 
@@ -8,12 +8,13 @@ Phase 1 of the rebuild plan added a block and chunk layer under the game. The ol
 | --- | --- |
 | `engine/` | Voxel core: `coords`, `cell`, `BlockRegistry`, `Chunk`, `ChunkStore`, `VoxelWorld` and the `WorldGenerator` interface. No Three.js, no React. |
 | `content/` | Block definitions. `blocks.ts` registers the legacy blocks. |
-| `meshing/` | Pure chunk mesher: turns a chunk into triangle lists in a worker-safe way. See [meshing.md](meshing.md). |
+| `meshing/` | Pure chunk mesher and the mesh worker pool, worker-safe. See [meshing.md](meshing.md). |
+| `render/` | The Three.js chunk renderer. See [renderer.md](renderer.md). |
 | `worldgen/` | Things that implement `WorldGenerator`. `LegacyZoneAdapter` wraps the old zones. |
-| `worldConstants.ts` | Numbers and enums with no Three.js import, so generation can run in a worker. `constants.ts` re-exports them and adds the Three.js vectors. |
+| `worldConstants.ts` | Numbers and enums (`BlockType`, `LodLevel`) with no Three.js import, so generation can run in a worker. `constants.ts` re-exports them and adds the Three.js vectors. |
 | `gameWorld.ts` | The `voxelWorld` and `blockRegistry` the game uses on the main thread. |
 
-`engine/` never imports from `worldgen/` or `content/`. `meshing/` reads the engine but, like it, has no Three.js or DOM. The generator is passed in.
+`engine/` never imports from `worldgen/`, `content/` or `zones/` (a test checks it). `meshing/` reads the engine but, like it, has no Three.js or DOM. The generator is passed in.
 
 ## World shape
 
@@ -43,9 +44,13 @@ voxelWorld.unloadChunk(cx, cz);
 
 Loaded chunks answer from their stored cells. Anything else, which means a chunk that is not loaded or a height outside the world, is answered by the generator one block at a time. So the player's collision checks never cause a chunk to be generated.
 
+## Generator interface
+
+`generateChunk(chunk, options?)` takes an optional `{ lod }`: `LodLevel.HIGH` (the default) or `LodLevel.LOW`, which a generator may use to leave out small detail that nobody can see from far away. `VoxelWorld.loadChunk` and the parity tests use the default. The mesh workers pass HIGH within 2 chunks of the player and LOW beyond. `sampleBlock` always answers at full detail.
+
 ## Legacy adapter
 
-`LegacyZoneAdapter` fills a chunk exactly the way `getBlockAt` answers a single block: stone below the ground, water above it up to the water level, and the zone's own blocks from the ground up to 64 blocks above. Tests compare it with the old function:
+`LegacyZoneAdapter` fills a chunk exactly the way `getBlockAt` answers a single block (at HIGH detail; at LOW it passes `LodLevel.LOW` to the zones, which then skip lanterns, crops, lily pads and the like): stone below the ground, water above it up to the water level, and the zone's own blocks from the ground up to 64 blocks above. Tests compare it with the old function:
 
 - 10,000 random points across 50 chunks, including the coast and mountains.
 - Every block above the ground in 12 landmark chunks (the Great Tower, Tempest's Coliseum and Town Hall, Greensom, Bosse, Fremmevilla, Magnolia), more than 500,000 comparisons.

@@ -1,6 +1,6 @@
 # Chunk mesher
 
-`meshing/` turns one chunk of cells into triangle lists. It is plain data code (no Three.js, no React, no DOM), so it runs in a worker. A test fails if a file in `meshing/` imports anything it should not.
+`meshing/` turns one chunk of cells into triangle lists. It is plain data code (no Three.js, no React, no DOM), so it runs in a worker. A test fails if a file in `meshing/` imports anything it should not (`mesh.worker.ts` alone may import `content/` and `worldgen/`).
 
 | File | What it does |
 | --- | --- |
@@ -9,6 +9,9 @@
 | `PaddedChunkReader.ts` | A `Chunk` plus a generator's `sampleBlock` for the one-block ring around it. |
 | `biomeTint.ts` | The zone colour blend for grass and leaves, ported from the old `World.tsx`. |
 | `color.ts` | `#rrggbb` to linear rgb. |
+| `runMeshJob.ts` | One job: generate a chunk with a given detail level, mesh it. |
+| `MeshWorkerPool.ts` | The worker pool: priority queue, cancel, stale results. See [renderer.md](renderer.md). |
+| `mesh.worker.ts` | Worker entry point. The one file here that imports `content/` and `worldgen/`, to build its own registry and generator. |
 
 ## Output
 

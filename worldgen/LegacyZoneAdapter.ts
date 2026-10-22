@@ -1,11 +1,10 @@
 import { BlockRegistry } from '../engine/BlockRegistry';
 import { Chunk } from '../engine/Chunk';
-import { WorldGenerator } from '../engine/WorldGenerator';
+import { GenerateOptions, WorldGenerator } from '../engine/WorldGenerator';
 import { packCell } from '../engine/cell';
 import { CHUNK_SIZE, WORLD_MAX_Y, WORLD_MIN_Y } from '../engine/coords';
-import { LodLevel } from '../zones/Zone';
 import { getBlockAt, getCurrentZoneName, getTerrainHeight, getZone } from '../utils/terrain';
-import { BlockType, WATER_LEVEL } from '../worldConstants';
+import { BlockType, LodLevel, WATER_LEVEL } from '../worldConstants';
 
 // The tallest structure the old zones build is the Great Tower, whose walls reach 59 blocks above the ground.
 // The terrain clamp leaves this much headroom below WORLD_MAX_Y.
@@ -23,7 +22,8 @@ export class LegacyZoneAdapter implements WorldGenerator {
     }
   }
 
-  generateChunk(chunk: Chunk): void {
+  generateChunk(chunk: Chunk, options?: GenerateOptions): void {
+    const lod = options?.lod ?? LodLevel.HIGH;
     const x0 = chunk.cx * CHUNK_SIZE;
     const z0 = chunk.cz * CHUNK_SIZE;
     const stone = packCell(BlockType.STONE);
@@ -43,7 +43,7 @@ export class LegacyZoneAdapter implements WorldGenerator {
         const top = Math.min(ground + LEGACY_SCAN_ABOVE, WORLD_MAX_Y);
         for (let y = Math.max(ground, WORLD_MIN_Y); y <= top; y++) {
           if (y > ground && y <= WATER_LEVEL) continue; // already water
-          const block = zone.getBlock(x, y, z, ground, LodLevel.HIGH);
+          const block = zone.getBlock(x, y, z, ground, lod);
           if (block !== BlockType.AIR) chunk.setCell(lx, y, lz, packCell(block));
         }
       }

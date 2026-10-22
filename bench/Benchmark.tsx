@@ -4,6 +4,7 @@ import { Vector3 } from 'three';
 import { MOVE_SPEED, PLAYER_HEIGHT } from '../constants';
 import { getTerrainHeight } from '../utils/terrain';
 import { FrameStats, summarizeFrames } from './stats';
+import { playerState } from '../playerState';
 import { getWorldProbe } from './worldProbe';
 
 type Waypoint = [number, number];
@@ -116,14 +117,13 @@ const pointAlong = (path: Waypoint[], dist: number, loop = false): { x: number; 
 
 interface BenchProps {
   mode: BenchMode;
-  setPlayerPos: (pos: Vector3) => void;
   onProgress: (legName: string) => void;
   onDone: (result: BenchResult) => void;
 }
 
 // Drives the camera along a fixed route in place of the Player component and records frame times.
-// Position updates go through setPlayerPos every frame, exactly as Player does, so the React cost is included.
-const Benchmark: React.FC<BenchProps> = ({ mode, setPlayerPos, onProgress, onDone }) => {
+// The position goes into playerState every frame, exactly as Player does it.
+const Benchmark: React.FC<BenchProps> = ({ mode, onProgress, onDone }) => {
   const { camera, gl } = useThree();
   const legs = useRef(buildLegs(mode));
   const run = useRef({
@@ -228,7 +228,9 @@ const Benchmark: React.FC<BenchProps> = ({ mode, setPlayerPos, onProgress, onDon
     camera.position.set(x, y, z);
     look.current.set(x + dx * 10, y - 0.5, z + dz * 10);
     camera.lookAt(look.current);
-    setPlayerPos(new Vector3(x, y, z));
+    playerState.x = x;
+    playerState.y = y;
+    playerState.z = z;
 
     if (def.soak && r.legTime >= r.nextSample) {
       const info = gl.info;

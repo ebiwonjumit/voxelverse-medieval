@@ -5,16 +5,13 @@ import { PointerLockControls } from '@react-three/drei';
 import { useKeyboardControls } from '../hooks/useKeyboardControls';
 import { GRAVITY, JUMP_FORCE, MOVE_SPEED, PLAYER_HEIGHT, PLAYER_RADIUS, INITIAL_SPAWN } from '../constants';
 import { voxelWorld } from '../gameWorld';
-
-interface PlayerProps {
-  setPlayerPos: (pos: Vector3) => void;
-}
+import { playerState } from '../playerState';
 
 // Cache for collision checks to avoid repeated getBlockAt calls
 const collisionCache = new Map<string, boolean>();
 let cacheFrameCount = 0;
 
-const Player: React.FC<PlayerProps> = ({ setPlayerPos }) => {
+const Player: React.FC = () => {
   const { camera } = useThree();
   const { moveForward, moveBackward, moveLeft, moveRight, jump, sprint } = useKeyboardControls();
   const velocity = useRef(new Vector3(0, 0, 0));
@@ -287,8 +284,10 @@ const Player: React.FC<PlayerProps> = ({ setPlayerPos }) => {
       }
     }
     
-    // Update global state
-    setPlayerPos(position.current.clone());
+    // Publish the position for the HUD and the atmosphere. This is a plain object, so it costs no React render.
+    playerState.x = position.current.x;
+    playerState.y = position.current.y;
+    playerState.z = position.current.z;
   });
 
   return <PointerLockControls ref={controlsRef} />;
