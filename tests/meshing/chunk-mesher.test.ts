@@ -3,7 +3,7 @@ import { Chunk } from '../../engine/Chunk';
 import { packCell } from '../../engine/cell';
 import { WORLD_MIN_Y } from '../../engine/coords';
 import { WorldGenerator } from '../../engine/WorldGenerator';
-import { LEGACY_BOXES, meshChunk, meshTransferables } from '../../meshing/ChunkMesher';
+import { AO_STRENGTH, LEGACY_BOXES, meshChunk, meshTransferables } from '../../meshing/ChunkMesher';
 import { PaddedChunkReader } from '../../meshing/PaddedChunkReader';
 import { BlockType } from '../../worldConstants';
 import { WHITE, MapReader, bounds, faceCount, quadsOf, registry, totalFaces } from './helpers';
@@ -239,10 +239,29 @@ describe('buckets', () => {
   });
 });
 
-describe('ambient occlusion', () => {
+describe('ambient occlusion off by default', () => {
+  it('ships with AO off so the colours stay flat', () => {
+    expect(AO_STRENGTH).toBe(0);
+  });
+
+  it('leaves every vertex at the registry colour even in a deep corner', () => {
+    const m = mesh(new MapReader([[0, 0, 0, WHITE], [1, 1, 0, WHITE], [0, 1, 1, WHITE], [1, 1, 1, WHITE]]));
+    for (const c of m.opaque.colors) expect(c).toBeCloseTo(1);
+  });
+
+  it('keeps the default quad split on every face', () => {
+    const m = mesh(new MapReader([[0, 0, 0, WHITE], [1, 1, 1, WHITE]]));
+    for (const q of quadsOf(m.opaque)) {
+      const tri = [q.indices.slice(0, 3), q.indices.slice(3, 6)];
+      expect(tri[0].filter((i) => tri[1].includes(i)).sort()).toEqual([0, 2]);
+    }
+  });
+});
+
+describe('ambient occlusion (strength 1)', () => {
   // Top face of the block at the origin, as the four vertices with their colour multiplier.
   const topOf = (reader: MapReader) => {
-    const quad = quadsOf(mesh(reader).opaque).find((q) =>
+    const quad = quadsOf(meshChunk(reader, 0, 0, registry, { aoStrength: 1 }).opaque).find((q) =>
       q.normal[1] === 1 && q.corners.every((c) => c.pos[1] === 1 && c.pos[0] <= 1 && c.pos[2] <= 1))!;
     expect(quad).toBeDefined();
     return quad;
@@ -312,8 +331,15 @@ describe('ambient occlusion', () => {
     expect(diagonalOf(topOf(new MapReader([[0, 0, 0, WHITE]])))).toEqual([0, 2]);
   });
 
+  it('scales the darkening with the strength', () => {
+    const half = quadsOf(meshChunk(new MapReader([[0, 0, 0, WHITE], [1, 1, 0, WHITE], [0, 1, 1, WHITE]]), 0, 0, registry, { aoStrength: 0.5 }).opaque)
+      .find((q) => q.normal[1] === 1 && q.corners.every((c) => c.pos[1] === 1 && c.pos[0] <= 1 && c.pos[2] <= 1))!;
+    const corner = half.corners.find((c) => c.pos[0] === 1 && c.pos[2] === 1)!;
+    expect(corner.rgb[0]).toBeCloseTo(0.775); // halfway between 1 and 0.55
+  });
+
   it('does not bake face shading into the colours', () => {
-    const m = mesh(new MapReader([[0, 0, 0, WHITE]]));
+    const m = meshChunk(new MapReader([[0, 0, 0, WHITE]]), 0, 0, registry, { aoStrength: 1 });
     for (const c of m.opaque.colors) expect(c).toBeCloseTo(1);
   });
 });

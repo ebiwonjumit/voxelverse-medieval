@@ -18,7 +18,7 @@
 `MeshData` is `{ cx, cz, opaque, cutout, water }`. Each bucket holds `positions`, `normals`, `colors` (Float32Array, three per vertex) and `indices` (Uint32Array). Every face is four vertices and six indices, counter-clockwise from outside. `meshTransferables(mesh)` lists the twelve buffers for `postMessage`.
 
 - Positions are chunk-local: x and z run 0 to 32, y is the world height. A block at (x, y, z) fills the unit cube from (x, y, z) to (x+1, y+1, z+1). The old renderer centred cubes on whole numbers, so the render code must place each chunk mesh half a block back on all three axes to look the same and to match the player's `Math.round` collision.
-- Colours are linear rgb with ambient occlusion multiplied in, so the material needs `vertexColors: true`. Face shading is not baked in: the Three.js lights do that through the normals.
+- Colours are linear rgb (with ambient occlusion multiplied in when it is switched on, see below), so the material needs `vertexColors: true`. Face shading is not baked in: the Three.js lights do that through the normals.
 - Buckets: `opaque` is every block the registry marks opaque. `water` is water. `cutout` is everything else that draws: leaves, glass, and the shaped legacy blocks. A bucket exists so each can get its own material later (alpha test for cutout, blending for water).
 
 ## Reading cells
@@ -43,7 +43,9 @@ A face is drawn unless the block beside it is opaque. Details:
 
 ## Ambient occlusion
 
-Full cubes (not water, not boxes) get per-vertex occlusion with the usual three-neighbour method over the layer in front of each face: two side blocks and the diagonal one, using the registry's `opaque` flag. Both sides solid gives the darkest level, otherwise the level is 3 minus the number of solid neighbours. Levels map to multipliers `[0.55, 0.7, 0.85, 1.0]`. The quad is split along the diagonal that joins the two brighter corners, which avoids the crease you get when the wrong diagonal is interpolated.
+Full cubes (not water, not boxes) can get per-vertex occlusion with the usual three-neighbour method over the layer in front of each face: two side blocks and the diagonal one, using the registry's `opaque` flag. Both sides solid gives the darkest level, otherwise the level is 3 minus the number of solid neighbours. At full strength levels map to multipliers `[0.55, 0.7, 0.85, 1.0]`. The quad is split along the diagonal that joins the two brighter corners, which avoids the crease you get when the wrong diagonal is interpolated.
+
+**It is off by default.** Phase 2 promises the same look as the old renderer (flat colours, same lights), and the old renderer had no AO. The single switch is `AO_STRENGTH` in `ChunkMesher.ts`: 0 means every multiplier is 1.0 and the neighbour lookups are skipped entirely (the quad keeps its default split); 1 is the full range above, and values between scale the darkening linearly. `meshChunk` also takes `{ aoStrength }` as a fifth argument, which is how the tests run the AO code at strength 1 while a separate test pins the shipped default to 0. Phase 6 (baked light) is the place to turn it on, and it will have to be rebalanced against the baked light then.
 
 ## Colours
 
@@ -51,13 +53,13 @@ Block colour is the registry colour. Grass and leaves use `biomeTint`: each zone
 
 ## Speed
 
-Measured by `tests/meshing/mesher-timing.test.ts` in node on an Apple M4, with chunks from `LegacyZoneAdapter` and ring sampling included (median of 9 runs after warm-up; generating the chunk is not counted):
+Measured by `tests/meshing/mesher-timing.test.ts` in node on an Apple M4, with AO off (the default) and chunks from `LegacyZoneAdapter` and ring sampling included (median of 9 runs after warm-up; generating the chunk is not counted):
 
 | Chunk | Median | Triangles |
 | --- | ---: | ---: |
-| (0, 9), spawn at Greensom | 8.6 ms | 8,500 |
-| (0, 0), Town of Beginnings | 10.3 ms | 16,666 |
-| (-1, -1), Great Tower corner | 10.3 ms | 15,702 |
-| (53, 0), Tempest Coliseum | 6.8 ms | 2,552 |
+| (0, 9), spawn at Greensom | 7.9 ms | 8,500 |
+| (0, 0), Town of Beginnings | 10.0 ms | 16,666 |
+| (-1, -1), Great Tower corner | 9.9 ms | 15,702 |
+| (53, 0), Tempest Coliseum | 6.3 ms | 2,552 |
 
 The target was under 25 ms. The test asserts it, so a regression fails `npm test`; a heavily loaded machine can add noise, so rerun once before concluding anything. The run prints its numbers with a `[mesher]` prefix.

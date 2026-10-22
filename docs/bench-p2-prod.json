@@ -1,6 +1,6 @@
 {
   "mode": "full",
-  "startedAt": "2026-10-22T20:20:12.809Z",
+  "startedAt": "2026-10-22T20:42:26.802Z",
   "env": {
     "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
     "devicePixelRatio": 1,
@@ -14,9 +14,9 @@
       "frames": 361,
       "avgFps": 60,
       "p50": 16.7,
-      "p95": 17.5,
-      "p99": 17.6,
-      "max": 18.4,
+      "p95": 17.1,
+      "p99": 17.5,
+      "max": 17.7,
       "hitches": 0,
       "drawCallsMax": 142,
       "trianglesMax": 295840,
@@ -30,9 +30,9 @@
       "frames": 361,
       "avgFps": 60.01,
       "p50": 16.7,
-      "p95": 17.4,
-      "p99": 17.8,
-      "max": 21.1,
+      "p95": 17,
+      "p99": 17.3,
+      "max": 17.6,
       "hitches": 0,
       "drawCallsMax": 142,
       "trianglesMax": 295840,
@@ -44,9 +44,9 @@
       "name": "jump",
       "seconds": 6,
       "frames": 360,
-      "avgFps": 59.99,
+      "avgFps": 60,
       "p50": 16.7,
-      "p95": 17.5,
+      "p95": 17.4,
       "p99": 17.6,
       "max": 17.7,
       "hitches": 0,
@@ -54,7 +54,7 @@
       "trianglesMax": 295840,
       "geometries": 142,
       "textures": 2,
-      "heapMB": 74
+      "heapMB": 73
     },
     {
       "name": "greensom-to-sao",
@@ -62,15 +62,15 @@
       "frames": 1415,
       "avgFps": 60,
       "p50": 16.7,
-      "p95": 17.5,
-      "p99": 17.7,
-      "max": 17.9,
+      "p95": 17.4,
+      "p99": 17.6,
+      "max": 17.7,
       "hitches": 0,
       "drawCallsMax": 142,
       "trianglesMax": 305398,
       "geometries": 314,
       "textures": 2,
-      "heapMB": 83
+      "heapMB": 80
     },
     {
       "name": "sao-to-tempest",
@@ -80,7 +80,7 @@
       "p50": 16.7,
       "p95": 17.5,
       "p99": 17.7,
-      "max": 24.9,
+      "max": 22.1,
       "hitches": 0,
       "drawCallsMax": 151,
       "trianglesMax": 558584,
@@ -95,7 +95,7 @@
     "p50": 16.7,
     "p95": 17.5,
     "p99": 17.7,
-    "max": 24.9,
+    "max": 22.1,
     "hitches": 0
   }
 }

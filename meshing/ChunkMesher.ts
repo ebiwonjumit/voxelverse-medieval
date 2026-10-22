@@ -78,7 +78,25 @@ export const LEGACY_BOXES: Readonly<Record<number, LegacyBox>> = {
 const HOLDS_WATER = new Set<number>([BlockType.LILY_PAD]);
 
 // --- Tables ------------------------------------------------------------------------------------------------
-const AO_MULTIPLIER = [0.55, 0.7, 0.85, 1.0];
+// Full-strength vertex AO multipliers by occlusion level (0 = both sides solid, 3 = open).
+const AO_FULL = [0.55, 0.7, 0.85, 1.0];
+
+/**
+ * How much vertex ambient occlusion is baked into colours: 0 is off (flat colours, the Phase 2 look), 1 is
+ * the full 0.55..1.0 range. It is off by default because Phase 2 promises the same look as the old renderer;
+ * Phase 6 (baked light) is where it can be switched back on. Tests pass an explicit strength to cover the AO code.
+ */
+export const AO_STRENGTH = 0;
+
+export interface MeshOptions {
+  aoStrength?: number;
+}
+
+const aoTable = (strength: number): Float32Array => {
+  const t = new Float32Array(4);
+  for (let i = 0; i < 4; i++) t[i] = 1 - (1 - AO_FULL[i]) * strength;
+  return t;
+};
 
 const KIND_AIR = 0;
 const KIND_CUBE = 1;
@@ -262,7 +280,11 @@ const fillColors = (r: number, g: number, b: number): Float32Array => {
   return colorBuf;
 };
 
-export const meshChunk = (reader: CellReader, cx: number, cz: number, registry: BlockRegistry): MeshData => {
+export const meshChunk = (
+  reader: CellReader, cx: number, cz: number, registry: BlockRegistry, options: MeshOptions = {},
+): MeshData => {
+  const aoStrength = options.aoStrength ?? AO_STRENGTH;
+  const aoMul = aoStrength > 0 ? aoTable(aoStrength) : null;
   const tables = getTables(registry);
   const { kind, opaque, wet, color } = tables;
   const opaqueB = new Bucket();
@@ -325,7 +347,7 @@ export const meshChunk = (reader: CellReader, cx: number, cz: number, registry: 
         } else if (k === KIND_WATER) {
           emitWaterCube(waterB, grid, i, lx, y, lz, tables);
         } else {
-          emitCube(opaque[id] ? opaqueB : cutoutB, grid, i, id, lx, y, lz, x0, z0, tables);
+          emitCube(opaque[id] ? opaqueB : cutoutB, grid, i, id, lx, y, lz, x0, z0, tables, aoMul);
         }
       }
     }
@@ -363,7 +385,7 @@ const emitLegacyBox = (
 
 const emitCube = (
   bucket: Bucket, grid: Uint16Array, i: number, id: number, lx: number, y: number, lz: number,
-  x0: number, z0: number, tables: BlockTables,
+  x0: number, z0: number, tables: BlockTables, aoMul: Float32Array | null,
 ): void => {
   const { opaque, color } = tables;
   const selfOpaque = opaque[id] === 1;
@@ -403,6 +425,16 @@ const emitCube = (
       b = color[id * 3 + 2];
     }
 
+    if (!aoMul) {
+      for (let c = 0; c < 4; c++) {
+        colorBuf[c * 3] = r;
+        colorBuf[c * 3 + 1] = gr;
+        colorBuf[c * 3 + 2] = b;
+      }
+      emitBoxFace(bucket, face, lx, y, lz, lx + 1, y + 1, lz + 1, colorBuf, false);
+      continue;
+    }
+
     // Ambient occlusion per corner: the two blocks beside the corner and the one diagonal to it, all in
     // the layer in front of the face. Two sides touching hides the corner entirely.
     const su = STRIDE[face.u];
@@ -415,7 +447,7 @@ const emitCube = (
       const corner = opaque[grid[front + du + dv]];
       const level = s1 && s2 ? 0 : 3 - (s1 + s2 + corner);
       aoBuf[c] = level;
-      const m = AO_MULTIPLIER[level];
+      const m = aoMul[level];
       colorBuf[c * 3] = r * m;
       colorBuf[c * 3 + 1] = gr * m;
       colorBuf[c * 3 + 2] = b * m;
