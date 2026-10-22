@@ -101,3 +101,29 @@ describe('ChunkStore', () => {
     expect([...s].map((c) => `${c.cx},${c.cz}`).sort()).toEqual(['0,0', '2,-3']);
   });
 });
+
+describe('Chunk bulk reads', () => {
+  it('reports the y range of its allocated sections', () => {
+    const c = new Chunk(0, 0);
+    expect(c.allocatedYRange()).toBeNull();
+    c.setCell(1, 5, 1, packCell(3));
+    expect(c.allocatedYRange()).toEqual({ minY: 0, maxY: 15 });
+    c.setCell(1, -1, 1, packCell(3));
+    c.setCell(1, 100, 1, packCell(3));
+    expect(c.allocatedYRange()).toEqual({ minY: -16, maxY: 111 });
+  });
+
+  it('copies ids without state into a strided array and leaves empty sections alone', () => {
+    const c = new Chunk(0, 0);
+    c.setCell(2, -3, 4, packCell(7, 9));
+    c.setCell(31, 20, 31, packCell(100, 15));
+    const rowStride = 40 * 40;
+    const zStride = 40;
+    const out = new Uint16Array(rowStride * 30);
+    c.copyIds(out, -5, 24, 41, rowStride, zStride);
+    const at = (lx: number, y: number, lz: number) => out[41 + (y + 5) * rowStride + lz * zStride + lx];
+    expect(at(2, -3, 4)).toBe(7);
+    expect(at(31, 20, 31)).toBe(100);
+    expect(out.reduce((n, v) => n + (v ? 1 : 0), 0)).toBe(2);
+  });
+});

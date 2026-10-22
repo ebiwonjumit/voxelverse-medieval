@@ -8,11 +8,12 @@ Phase 1 of the rebuild plan added a block and chunk layer under the game. The ol
 | --- | --- |
 | `engine/` | Voxel core: `coords`, `cell`, `BlockRegistry`, `Chunk`, `ChunkStore`, `VoxelWorld` and the `WorldGenerator` interface. No Three.js, no React. |
 | `content/` | Block definitions. `blocks.ts` registers the legacy blocks. |
+| `meshing/` | Pure chunk mesher: turns a chunk into triangle lists in a worker-safe way. See [meshing.md](meshing.md). |
 | `worldgen/` | Things that implement `WorldGenerator`. `LegacyZoneAdapter` wraps the old zones. |
 | `worldConstants.ts` | Numbers and enums with no Three.js import, so generation can run in a worker. `constants.ts` re-exports them and adds the Three.js vectors. |
 | `gameWorld.ts` | The `voxelWorld` and `blockRegistry` the game uses on the main thread. |
 
-`engine/` never imports from `worldgen/` or `content/`. The generator is passed in.
+`engine/` never imports from `worldgen/` or `content/`. `meshing/` reads the engine but, like it, has no Three.js or DOM. The generator is passed in.
 
 ## World shape
 
