@@ -308,6 +308,8 @@ export interface FrameBox {
   azimuth?: number;
   /** Degrees above the horizon. Default 50, or 45 when focused. */
   elevation?: number;
+  /** Moves the camera nearer along its line by this factor once the whole box fits. Default 1. */
+  zoom?: number;
 }
 
 /**
@@ -351,8 +353,9 @@ export const defaultCamera = (layout: FrameBox, aspect: number, focused: boolean
     if (fits(mid)) hi = mid;
     else lo = mid;
   }
+  const distance = hi / Math.max(layout.zoom ?? 1, 0.1);
   return {
-    position: [target[0] + back[0] * hi, target[1] + back[1] * hi, target[2] + back[2] * hi],
+    position: [target[0] + back[0] * distance, target[1] + back[1] * distance, target[2] + back[2] * distance],
     target,
   };
 };
