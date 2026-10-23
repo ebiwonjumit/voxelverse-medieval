@@ -5,7 +5,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import {
-  COMPOUND, LANDMARKS, ROAD_GATES, TEMPEST_CENTER_X, TEMPEST_CENTER_Z, blockAt, districtAt, farmField, inShape, landmarkAt, riverDistance, roadAt, RIVER,
+  COMPOUND, RIVER, TEMPEST_CENTER_X, TEMPEST_CENTER_Z, blockAt, districtAt, farmField, landmarkAt, riverDistance, roadAt,
 } from '../worldgen/tempest/layout';
 import { encodePng } from './png';
 
@@ -46,7 +46,7 @@ const colorAt = (x: number, z: number): Rgb => {
   const block = blockAt(x, z);
   if (block) {
     const base = DISTRICT[block.district];
-    // Bare plots and scaffolded ones are paler and hatched.
+    // Bare plots are paler.
     if (block.density === 'empty') return [Math.min(base[0] + 40, 255), Math.min(base[1] + 40, 255), Math.min(base[2] + 40, 255)];
     return base;
   }
@@ -65,8 +65,6 @@ for (let py = 0; py < height; py++) {
     rgb[o] = c[0]; rgb[o + 1] = c[1]; rgb[o + 2] = c[2];
   }
 }
-// The two road gates' directions: a small mark on the edge of the map where each would be, for orientation only.
-void ROAD_GATES; void inShape; void LANDMARKS;
 mkdirSync(dirname(out), { recursive: true });
 writeFileSync(out, encodePng(width, height, rgb));
 console.log(`wrote ${out} (${width}x${height})`);
