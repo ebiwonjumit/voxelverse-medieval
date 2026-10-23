@@ -6,7 +6,7 @@ import { SIDES } from '../engine/models/Side';
 import { FACE_BOTTOM, FACE_SIDE, FACE_TOP, TINT_FOLIAGE, TextureLayout, createTextureLayout } from '../engine/TextureLayout';
 import { BlockType } from '../worldConstants';
 import { CellReader } from './CellReader';
-import { grassTint, LEAVES_TINT_SCALE } from './biomeTint';
+import { defaultWildTint, grassTint, LEAVES_TINT_SCALE, WildTint } from './biomeTint';
 import { LightData } from './LightEngine';
 
 // Turns one chunk of cells into triangle lists. Pure data in, typed arrays out, so it runs in a worker.
@@ -98,6 +98,11 @@ export interface MeshOptions {
   light?: LightData;
   /** Which texture layer each face uses. Without one every block draws as a flat tile of its registry colour. */
   layout?: TextureLayout;
+  /**
+   * The natural colour of grass and leaves in the wilderness, from the generator (see biomeTint.ts). Without one the
+   * wilderness is a plain meadow green. It is read once per column of the chunk, not per face.
+   */
+  wildTint?: WildTint;
 }
 
 // A registry's flat-only layout, for callers that bring no catalog (most of the mesher tests).
@@ -346,6 +351,7 @@ const brightBuf = new Float32Array(4);
 const tintCache = new Float32Array(CHUNK_SIZE * CHUNK_SIZE * 3);
 const tintKnown = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE);
 const tmpRgb = new Float32Array(3);
+let activeWildTint: WildTint = defaultWildTint;
 const tintOut = new Float32Array(3);
 const lo = new Float64Array(3);
 const hi = new Float64Array(3);
@@ -439,6 +445,7 @@ export const meshChunk = (
   }
 
   tintKnown.fill(0);
+  activeWildTint = options.wildTint ?? defaultWildTint;
   const nbhd = new GridNeighbourhood(registry, grid);
 
   for (let y = minY; y <= maxY; y++) {
@@ -491,7 +498,7 @@ const faceTint = (layout: TextureLayout, slot: number, lx: number, lz: number, x
   }
   const col = lz * CHUNK_SIZE + lx;
   if (!tintKnown[col]) {
-    grassTint(x0 + lx, z0 + lz, tmpRgb);
+    grassTint(x0 + lx, z0 + lz, tmpRgb, 0, activeWildTint);
     tintCache[col * 3] = tmpRgb[0];
     tintCache[col * 3 + 1] = tmpRgb[1];
     tintCache[col * 3 + 2] = tmpRgb[2];

@@ -1,6 +1,7 @@
 import { BackSide, Fog, Group, Mesh, ShaderMaterial, SphereGeometry, SRGBColorSpace, Vector3 } from 'three';
 import { AtmosphereSettings } from '../zones/Zone';
 import { getZone } from '../zones';
+import { wildernessAtmosphere } from '../zones/wildernessAtmosphere';
 import { CHUNK_SIZE, RENDER_DISTANCE } from '../worldConstants';
 
 // The sky: a clock, the sun and moon it moves, the colours of the sky and the fog at each time of day, and the dome
@@ -465,12 +466,26 @@ void main() {
 }
 `;
 
+// The zone that owns everything outside the legacy zones.
+const WILDERNESS = getZone(1e7, 1e7);
+
 export interface SkySystemOptions {
   clock?: SkyClock;
   renderDistance?: number;
   /** How fast the fog and sky tint follow a change of zone, per second (an exponential approach). */
   zoneBlendRate?: number;
+  /** How fast they follow a change of biome inside the wilderness, per second. Slower than a zone change. */
+  biomeBlendRate?: number;
+  /**
+   * The biome under a position (the main thread's generator has one, `worldGenerator.biomeAt`). In the wilderness the
+   * sky then leans a little toward the biome (zones/wildernessAtmosphere.ts); without it the wilderness has its plain
+   * clear look. Only asked when the player has moved `BIOME_SAMPLE_DISTANCE` blocks since the last answer.
+   */
+  biomeAt?: (x: number, z: number) => number;
 }
+
+/** The player has to move this many blocks before the biome is asked for again. Fog changes over hundreds of blocks. */
+export const BIOME_SAMPLE_DISTANCE = 6;
 
 /**
  * Owns the clock, the sky dome and the scene's fog. Call `update` once a frame; read `state.daylight` and
@@ -485,16 +500,25 @@ export class SkySystem {
 
   private readonly renderDistance: number;
   private readonly blendRate: number;
+  private readonly biomeBlendRate: number;
+  private readonly biomeAt: ((x: number, z: number) => number) | undefined;
   private readonly dome: Mesh;
   private readonly material: ShaderMaterial;
   private target: ZoneAtmosphere | null = null;
   private current: ZoneAtmosphere | null = null;
   private lastZone: unknown = null;
+  private lastBiome: number | null = null;
+  private rate: number;
+  private sampledX = NaN;
+  private sampledZ = NaN;
 
   constructor(options: SkySystemOptions = {}) {
     this.clock = options.clock ?? new SkyClock();
     this.renderDistance = options.renderDistance ?? RENDER_DISTANCE;
     this.blendRate = options.zoneBlendRate ?? 1.2;
+    this.biomeBlendRate = options.biomeBlendRate ?? 0.5;
+    this.rate = this.blendRate;
+    this.biomeAt = options.biomeAt;
     this.group.name = 'sky';
 
     this.material = new ShaderMaterial({
@@ -535,13 +559,27 @@ export class SkySystem {
   /** `dt` in seconds, the camera's position (the dome follows it), and the player's block position for the zone. */
   update(dt: number, camX: number, camY: number, camZ: number, playerX: number, playerZ: number): void {
     const zone = getZone(playerX, playerZ);
-    if (zone !== this.lastZone) {
+    // Between the zones the atmosphere follows the biome. The biome is looked up only after the player has moved a few
+    // blocks, and the atmosphere then eases toward it, so a ragged biome border never makes the sky flicker.
+    let biome: number | null = null;
+    if (this.biomeAt && zone === WILDERNESS) {
+      if (this.lastBiome === null || !(Math.hypot(playerX - this.sampledX, playerZ - this.sampledZ) < BIOME_SAMPLE_DISTANCE)) {
+        this.sampledX = playerX;
+        this.sampledZ = playerZ;
+        biome = this.biomeAt(playerX, playerZ);
+      } else {
+        biome = this.lastBiome;
+      }
+    }
+    if (zone !== this.lastZone || biome !== this.lastBiome) {
+      this.rate = zone === this.lastZone ? this.biomeBlendRate : this.blendRate;
       this.lastZone = zone;
-      this.target = parseAtmosphere(zone.getAtmosphere());
+      this.lastBiome = biome;
+      this.target = parseAtmosphere(biome !== null ? wildernessAtmosphere(biome) : zone.getAtmosphere());
       if (!this.current) this.current = this.target;
     }
     if (this.current && this.target && this.current !== this.target) {
-      const t = 1 - Math.exp(-Math.max(dt, 0) * this.blendRate);
+      const t = 1 - Math.exp(-Math.max(dt, 0) * this.rate);
       this.current = lerpAtmosphere(this.current, this.target, t);
     }
     this.clock.update(dt);

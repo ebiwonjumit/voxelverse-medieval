@@ -90,49 +90,48 @@ export class BambooLeaves extends Cutout {
 }
 
 /**
- * A rosette of arching fronds. Each is a rib drawn along a curve that rises and bends over towards the ground, with
- * leaflets sweeping forward off both sides at every other step, shorter towards the tip. Outer fronds are drawn
- * first so the inner ones overlap them.
+ * Three fronds from one crown: a tall upright one and two that arch out and over. Each is a thin rib with leaflets in
+ * opposite pairs every second step, angled forward toward the tip and getting shorter, so the outline is a feather
+ * with clear gaps between the leaflets (a leafy tuft is what it looked like when five fronds overlapped).
  */
 export class Fern extends Cutout {
   readonly id = 'fern';
-  private static readonly FROND = palette('#25521c', '#3a7a2a', '#55a03a', '#7dc656');
-  /** Root, control point and tip of each frond, back to front. */
-  private static readonly CURVES: ReadonlyArray<readonly [number, number, number, number, number, number]> = [
-    [7, 15, 2, 12, 0, 15],
-    [9, 15, 13, 12, 15, 15],
-    [7, 15, 4, 4, 0, 6],
-    [9, 15, 12, 4, 15, 6],
-    [8, 15, 7, 8, 9, 1],
+  private static readonly FROND = palette('#1f4a19', '#357328', '#52a038', '#80cc5a');
+  /** Root, control point and tip of each frond, back to front, with the length of its longest leaflet. */
+  private static readonly CURVES: ReadonlyArray<readonly [number, number, number, number, number, number, number]> = [
+    [7, 15, 3, 9, 0, 6, 2],
+    [9, 15, 13, 9, 15, 6, 2],
+    [8, 15, 7, 7, 9, 0, 3],
   ];
 
   generate(rng: SeededRng): Uint8Array {
     const c = new Canvas();
     const [rib, low, mid, lit] = Fern.FROND;
-    for (const [x0, y0, x1, y1, x2, y2] of Fern.CURVES) {
-      const jx = rng.range(-0.6, 0.6);
-      const steps = 15;
+    for (const [x0, y0, x1, y1, x2, y2, maxLeaf] of Fern.CURVES) {
+      const jx = rng.range(-0.5, 0.5);
+      const steps = 16;
       for (let i = 0; i <= steps; i++) {
         const t = i / steps;
         const u = 1 - t;
         const bx = u * u * x0 + 2 * u * t * (x1 + jx) + t * t * x2;
         const by = u * u * y0 + 2 * u * t * y1 + t * t * y2;
-        // Tangent of the curve, for the leaflets.
         const tx = 2 * u * (x1 + jx - x0) + 2 * t * (x2 - x1 - jx);
         const ty = 2 * u * (y1 - y0) + 2 * t * (y2 - y1);
         const len = Math.hypot(tx, ty) || 1;
         const fx = tx / len;
         const fy = ty / len;
-        put(c, Math.round(bx), Math.round(by), i < 2 ? rib : low);
-        if (i < 2 || i % 2) continue;
-        const reach = Math.max(1, Math.round(2.4 * Math.sqrt(1 - t)));
-        for (let r = 1; r <= reach; r++) {
-          // Perpendicular to the rib, swept forward by 0.6 of a pixel per pixel of reach.
-          const ox = -fy * r + fx * r * 0.6;
-          const oy = fx * r + fy * r * 0.6;
-          const px = ox < 0 ? 0 : 1; // which side is the lit one: the left
-          put(c, Math.round(bx + ox), Math.round(by + oy), px ? mid : r === reach ? lit : mid);
-          put(c, Math.round(bx - ox + fx * r * 1.2), Math.round(by - oy + fy * r * 1.2), r === reach ? mid : low);
+        put(c, Math.round(bx), Math.round(by), i < 3 ? rib : low);
+        // Leaflets start a third of the way up the rib, every second step, and shrink to one pixel at the tip.
+        if (i < 4 || i % 2 === 1 || i === steps) continue;
+        const reach = Math.max(1, Math.round(maxLeaf * (1 - t) ** 0.6));
+        for (const side of [-1, 1]) {
+          for (let r = 1; r <= reach; r++) {
+            // Perpendicular to the rib, swept forward by 0.7 of a pixel per pixel of reach.
+            const px = bx + side * -fy * r + fx * r * 0.7;
+            const py = by + side * fx * r + fy * r * 0.7;
+            const shade = side < 0 ? (r === reach ? lit : mid) : r === reach ? mid : low;
+            put(c, Math.round(px), Math.round(py), shade);
+          }
         }
       }
     }
@@ -298,8 +297,8 @@ interface Cap {
 }
 
 /**
- * Small toadstools in a huddle: a domed cap lit on the left and dark underneath, on a pale stem. The red ones have
- * white spots and the brown ones are flatter, wider and plain.
+ * Toadstools, a big one and a small one beside it: a wide domed cap lit on the left and dark underneath, on a pale stem.
+ * The red ones have white spots and the brown ones are flatter, wider and plain with pale flecks.
  */
 export class Mushroom extends Cutout {
   private static readonly STEM = palette('#a89a78', '#cfc2a0', '#eadfc4');
@@ -320,40 +319,67 @@ export class Mushroom extends Cutout {
       for (let k = 0; k < m.stemW; k++) put(c, stemX + k, baseY - i, Mushroom.STEM[k === 0 ? 2 : k === m.stemW - 1 && m.stemW > 1 ? 0 : 1]);
     }
     const top = baseY - m.stem - m.h + 1;
+    const centre = m.x + (m.w - 1) / 2;
+    const rows: Array<[number, number]> = [];
     for (let r = 0; r < m.h; r++) {
       const fraction = Math.sqrt(1 - ((m.h - 1 - r) / m.h) ** 2);
       const half = Math.max(1, Math.round((m.w / 2) * fraction));
-      const centre = m.x + (m.w - 1) / 2;
-      for (let x = Math.ceil(centre - half + 0.5); x <= Math.floor(centre + half - 0.5); x++) {
+      const left = Math.ceil(centre - half + 0.5);
+      const right = Math.floor(centre + half - 0.5);
+      rows.push([left, right]);
+      for (let x = left; x <= right; x++) {
         const rel = (x - centre) / (m.w / 2);
         let shade = 2;
-        if (r === m.h - 1) shade = 0;
-        else if (rel < -0.25 && r < m.h - 1) shade = 3;
+        if (r === m.h - 1) shade = 0; // the dark underside
+        else if (rel < -0.25) shade = 3;
         else if (rel > 0.45) shade = 1;
         put(c, x, top + r, this.cap[shade]);
       }
     }
     if (this.style === 'spotted') {
-      put(c, m.x + 1 + jitter, top + 1, this.spot);
-      if (m.w >= 6) put(c, m.x + m.w - 3, top + 2, this.spot);
-      if (m.w >= 8) put(c, m.x + 3, top + 2, this.spot);
+      // White spots on the cap: bigger ones near the crown, which is what shows from above, smaller ones lower on the side.
+      const spot = (dx: number, r: number, wide: boolean): void => {
+        if (r < 0 || r >= m.h - 1) return;
+        const [left, right] = rows[r];
+        const x = Math.round(centre + dx);
+        if (x < left || x + (wide ? 1 : 0) > right) return;
+        put(c, x, top + r, this.spot);
+        if (wide) put(c, x + 1, top + r, this.spot);
+      };
+      if (m.w >= 9) {
+        spot(-3 + jitter, 1, true);
+        spot(2, 1, false);
+        spot(-1, 2, true);
+        spot(3, 3, false);
+        spot(-4, 3, false);
+        spot(0, 4, false);
+      } else if (m.w >= 5) {
+        spot(-1, 1, false);
+        spot(1 + jitter, 1, false);
+      }
+    } else if (m.w >= 9) {
+      // Plain caps are pale-flecked on the lit side, so they read as a cap and not as a brown blob.
+      const fleck = this.cap[3];
+      for (const [dx, r] of [[-3, 1], [-1, 1], [1, 2], [-2, 2], [3, 2]] as const) {
+        if (r < m.h - 1) put(c, Math.round(centre + dx), top + r, fleck);
+      }
     }
   }
 
   generate(rng: SeededRng): Uint8Array {
     const c = new Canvas();
     const j = rng.int(2);
+    // The big cap is drawn last so it sits in front of the small one. Caps fill most of the tile: from the side they
+    // are a wide, spotted dome, and from above (where crossed planes show only their upper edge) the wide caps still
+    // read as two big red or brown discs rather than a thin X.
     const caps: Cap[] = this.style === 'spotted'
       ? [
-        { x: 1 + j, w: 8, h: 4, stem: 5, stemW: 2 },
-        { x: 9, w: 6, h: 3, stem: 4, stemW: 2 },
-        { x: 5 + j, w: 4, h: 2, stem: 3, stemW: 1 },
+        { x: 10, w: 6, h: 3, stem: 4, stemW: 2 },
+        { x: 0 + j, w: 11, h: 6, stem: 5, stemW: 3 },
       ]
       : [
-        { x: 0 + j, w: 6, h: 3, stem: 5, stemW: 1 },
-        { x: 6, w: 7, h: 3, stem: 3, stemW: 2 },
-        { x: 11 + j, w: 4, h: 2, stem: 2, stemW: 1 },
-        { x: 3, w: 4, h: 2, stem: 2, stemW: 1 },
+        { x: 9, w: 7, h: 3, stem: 3, stemW: 2 },
+        { x: 0 + j, w: 11, h: 5, stem: 4, stemW: 2 },
       ];
     for (const m of caps) this.draw(c, m, j);
     return c.data;

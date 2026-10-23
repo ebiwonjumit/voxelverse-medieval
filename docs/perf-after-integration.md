@@ -120,7 +120,11 @@ In [screens/integration/](screens/integration/), taken at noon in the production
 
 Looked for and not found in any of them: floating trees, holes at zone borders, gaps in the roads, black or magenta blocks, flat-colour tiles, bright seams at chunk edges. The water matches the shore (sand and gravel round it, the level uniform).
 
-Two things that are on screen but are not integration faults, left as they are:
+Two things that were on screen but were not integration faults, since fixed (see the polish step below):
 
-- **The wilderness sky is the legacy "deep purple".** `zones/WildernessZone.ts` gives the wilderness a purple fog and sky tint, so on a sunny meadow, in the shots from `highway-400` to `east-mountains`, the sky goes violet towards the horizon while it is clear blue in the zones. That was a design choice for a barren land and it now sits oddly on real biomes; it is an atmosphere setting, not a world-generation one.
-- **Grass is grey-green far from the zones.** The grass and leaf tint is still the old blend of the zone colours weighted by distance (`meshing/biomeTint.ts`, tested against the old formula), which far from every zone averages to a dull grey-green (the bridge and east mountain shots). Tinting by the new biomes would fix it; it is the natural next job for the colour work and was not done here.
+- **The wilderness sky was the legacy "deep purple".** Fixed: the wilderness now has a clear blue atmosphere that leans a little toward the biome ([sky.md](sky.md#the-wilderness-atmosphere)).
+- **Grass was grey-green far from the zones.** Fixed: the grass and leaf tint now blends the zone colours into a natural colour per biome with distance from the zones ([meshing.md](meshing.md)).
+
+## After the colour polish
+
+The same production flythrough (`node bench/run.mjs --url "http://localhost:3111/?bench" --out docs/bench-polish-prod.json`) after the wilderness atmosphere and the natural grass tint. Result: jump p99 17.6 ms, greensom-to-sao p99 17.7 ms, sao-to-tempest p99 17.7 ms, overall 60.0 fps, p99 17.7 ms, no frame over 50 ms (worst 23 ms). That is the same as the table above (18.6 ms) or a little better. A first run on a loaded machine (load average 8, another job running) had one 82 ms frame in the sao-to-tempest leg and was otherwise the same (p99 17.7 ms); it did not repeat on a rerun at load 3, which is the run kept. Before and after shots of the same eight viewpoints are in [screens/polish/](screens/polish/).

@@ -125,8 +125,9 @@ export class Snow extends TextureRecipe {
 /** Packed gravel: small round pebbles with thin dark gaps. Smaller and warmer than cobblestone. */
 export class Path extends TextureRecipe {
   readonly id = 'path';
-  private static readonly PEBBLE = palette('#a39d90', '#b4aea1', '#c4bfb3', '#d4cfc4');
-  private static readonly GAP = hex('#7e796d');
+  // Lifted toward the old flat path colour (#d6d3d1); the gaps stay a clear step darker so the pebbles still show.
+  private static readonly PEBBLE = palette('#d0cabc', '#dbd6ca', '#e6e2d8', '#f0ede5');
+  private static readonly GAP = hex('#b0aa9c');
 
   generate(rng: SeededRng): Uint8Array {
     const c = new Canvas();
@@ -238,6 +239,38 @@ export class Farmland extends TextureRecipe {
       return ramp(ridge ? Farmland.RIDGE : Farmland.FURROW, shade);
     });
     for (let i = 0; i < 6; i++) c.set(rng.int(N), rng.int(N), hex('#8c6a45'));
+    return c.data;
+  }
+}
+
+/**
+ * The side of a farmland block: packed dark soil, not the dirt tile. It is the colour of the old flat farmland, with a
+ * crumbly tilled lip along the top (lighter, loose clods) over a plain damp body with a few pebbles and roots.
+ */
+export class FarmlandSide extends TextureRecipe {
+  readonly id = 'farmland_side';
+  readonly tiling: Tiling = 'both';
+  private static readonly SOIL = palette('#392416', '#472e1d', '#593a25', '#6e4a30');
+
+  generate(rng: SeededRng): Uint8Array {
+    const c = new Canvas();
+    const v = ranks(layers(rng, [[4, 4, 1], [8, 8, 0.8]]));
+    // Horizontal bias: the body is flattened a little by the plough, so strata run sideways.
+    const strata = ranks(layers(rng, [[2, 8, 1], [8, 16, 0.4]]));
+    c.paint((x, y) => ramp(FarmlandSide.SOIL, Math.min(0.99, v[at(x, y)] * 0.65 + strata[at(x, y)] * 0.35)));
+    // The tilled lip: loose clods one or two pixels across, a shade lighter, on the top two rows.
+    const clod = hex('#82593a');
+    for (let x = 0; x < N; x++) {
+      if (rng.chance(0.55)) c.set(x, 0, clod);
+      if (rng.chance(0.3)) c.set(x, 1, FarmlandSide.SOIL[3]);
+    }
+    for (let i = 0; i < 4; i++) c.set(rng.int(N), rng.int(N), hex('#7d6347')); // pebbles
+    for (let i = 0; i < 4; i++) {
+      const x = rng.int(N);
+      const y = rng.int(N);
+      c.set(x, y, FarmlandSide.SOIL[0]);
+      c.set(x + 1, y, FarmlandSide.SOIL[0]);
+    }
     return c.data;
   }
 }

@@ -2,6 +2,7 @@ import { Canvas, RGB, hex, mix, palette, ramp } from '../Pixels';
 import { SeededRng } from '../Rng';
 import { TILE_SIZE, TextureRecipe, Tiling } from '../TextureRecipe';
 import { layers, ranks, voronoi, waveVeins } from '../noise';
+import { glints } from './masonry';
 
 const N = TILE_SIZE;
 const at = (x: number, y: number) => y * N + x;
@@ -76,6 +77,8 @@ export class Obsidian extends TextureRecipe {
       const y = rng.int(N);
       for (let k = 0; k < 3; k++) c.set(x + k, y + k, Obsidian.SHADES[k === 1 ? 4 : 3]);
     }
+    // And a few pale violet pinpricks where the glass catches the light, so the flows read in a dim cave.
+    glints(c, rng, hex('#8f7bd6'), 6);
     return c.data;
   }
 }
@@ -183,7 +186,9 @@ export class Lantern extends TextureRecipe {
 /** Faceted purple gem: lit and shaded planes with bright edges. */
 export class Crystal extends TextureRecipe {
   readonly id = 'crystal';
-  private static readonly SHADES = palette('#53127a', '#7620a6', '#9a2ccf', '#c23cf2', '#e17cff');
+  // Toned down toward the old flat colour (#d500f9, about 1.3x its brightness): deep violet planes, with the glow carried
+  // by the bright facet edges and a few white sparkles rather than by the whole face.
+  private static readonly SHADES = palette('#1e052b', '#2b0940', '#3a0e52', '#4c1568', '#632a82');
 
   generate(rng: SeededRng): Uint8Array {
     const c = new Canvas();
@@ -191,7 +196,7 @@ export class Crystal extends TextureRecipe {
     const tone = Array.from({ length: 9 }, () => rng.next());
     c.paint((x, y) => {
       const cell = cells[at(x, y)];
-      if (cell.d2 - cell.d1 < 0.9) return hex('#f3b8ff'); // bright facet edge
+      if (cell.d2 - cell.d1 < 0.9) return hex('#c57de9'); // bright facet edge
       // Each facet is a lit plane: brighter toward the upper left of its own centre.
       const v = tone[cell.id] * 0.55 + 0.2 + (-(cell.dx + cell.dy) / 10) * 0.5;
       return ramp(Crystal.SHADES, Math.min(0.99, Math.max(0, v)));

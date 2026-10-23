@@ -143,7 +143,7 @@ const FACES: Record<Colored, BlockFaces> = {
   [BlockType.MARBLE]: same('marble'),
   [BlockType.GOLD_BLOCK]: same('gold'),
   [BlockType.WOOD_FENCE]: same('plank'),
-  [BlockType.FARMLAND]: { top: 'farmland', bottom: 'dirt', side: 'dirt' },
+  [BlockType.FARMLAND]: { top: 'farmland', bottom: 'dirt', side: 'farmland_side' },
   [BlockType.WHEAT]: same('wheat_ripe'),
   [BlockType.STEEL_BEAM]: same('steel'),
   [BlockType.HANGAR_WALL]: same('hangar_wall'),

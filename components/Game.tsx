@@ -40,7 +40,11 @@ const Game: React.FC = () => {
   // The sky owns the clock, the dome, the fog and the daylight the chunks show. A screenshot gets noon unless the address
   // says otherwise (?sky=dawn, ?time=18:30, see parseSkyOptions), so the shots of one viewpoint can be compared.
   const sky = useMemo(
-    () => new SkySystem({ clock: new SkyClock(parseSkyOptions(window.location.search, shot !== null)) }),
+    () => new SkySystem({
+      clock: new SkyClock(parseSkyOptions(window.location.search, shot !== null)),
+      // In the wilderness the fog and sky lean a little toward the biome, the same one the HUD shows.
+      biomeAt: (x, z) => worldGenerator.biomeAt(x, z),
+    }),
     [shot],
   );
   useEffect(() => () => sky.dispose(), [sky]);
