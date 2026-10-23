@@ -101,3 +101,4 @@ World (React) -> ChunkRenderer.update(x, z)
 - **Layers.** `meshing/` and `engine/` import neither Three.js nor React (a test checks both), so a worker can load them. `render/` and `components/` are the only places that touch Three.js; `mesh.worker.ts` is the only file in `meshing/` that imports `content/` and `worldgen/`.
 
 Details: [meshing.md](meshing.md) for the mesher, [renderer.md](renderer.md) for the pool and the Three.js side. Measured results against the baseline, with the soak and before and after screenshots, are in [perf-after-p2.md](perf-after-p2.md).
+- **A page to look at blocks.** `?sandbox=blocks` (`components/sandbox/`) meshes every registered block with the same `meshChunk`, layout, texture array and materials as the world and shows them on a grid under neutral light. It is selected in `App.tsx` before the game mounts and needs no world, workers or player. See [textures.md](textures.md#block-sandbox).

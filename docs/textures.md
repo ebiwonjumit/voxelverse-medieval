@@ -82,18 +82,46 @@ How the texture is set up, and why:
 
 `buildAtlasPixels(catalog, layout)` returns the raw bytes without touching Three.js state, which is what the tests check. The materials that sample the array are in [renderer.md](renderer.md).
 
+## Block sandbox
+
+![Every block in the sandbox](screens/p3/blocks.png)
+
+`/?sandbox=blocks` replaces the game with a page that shows every registered block (air excluded) as a labelled cube on a grid, in id order, under fixed neutral light, with drei's `OrbitControls` (drag to orbit, wheel to zoom, right-drag to pan). Below the grid are two rows for the biome tint: the grass block and the oak leaves under each of the six zone colours. Only `sandbox=blocks` selects it (`App.tsx` checks before the game mounts, and the page is a lazy chunk, so the game does not load it). The grid is built from the registry, so blocks other branches add appear without a change here, drawn with their textures or, if they have none, in their flat colour.
+
+It draws through the same path as the world, not a copy of it: the cubes are meshed by `meshChunk` with the default `TextureLayout`, uploaded with `bucketGeometry` (shared with `ChunkRenderer`) and drawn with `createBlockMaterials` over the real texture array. So it shows the mesher's choices too: the grass side's fringe layer, the shaped legacy boxes (flowers, fence, crops, lantern, which are still small boxes until Phase 4) and the water wave. What differs from the game is the light: white ambient plus two directional lights, no tone mapping, no sky and no fog, so a tile's colour reads as itself. The page has no player and no world, so the game's own HUD is not there.
+
+![A closer look at eight materials](screens/p3/blocks-close.png)
+
+| URL | Shows |
+| --- | --- |
+| `?sandbox=blocks` | every block, plus the biome rows |
+| `?sandbox=blocks&view=close` | eight materials (grass, planks, stone brick, log, cobblestone, red brick, marble, gold), close up |
+| `?sandbox=blocks&focus=wood_plank,marble` | any blocks by short name (the registry name without `voxelverse:`), close up, four to a row |
+| `?sandbox=blocks&cam=px,py,pz,tx,ty,tz` | an explicit camera position and target instead of the framed one |
+
+Zone colours: the mesher tints by world position, so each zone's pair is meshed on that zone's own centre, where its colour is all but pure (the other centres are 1,500 blocks or more away), and the mesh is then moved into the row. The camera is placed by fitting the corners of the content box (labels included) to the frustum, so a longer block list backs off by itself.
+
+`window.__SHOT_READY__` turns true a few frames after the meshes are drawn, the same flag the world's `?shot` mode raises, so the screenshot tool works unchanged:
+
+```bash
+node bench/run.mjs --url "http://localhost:3101/?sandbox=blocks" --shot docs/screens/p3/blocks.png
+node bench/run.mjs --url "http://localhost:3101/?sandbox=blocks&view=close" --shot docs/screens/p3/blocks-close.png
+```
+
+The pure half (`parseSandbox`, `layoutBlocks`, `meshStage`, `defaultCamera`) is in `components/sandbox/sandboxLayout.ts` and tested in `tests/sandbox.test.ts`; `BlockSandbox.tsx` only adds Three.js and React.
+
 ## Cost
 
-Measured on 23 Oct 2026 with the same harness, machine and flythrough as [perf-after-p2.md](perf-after-p2.md), production build, render distance 8 (raw results: [`bench-p3-prod.json`](bench-p3-prod.json), [`bench-soak-p3-prod.json`](bench-soak-p3-prod.json)):
+Measured on 23 Oct 2026 with the same harness, machine and flythrough as [perf-after-p2.md](perf-after-p2.md), production build, render distance 8. The full tables, the soak, the mip check and the memory discussion are in [perf-after-p3.md](perf-after-p3.md); raw results are [`bench-p3-prod.json`](bench-p3-prod.json) and [`bench-soak-p3-prod.json`](bench-soak-p3-prod.json).
 
 | Run | fps | p99 | max | frames over 50 ms |
 | --- | ---: | ---: | ---: | ---: |
-| flythrough, overall | 60.0 | 17.7 ms | 22.2 ms | 0 |
-| 90 s soak | 60.0 | 17.7 ms | 24.4 ms (first seconds) | 0 |
+| flythrough, overall | 60.0 | 17.7 ms | 29.4 ms | 0 |
+| 90 s soak | 60.0 | 17.7 ms | 23.3 ms | 0 |
 
-That is the Phase 2 result (60.0 fps, p99 17.7 ms, worst frame 22.1 ms), and the soak's geometry count stays flat (159 to 376, 352 at the end). Headless Chrome is locked to 60 fps, so this proves the frame budget, not the headroom. The chunk mesher still meshes the heaviest test chunk in about 10 ms (target 25 ms).
+Every Phase 2 target is met (jump p99 17.8 ms, walking p99 17.7 ms, no frame over 50 ms while walking, geometry count flat in the soak). The worst single frame is a few milliseconds above Phase 2's 22.1 ms, within what a busy machine produces on the same code. Headless Chrome is locked to 60 fps, so this proves the frame budget, not the headroom. The chunk mesher still meshes the heaviest test chunk in about 10 ms (target 25 ms).
 
-Textured vertices are bigger: each now carries a tint (3 floats), a uv (2) and two layer numbers (2) on top of position, normal and colour, 76 bytes against the old 36. Vertex memory and upload size roughly double for the same geometry. Nothing in the measurements shows it as a cost yet; if it ever does, the first things to shrink are the normal (a byte per axis would do) and the layer pair (it never changes within a face).
+Textured vertices are bigger: each now carries a tint (3 floats), a uv (2) and two layer numbers (2) on top of position, normal and colour, 76 bytes against the old 36. Frame time does not show it, but memory does: the JS heap is about 112 MB at rest against 75 MB after Phase 2 and ends the long walk at about 258 MB against 176 MB, because Three.js keeps each geometry's typed arrays after uploading. [perf-after-p3.md](perf-after-p3.md#memory) says what was tried. If it ever matters, the first things to shrink are the normal (a byte per axis would do) and the layer pair (it never changes within a face), and releasing the arrays after upload.
 
 ## Adding a tile
 
