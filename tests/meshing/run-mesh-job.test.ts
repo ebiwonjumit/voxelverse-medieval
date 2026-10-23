@@ -3,15 +3,15 @@ import { createDefaultRegistry } from '../../content/blocks';
 import { MeshData, meshTriangleCount } from '../../meshing/ChunkMesher';
 import { runMeshJob } from '../../meshing/runMeshJob';
 import { createWorkerGenerator } from '../../worldgen/createWorkerGenerator';
-import { LegacyZoneAdapter } from '../../worldgen/LegacyZoneAdapter';
+import { VoxelverseGenerator } from '../../worldgen/VoxelverseGenerator';
 import { LodLevel } from '../../worldConstants';
 
 const registry = createDefaultRegistry();
 const generator = createWorkerGenerator(registry);
 
 describe('createWorkerGenerator', () => {
-  it('gives the workers the legacy zones for now', () => {
-    expect(generator).toBeInstanceOf(LegacyZoneAdapter);
+  it('gives the workers the Phase 6 generator', () => {
+    expect(generator).toBeInstanceOf(VoxelverseGenerator);
   });
 });
 

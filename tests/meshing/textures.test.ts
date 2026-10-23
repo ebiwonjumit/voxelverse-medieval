@@ -8,9 +8,9 @@ import { MapReader, Quad, quadsOf } from './helpers';
 
 // Each of these blocks gets its own registry so a test block never leaks into the shared one.
 const registry = createDefaultRegistry();
-const FLAT = 100;
-const STONE_TINTED = 101;
-const MISSING_TILE = 102;
+const FLAT = 4001;
+const STONE_TINTED = 4002;
+const MISSING_TILE = 4003;
 registry.register({ id: FLAT, name: 'test:flat', color: '#336699', solid: true, opaque: true, emits: 0 });
 registry.register({
   id: STONE_TINTED, name: 'test:tinted_stone', color: '#808080', solid: true, opaque: true, emits: 0,

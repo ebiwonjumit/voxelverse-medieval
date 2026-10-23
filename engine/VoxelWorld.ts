@@ -38,7 +38,7 @@ export class VoxelWorld {
       const chunk = this.store.get(chunkCoord(x), chunkCoord(z));
       if (chunk) return chunk.getCell(localCoord(x), y, localCoord(z));
     }
-    return packCell(this.generator.sampleBlock(x, y, z));
+    return this.generator.sampleCell ? this.generator.sampleCell(x, y, z) : packCell(this.generator.sampleBlock(x, y, z));
   }
 
   getBlock(x: number, y: number, z: number): number {

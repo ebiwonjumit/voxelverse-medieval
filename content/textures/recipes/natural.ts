@@ -29,7 +29,7 @@ export class Speckle extends TextureRecipe {
 const DIRT = palette('#46301f', '#573a26', '#684730', '#7a5638', '#8b6746');
 
 /** Brown soil as a canvas, shared with the grass side. */
-const dirtCanvas = (rng: SeededRng): Canvas => {
+export const dirtCanvas = (rng: SeededRng): Canvas => {
   const c = new Canvas();
   const v = ranks(layers(rng, [[4, 4, 1], [8, 8, 0.8]]));
   c.paint((x, y) => ramp(DIRT, v[at(x, y)]));

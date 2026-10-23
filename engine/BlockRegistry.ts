@@ -1,4 +1,6 @@
 import { MAX_BLOCK_ID } from './cell';
+import { BlockModel } from './models/BlockModel';
+import { CUBE_MODEL } from './models/CubeModel';
 
 // Texture names for the three kinds of face of a block. Names refer to the texture catalog; the engine only
 // carries them, it never looks them up.
@@ -19,10 +21,19 @@ export interface BlockDef {
   name: string;     // "namespace:block_name"
   color: string;    // flat colour as #rrggbb, drawn as a flat tile when the block has no faces
   solid: boolean;   // blocks the player
-  opaque: boolean;  // hides the faces of neighbouring blocks
+  opaque: boolean;  // a solid material that hides the faces of neighbours it covers (a stair covers only its back and base)
   emits: number;    // block light level 0..15
+  // How much light the block soaks up passing through it, 0..15 (default 0). A block that is not opaque lets light
+  // through at the usual cost of 1 per block; a block with a dim above 0 also stops sky light from falling through
+  // it for free, and one above 1 costs that much per block. Leaves use 1, so a canopy shades what is under it.
+  lightDim?: number;
   faces?: BlockFaces; // texture names; a block without them is drawn in its flat colour
   tint?: BlockTint;
+  // What the block looks like and where it can be bumped into. Blocks without one are plain cubes. What the 4-bit
+  // state of a cell means is up to the model (see engine/models and docs/models.md).
+  model?: BlockModel;
+  // The cell also holds a cube of water, so water beside it is not drawn against it (a lily pad sits in water).
+  holdsWater?: boolean;
 }
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
@@ -32,6 +43,9 @@ export class BlockRegistry {
   private readonly names = new Map<string, BlockDef>();
   private readonly solidTable = new Uint8Array(MAX_BLOCK_ID + 1);
   private readonly opaqueTable = new Uint8Array(MAX_BLOCK_ID + 1);
+  private readonly emitTable = new Uint8Array(MAX_BLOCK_ID + 1);
+  private readonly dimTable = new Uint8Array(MAX_BLOCK_ID + 1);
+  private readonly modelTable: BlockModel[] = new Array(MAX_BLOCK_ID + 1).fill(CUBE_MODEL);
 
   get size(): number {
     return this.defs.size;
@@ -44,6 +58,9 @@ export class BlockRegistry {
     if (!def.name) throw new Error(`Block with id ${def.id} has no name`);
     if (!Number.isInteger(def.emits) || def.emits < 0 || def.emits > 15) {
       throw new RangeError(`Block ${def.name} emits ${def.emits}, expected 0..15`);
+    }
+    if (def.lightDim !== undefined && (!Number.isInteger(def.lightDim) || def.lightDim < 0 || def.lightDim > 15)) {
+      throw new RangeError(`Block ${def.name} has lightDim ${def.lightDim}, expected 0..15`);
     }
     if (!HEX_COLOR.test(def.color)) {
       throw new Error(`Block ${def.name} has color ${def.color}, expected #rrggbb`);
@@ -64,11 +81,17 @@ export class BlockRegistry {
     if (def.tint !== undefined && def.tint !== 'grass' && def.tint !== 'foliage') {
       throw new Error(`Block ${def.name} has tint ${String(def.tint)}, expected grass or foliage`);
     }
+    if (def.model !== undefined && typeof def.model.quads !== 'function') {
+      throw new Error(`Block ${def.name} has a model that is not a BlockModel`);
+    }
     const frozen = Object.freeze({ ...def, faces: def.faces ? Object.freeze({ ...def.faces }) : undefined });
     this.defs.set(frozen.id, frozen);
     this.names.set(frozen.name, frozen);
     this.solidTable[frozen.id] = frozen.solid ? 1 : 0;
     this.opaqueTable[frozen.id] = frozen.opaque ? 1 : 0;
+    this.emitTable[frozen.id] = frozen.emits;
+    this.dimTable[frozen.id] = frozen.lightDim ?? 0;
+    this.modelTable[frozen.id] = frozen.model ?? CUBE_MODEL;
     return frozen;
   }
 
@@ -99,5 +122,19 @@ export class BlockRegistry {
 
   isOpaque(id: number): boolean {
     return this.opaqueTable[id] === 1;
+  }
+
+  // Light rules, read by the light engine. Unknown ids emit nothing and let light through.
+  emission(id: number): number {
+    return this.emitTable[id];
+  }
+
+  lightDim(id: number): number {
+    return this.dimTable[id];
+  }
+
+  // The model of a block. Unknown ids read as plain cubes, which is how the mesher draws them (as magenta cubes).
+  model(id: number): BlockModel {
+    return this.modelTable[id] ?? CUBE_MODEL;
   }
 }

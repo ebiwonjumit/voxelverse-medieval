@@ -13,7 +13,7 @@ export const MIN_BUILD_HEIGHT = -30; // Use this too
 
 // Physics
 export const GRAVITY = 18;
-export const JUMP_FORCE = 8;
+export const JUMP_FORCE = 6.7; // a jump of about 1.25 blocks: over a full block, never over a fence (1.5)
 export const MOVE_SPEED = 7; 
 export const PLAYER_HEIGHT = 1.82;
 export const PLAYER_RADIUS = 0.4;

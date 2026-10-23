@@ -5,8 +5,8 @@ import { CellReader } from '../../meshing/CellReader';
 
 export const registry = createDefaultRegistry();
 
-// A plain test block well above every reserved id range (legacy 0-47, nature 48-79, shaped 80-127, Tempest 128-255),
-// so colours are easy to predict (white is linear 1).
+// A plain block well above every range the game uses (legacy 0-47, nature 48-79, shaped 80-127, Tempest 128-255), so
+// other branches adding blocks never collide with it. White is linear 1, which makes colours easy to predict.
 export const WHITE = 4000;
 registry.register({ id: WHITE, name: 'test:white', color: '#ffffff', solid: true, opaque: true, emits: 0 });
 
@@ -14,12 +14,13 @@ registry.register({ id: WHITE, name: 'test:white', color: '#ffffff', solid: true
 export class MapReader implements CellReader {
   private readonly cells = new Map<string, Cell>();
 
-  constructor(blocks: Array<[number, number, number, number]> = []) {
-    for (const [x, y, z, id] of blocks) this.set(x, y, z, id);
+  // Blocks are [x, y, z, id] or [x, y, z, id, state].
+  constructor(blocks: Array<[number, number, number, number, number?]> = []) {
+    for (const [x, y, z, id, state] of blocks) this.set(x, y, z, id, state);
   }
 
-  set(x: number, y: number, z: number, id: number): this {
-    this.cells.set(`${x},${y},${z}`, packCell(id));
+  set(x: number, y: number, z: number, id: number, state = 0): this {
+    this.cells.set(`${x},${y},${z}`, packCell(id, state));
     return this;
   }
 
@@ -37,7 +38,10 @@ export interface Quad {
   normal: [number, number, number];
   corners: Array<{
     pos: [number, number, number];
-    rgb: [number, number, number];  // ambient occlusion multiplier
+    sky: number;    // baked sky light, 0..1
+    block: number;  // baked block light, 0..1
+    ao: number;     // ambient occlusion multiplier, 0.55..1
+    glow: number;   // the block's own emission, 0..1
     tint: [number, number, number]; // biome tint, white when the face takes none
     uv: [number, number];
   }>;
@@ -56,7 +60,10 @@ export const quadsOf = (bucket: BucketData): Quad[] => {
       const o = (v0 + i) * 3;
       corners.push({
         pos: [bucket.positions[o], bucket.positions[o + 1], bucket.positions[o + 2]] as [number, number, number],
-        rgb: [bucket.colors[o], bucket.colors[o + 1], bucket.colors[o + 2]] as [number, number, number],
+        sky: bucket.light[(v0 + i) * 4],
+        block: bucket.light[(v0 + i) * 4 + 1],
+        ao: bucket.light[(v0 + i) * 4 + 2],
+        glow: bucket.light[(v0 + i) * 4 + 3],
         tint: [bucket.tints[o], bucket.tints[o + 1], bucket.tints[o + 2]] as [number, number, number],
         uv: [bucket.uvs[(v0 + i) * 2], bucket.uvs[(v0 + i) * 2 + 1]] as [number, number],
       });

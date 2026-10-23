@@ -34,7 +34,9 @@ describe('nature blocks', () => {
     const legacyOnly = new BlockRegistry();
     registerNatureBlocks(legacyOnly);
     expect(legacyOnly.size).toBe(natureBlockIds().length);
-    expect(registry.size).toBe(legacyIds.length + natureBlockIds().length);
+    // Count by range: the shaped blocks (80..127) share the registry.
+    expect(registry.all().filter((d) => d.id < NATURE_ID_MIN).length).toBe(legacyIds.length);
+    expect(registry.all().filter((d) => d.id >= NATURE_ID_MIN && d.id <= NATURE_ID_MAX).length).toBe(natureBlockIds().length);
     // Registering twice is a mistake the registry reports.
     expect(() => registerNatureBlocks(registry)).toThrow();
   });
@@ -77,5 +79,11 @@ describe('nature blocks', () => {
       expect(registry.isOpaque(id), NatureBlock[id]).toBe(true);
     }
     for (const id of natureBlockIds()) if (registry.isOpaque(id)) expect(registry.isSolid(id)).toBe(true);
+  });
+
+  it('dim light by 1 under leaves and not under anything else', () => {
+    const registry = createDefaultRegistry();
+    const leaves = new Set<number>([NatureBlock.CEDAR_LEAVES, NatureBlock.SAKURA_LEAVES, NatureBlock.SNOWY_PINE_LEAVES]);
+    for (const id of natureBlockIds()) expect(registry.lightDim(id), NatureBlock[id]).toBe(leaves.has(id) ? 1 : 0);
   });
 });

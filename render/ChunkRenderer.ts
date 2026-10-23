@@ -53,6 +53,14 @@ export interface ChunkRendererStats {
   meshes: number;          // meshes in the scene
   geometries: number;      // geometries created and not yet disposed
   pending: number;         // jobs not finished plus meshes waiting for upload
+  // Worker time per mesh job, as the workers measured it (see MeshTiming). Zero before the first result.
+  jobs: number;            // results received that carried timing
+  generateMs: number;      // average time generating chunks per job, 0 when the worker's cache had them all
+  lightMs: number;         // average time computing the baked light per job
+  meshMs: number;          // average meshing time per job
+  maxLightMs: number;
+  maxMeshMs: number;
+  chunksGenerated: number; // chunks the workers generated in total, for the cache hit rate: jobs * 9 would be no cache
 }
 
 export interface ChunkRendererOptions {
@@ -90,7 +98,7 @@ export const bucketGeometry = (data: BucketData, pad = 0): BufferGeometry => {
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(data.positions, 3));
   geometry.setAttribute('normal', new BufferAttribute(data.normals, 3));
-  geometry.setAttribute('color', new BufferAttribute(data.colors, 3));
+  geometry.setAttribute('bakedLight', new BufferAttribute(data.light, 4));
   geometry.setAttribute('tint', new BufferAttribute(data.tints, 3));
   geometry.setAttribute('uv', new BufferAttribute(data.uvs, 2));
   geometry.setAttribute('texLayer', new BufferAttribute(data.layers, 2));
@@ -117,6 +125,12 @@ export class ChunkRenderer {
   private readonly textureUniform: { value: DataArrayTexture | null };
   private readonly materials: BlockMaterials;
   private readonly timeUniform = { value: 0 };
+  // Scales the baked sky light in the shader; the day/night cycle sets it each frame with setDaylight.
+  private readonly daylightUniform = { value: 1 };
+  // The colour of that light: white at noon, warm at dusk, blue at night.
+  private readonly skyLightUniform = { value: new Vector3(1, 1, 1) };
+
+  private readonly timing = { jobs: 0, generate: 0, light: 0, mesh: 0, maxLight: 0, maxMesh: 0, generated: 0 };
 
   private playerCx = 0;
   private playerCz = 0;
@@ -133,7 +147,7 @@ export class ChunkRenderer {
     this.atlas = options.atlas
       ?? buildAtlas(createDefaultCatalog(), createDefaultTextureLayout(createDefaultRegistry()));
     this.textureUniform = { value: this.atlas.texture };
-    this.materials = createBlockMaterials(this.textureUniform, this.timeUniform);
+    this.materials = createBlockMaterials(this.textureUniform, this.timeUniform, this.daylightUniform, this.skyLightUniform);
 
     const factory = options.workerFactory ?? createMeshWorker;
     const size = options.poolSize ?? defaultPoolSize(typeof navigator === 'undefined' ? undefined : navigator.hardwareConcurrency);
@@ -149,6 +163,7 @@ export class ChunkRenderer {
   }
 
   getStats(): ChunkRendererStats {
+    const t = this.timing;
     let meshes = 0;
     for (const entry of this.chunks.values()) {
       for (const name of BUCKET_NAMES) if (entry.meshes[name]) meshes++;
@@ -158,7 +173,25 @@ export class ChunkRenderer {
       meshes,
       geometries: this.geometryCount,
       pending: this.pool.pending + this.uploads.size,
+      jobs: t.jobs,
+      generateMs: t.jobs ? t.generate / t.jobs : 0,
+      lightMs: t.jobs ? t.light / t.jobs : 0,
+      meshMs: t.jobs ? t.mesh / t.jobs : 0,
+      maxLightMs: t.maxLight,
+      maxMeshMs: t.maxMesh,
+      chunksGenerated: t.generated,
     };
+  }
+
+  // How much of the baked sky light shows, 0 (night) to 1 (noon). Takes effect on the next frame for every chunk on
+  // screen and every chunk still to come, because it is a uniform: nothing is re-meshed.
+  setDaylight(daylight: number): void {
+    this.daylightUniform.value = Math.min(Math.max(daylight, 0), 1);
+  }
+
+  // The colour sky light takes, as multipliers (1, 1, 1 is neutral). Same rules as setDaylight.
+  setSkyLightColor(r: number, g: number, b: number): void {
+    this.skyLightUniform.value.set(r, g, b);
   }
 
   // True once the world around the player has been requested, built and uploaded and nothing has changed for a moment.
@@ -250,6 +283,17 @@ export class ChunkRenderer {
   }
 
   private receive(mesh: MeshData, lod: LodLevel): void {
+    const timing = mesh.timing;
+    if (timing) {
+      const t = this.timing;
+      t.jobs++;
+      t.generate += timing.generate;
+      t.light += timing.light;
+      t.mesh += timing.mesh;
+      t.generated += timing.generated;
+      t.maxLight = Math.max(t.maxLight, timing.light);
+      t.maxMesh = Math.max(t.maxMesh, timing.mesh);
+    }
     const key = ChunkStore.keyOf(mesh.cx, mesh.cz);
     const entry = this.chunks.get(key);
     if (!entry) return; // unloaded while the worker was busy

@@ -34,6 +34,21 @@ describe('BlockRegistry', () => {
     expect(() => r.register(def({ color: 'red' }))).toThrow(/color/);
   });
 
+  it('carries the light rules: emission and lightDim, defaulting to none', () => {
+    const r = new BlockRegistry();
+    r.register(def({ id: 1, name: 'test:lamp', emits: 12 }));
+    r.register(def({ id: 2, name: 'test:leaf', opaque: false, lightDim: 1 }));
+    r.register(def({ id: 3, name: 'test:plain' }));
+    expect(r.emission(1)).toBe(12);
+    expect(r.emission(3)).toBe(0);
+    expect(r.lightDim(2)).toBe(1);
+    expect(r.lightDim(3)).toBe(0);
+    expect(r.emission(999)).toBe(0); // unknown ids emit nothing and dim nothing
+    expect(r.lightDim(999)).toBe(0);
+    expect(() => r.register(def({ id: 4, name: 'test:bad', lightDim: 16 }))).toThrow(RangeError);
+    expect(() => r.register(def({ id: 5, name: 'test:bad2', lightDim: 0.5 }))).toThrow(RangeError);
+  });
+
   it('throws for unknown ids and names', () => {
     const r = new BlockRegistry();
     expect(() => r.get(5)).toThrow(/5/);

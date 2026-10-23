@@ -141,3 +141,95 @@ export class BirchLog extends Log {
     }
   }
 }
+
+/**
+ * Cedar: reddish bark that hangs in long stringy strips, pink-orange heartwood on the end. Tall, straight and slim
+ * is how the generator builds it, so the bark runs unbroken up the side.
+ */
+export class CedarLog extends Log {
+  protected readonly bark: readonly RGB[] = palette('#3a1f16', '#512c1f', '#6d4330', '#8a5840');
+  protected readonly wood: readonly RGB[] = palette('#a55a3c', '#b8694a', '#c97c5a', '#d9906c');
+
+  constructor(face: LogFace) {
+    super(face, face === 'side' ? 'cedar_log_side' : 'cedar_log_top');
+  }
+
+  protected barkSide(rng: SeededRng, c: Canvas): void {
+    const v = ranks(layers(rng, [[10, 2, 1], [16, 4, 0.5]]));
+    c.paint((x, y) => ramp(this.bark, v[at(x, y)]));
+    // Strips that peel away from the trunk: a dark line with a lit edge beside it, a few pixels to a third of the tile.
+    for (let i = 0; i < 5; i++) {
+      const x = rng.int(N);
+      const y = rng.int(N);
+      const len = 4 + rng.int(6);
+      for (let k = 0; k < len; k++) {
+        c.set(x, y + k, this.bark[0]);
+        c.set(x + 1, y + k, this.bark[3]);
+      }
+    }
+  }
+}
+
+/** Cherry bark: smooth and dark with the pale horizontal dashes (lenticels) the tree is known by. Pink wood on the end. */
+export class SakuraLog extends Log {
+  protected readonly bark: readonly RGB[] = palette('#2a2024', '#3a2d31', '#4e3b3b', '#665151');
+  protected readonly wood: readonly RGB[] = palette('#9a6a63', '#b07d74', '#c4928a', '#d6a79d');
+
+  constructor(face: LogFace) {
+    super(face, face === 'side' ? 'sakura_log_side' : 'sakura_log_top');
+  }
+
+  protected barkSide(rng: SeededRng, c: Canvas): void {
+    const v = ranks(layers(rng, [[8, 8, 1], [16, 16, 0.6]]));
+    c.paint((x, y) => ramp(this.bark, v[at(x, y)]));
+    const dash = hex('#85706f');
+    const shade = hex('#1b1316');
+    for (let i = 0; i < 7; i++) {
+      const x = rng.int(N);
+      const y = rng.int(N);
+      const len = 2 + rng.int(2);
+      for (let k = 0; k < len; k++) c.set(x + k, y, dash);
+      for (let k = 1; k < len; k++) c.set(x + k, y + 1, shade);
+    }
+  }
+}
+
+/** Pine: grey-brown bark broken into tall plates by dark cracks, resin-orange wood on the end. */
+export class PineLog extends Log {
+  protected readonly bark: readonly RGB[] = palette('#34261b', '#4b3621', '#654a2f', '#7f6040');
+  protected readonly wood: readonly RGB[] = palette('#b8803a', '#cc9448', '#dca95a', '#ecbf72');
+
+  constructor(face: LogFace) {
+    super(face, face === 'side' ? 'pine_log_side' : 'pine_log_top');
+  }
+
+  protected barkSide(rng: SeededRng, c: Canvas): void {
+    const crack = hex('#1e140d');
+    // Bands of plates, each band with its own column splits, so the cracks stagger instead of forming a grid.
+    // Band heights and widths always add up to 16, so the tile repeats up and across the trunk.
+    const heights = [[5, 6, 5], [4, 7, 5], [6, 4, 6], [8, 8], [5, 5, 6], [3, 7, 6]];
+    const widths = [[4, 4, 4, 4], [3, 5, 3, 5], [5, 3, 5, 3], [4, 5, 3, 4], [6, 4, 6], [3, 4, 5, 4]];
+    let y0 = rng.int(N);
+    for (const h of rng.pick(heights)) {
+      let x0 = rng.int(N);
+      for (const w of rng.pick(widths)) {
+        const tone = rng.next();
+        for (let dy = 0; dy < h; dy++) {
+          for (let dx = 0; dx < w; dx++) {
+            const edge = dx === w - 1 && rng.chance(0.85);
+            const foot = dy === h - 1 && rng.chance(0.85);
+            if (edge || foot) {
+              c.set(x0 + dx, y0 + dy, crack);
+              continue;
+            }
+            // Lit from the upper left: the left column and the top row of a plate are brighter.
+            const lit = (dx === 0 ? 0.18 : 0) + (dy === 0 ? 0.12 : 0);
+            c.set(x0 + dx, y0 + dy, ramp(this.bark, Math.min(0.99, tone * 0.75 + lit)));
+          }
+        }
+        x0 += w;
+      }
+      y0 += h;
+    }
+  }
+}

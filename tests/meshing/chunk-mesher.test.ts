@@ -4,7 +4,7 @@ import { packCell } from '../../engine/cell';
 import { WORLD_MIN_Y } from '../../engine/coords';
 import { createTextureLayout } from '../../engine/TextureLayout';
 import { WorldGenerator } from '../../engine/WorldGenerator';
-import { AO_STRENGTH, LEGACY_BOXES, meshChunk, meshTransferables } from '../../meshing/ChunkMesher';
+import { AO_STRENGTH, meshChunk, meshTransferables } from '../../meshing/ChunkMesher';
 import { PaddedChunkReader } from '../../meshing/PaddedChunkReader';
 import { BlockType } from '../../worldConstants';
 import { WHITE, MapReader, bounds, faceCount, quadsOf, registry, totalFaces } from './helpers';
@@ -149,7 +149,7 @@ describe('PaddedChunkReader', () => {
     for (const name of ['opaque', 'cutout', 'water'] as const) {
       expect(Array.from(a[name].positions)).toEqual(Array.from(b[name].positions));
       expect(Array.from(a[name].indices)).toEqual(Array.from(b[name].indices));
-      expect(Array.from(a[name].colors)).toEqual(Array.from(b[name].colors));
+      expect(Array.from(a[name].light)).toEqual(Array.from(b[name].light));
     }
   });
 });
@@ -211,20 +211,22 @@ describe('see-through blocks', () => {
 });
 
 describe('buckets', () => {
-  const cases: Array<[string, number, 'opaque' | 'cutout']> = [
-    ['stone', BlockType.STONE, 'opaque'],
-    ['grass', BlockType.GRASS, 'opaque'],
-    ['glass', BlockType.GLASS, 'cutout'],
-    ['leaves', BlockType.LEAVES, 'cutout'],
-    ['flower', BlockType.FLOWER_RED, 'cutout'],
-    ['fence', BlockType.WOOD_FENCE, 'cutout'],
+  // Name, block, bucket and how many faces a lone block draws (a flower is two planes, each seen from both sides).
+  const cases: Array<[string, number, 'opaque' | 'cutout', number]> = [
+    ['stone', BlockType.STONE, 'opaque', 6],
+    ['grass', BlockType.GRASS, 'opaque', 6],
+    ['glass', BlockType.GLASS, 'cutout', 6],
+    ['leaves', BlockType.LEAVES, 'cutout', 6],
+    ['flower', BlockType.FLOWER_RED, 'cutout', 4],
+    ['fence', BlockType.WOOD_FENCE, 'cutout', 6],
+    ['farmland', BlockType.FARMLAND, 'opaque', 6],
   ];
-  for (const [name, id, bucket] of cases) {
+  for (const [name, id, bucket, faces] of cases) {
     it(`sends ${name} to ${bucket} only`, () => {
       const m = mesh(new MapReader([[3, 3, 3, id]]));
       const counts = { opaque: faceCount(m.opaque), cutout: faceCount(m.cutout), water: faceCount(m.water) };
-      expect(counts[bucket]).toBe(6);
-      expect(totalFaces(m)).toBe(6);
+      expect(counts[bucket]).toBe(faces);
+      expect(totalFaces(m)).toBe(faces);
     });
   }
 
@@ -243,18 +245,25 @@ describe('buckets', () => {
   });
 });
 
-describe('ambient occlusion off by default', () => {
-  it('ships with AO off so the colours stay flat', () => {
-    expect(AO_STRENGTH).toBe(0);
+describe('ambient occlusion default and switch', () => {
+  const aoOf = (b: { light: Float32Array }) => Array.from({ length: b.light.length / 4 }, (_, v) => b.light[v * 4 + 2]);
+
+  it('ships with AO on, now that the shader multiplies it into baked light', () => {
+    expect(AO_STRENGTH).toBe(1);
   });
 
-  it('leaves every vertex at the registry colour even in a deep corner', () => {
+  it('darkens a deep corner by default', () => {
     const m = mesh(new MapReader([[0, 0, 0, WHITE], [1, 1, 0, WHITE], [0, 1, 1, WHITE], [1, 1, 1, WHITE]]));
-    for (const c of m.opaque.colors) expect(c).toBeCloseTo(1);
+    expect(Math.min(...aoOf(m.opaque))).toBeCloseTo(0.55);
   });
 
-  it('keeps the default quad split on every face', () => {
-    const m = mesh(new MapReader([[0, 0, 0, WHITE], [1, 1, 1, WHITE]]));
+  it('leaves every vertex unoccluded at strength 0, even in a deep corner', () => {
+    const m = meshChunk(new MapReader([[0, 0, 0, WHITE], [1, 1, 0, WHITE], [0, 1, 1, WHITE], [1, 1, 1, WHITE]]), 0, 0, registry, { aoStrength: 0 });
+    for (const ao of aoOf(m.opaque)) expect(ao).toBe(1);
+  });
+
+  it('keeps the default quad split on every face at strength 0', () => {
+    const m = meshChunk(new MapReader([[0, 0, 0, WHITE], [1, 1, 1, WHITE]]), 0, 0, registry, { aoStrength: 0 });
     for (const q of quadsOf(m.opaque)) {
       const tri = [q.indices.slice(0, 3), q.indices.slice(3, 6)];
       expect(tri[0].filter((i) => tri[1].includes(i)).sort()).toEqual([0, 2]);
@@ -272,11 +281,11 @@ describe('ambient occlusion (strength 1)', () => {
   };
   const at = (quad: ReturnType<typeof topOf>, x: number, z: number) =>
     quad.corners.findIndex((c) => c.pos[0] === x && c.pos[2] === z);
-  const shade = (quad: ReturnType<typeof topOf>, x: number, z: number) => quad.corners[at(quad, x, z)].rgb[0];
+  const shade = (quad: ReturnType<typeof topOf>, x: number, z: number) => quad.corners[at(quad, x, z)].ao;
 
   it('leaves an open face fully lit', () => {
     const quad = topOf(new MapReader([[0, 0, 0, WHITE]]));
-    for (const c of quad.corners) expect(c.rgb).toEqual([1, 1, 1]);
+    for (const c of quad.corners) expect(c.ao).toBe(1);
   });
 
   it('darkens the corners beside a wall in an L-shaped layout', () => {
@@ -311,7 +320,7 @@ describe('ambient occlusion (strength 1)', () => {
 
   it('does not count see-through blocks as occluders', () => {
     const quad = topOf(new MapReader([[0, 0, 0, WHITE], [1, 1, 0, BlockType.GLASS], [1, 1, 1, BlockType.LEAVES]]));
-    for (const c of quad.corners) expect(c.rgb).toEqual([1, 1, 1]);
+    for (const c of quad.corners) expect(c.ao).toBe(1);
   });
 
   // The shared diagonal of a quad is the pair of vertex indices that appear in both triangles.
@@ -325,7 +334,7 @@ describe('ambient occlusion (strength 1)', () => {
     for (const [bx, bz] of [[1, 1], [-1, -1], [1, -1], [-1, 1]]) {
       const quad = topOf(new MapReader([[0, 0, 0, WHITE], [bx, 1, bz, WHITE]]));
       const shaded = at(quad, bx === 1 ? 1 : 0, bz === 1 ? 1 : 0);
-      expect(quad.corners[shaded].rgb[0]).toBeCloseTo(0.85);
+      expect(quad.corners[shaded].ao).toBeCloseTo(0.85);
       expect(diagonalOf(quad)).not.toContain(shaded);
     }
   });
@@ -339,12 +348,12 @@ describe('ambient occlusion (strength 1)', () => {
     const half = quadsOf(meshChunk(new MapReader([[0, 0, 0, WHITE], [1, 1, 0, WHITE], [0, 1, 1, WHITE]]), 0, 0, registry, { aoStrength: 0.5 }).opaque)
       .find((q) => q.normal[1] === 1 && q.corners.every((c) => c.pos[1] === 1 && c.pos[0] <= 1 && c.pos[2] <= 1))!;
     const corner = half.corners.find((c) => c.pos[0] === 1 && c.pos[2] === 1)!;
-    expect(corner.rgb[0]).toBeCloseTo(0.775); // halfway between 1 and 0.55
+    expect(corner.ao).toBeCloseTo(0.775); // halfway between 1 and 0.55
   });
 
-  it('does not bake face shading into the colours', () => {
+  it('does not bake face shading into the occlusion', () => {
     const m = meshChunk(new MapReader([[0, 0, 0, WHITE]]), 0, 0, registry, { aoStrength: 1 });
-    for (const c of m.opaque.colors) expect(c).toBeCloseTo(1);
+    for (const q of quadsOf(m.opaque)) for (const c of q.corners) expect(c.ao).toBeCloseTo(1);
   });
 });
 
@@ -372,11 +381,11 @@ describe('index validity', () => {
       const b = m[name];
       const vertices = b.positions.length / 3;
       expect(b.normals.length).toBe(b.positions.length);
-      expect(b.colors.length).toBe(b.positions.length);
+      expect(b.light.length).toBe(b.positions.length / 3 * 4);
       expect(b.indices.length % 6).toBe(0);
       expect(b.indices.every((i) => i < vertices)).toBe(true);
       expect(b.positions.every(Number.isFinite)).toBe(true);
-      expect(b.colors.every((c) => c >= 0 && c <= 1)).toBe(true);
+      expect(b.light.every((c) => c >= 0 && c <= 1)).toBe(true);
       let inside = true;
       for (let i = 0; i < b.positions.length; i += 3) {
         inside &&= b.positions[i] >= 0 && b.positions[i] <= 32 && b.positions[i + 2] >= 0 && b.positions[i + 2] <= 32;
