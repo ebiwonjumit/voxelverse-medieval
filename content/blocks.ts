@@ -164,6 +164,9 @@ const TINT = new Map<BlockType, BlockTint>([
   [BlockType.LEAVES, 'foliage'],
 ]);
 
+// Leaves are see-through but shade what is under them: sky light does not fall through a canopy for free.
+const LEAF_BLOCKS = new Set<BlockType>([BlockType.LEAVES, BlockType.BIRCH_LEAVES, BlockType.PINE_LEAVES]);
+
 const EMITS = new Map<BlockType, number>([
   [BlockType.LANTERN, 15],
   [BlockType.MAGIC_CRYSTAL, 10],
@@ -180,6 +183,7 @@ export const createDefaultRegistry = (): BlockRegistry => {
       solid: !NOT_SOLID.has(type),
       opaque: !NOT_OPAQUE.has(type),
       emits: EMITS.get(type) ?? 0,
+      lightDim: LEAF_BLOCKS.has(type) ? 1 : undefined,
       faces: type === BlockType.AIR ? undefined : FACES[type as Colored],
       tint: TINT.get(type),
       model: MODELS.get(type),

@@ -9,6 +9,7 @@
 | `PaddedChunkReader.ts` | A `Chunk` plus a generator's `sampleBlock` for the one-block ring around it. |
 | `biomeTint.ts` | The zone colour blend for grass and leaves, ported from the old `World.tsx`. |
 | `color.ts` | `#rrggbb` to linear rgb. |
+| `LightEngine.ts` | `computeChunkLight(reader, cx, cz, registry)`: baked sky and block light for a chunk and a one block ring, from the 3x3 chunks around it. Not used by the mesher yet. See [light.md](light.md). |
 | `runMeshJob.ts` | One job: generate a chunk with a given detail level, mesh it. |
 | `MeshWorkerPool.ts` | The worker pool: priority queue, cancel, stale results. See [renderer.md](renderer.md). |
 | `mesh.worker.ts` | Worker entry point. The one file here that imports `content/` and `worldgen/`, to build its own registry and generator. |

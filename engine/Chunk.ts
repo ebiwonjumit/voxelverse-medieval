@@ -57,15 +57,17 @@ export class Chunk {
   copyCells(out: Uint16Array, minY: number, maxY: number, offset: number, rowStride: number, zStride: number): void {
     const lo = Math.max(minY, WORLD_MIN_Y);
     const hi = Math.min(maxY, WORLD_MAX_Y);
+    // A local copy: this loop runs millions of times and an imported binding is a slow property read under vite-node.
+    const size = CHUNK_SIZE;
     for (let y = lo; y <= hi; y++) {
       const section = this.sections[sectionIndex(y)];
       if (!section) continue;
       const rowOut = offset + (y - minY) * rowStride;
-      let src = localY(y) * CHUNK_SIZE * CHUNK_SIZE;
-      for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+      let src = localY(y) * size * size;
+      for (let lz = 0; lz < size; lz++) {
         const dst = rowOut + lz * zStride;
-        for (let lx = 0; lx < CHUNK_SIZE; lx++) out[dst + lx] = section[src + lx];
-        src += CHUNK_SIZE;
+        for (let lx = 0; lx < size; lx++) out[dst + lx] = section[src + lx];
+        src += size;
       }
     }
   }

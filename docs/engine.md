@@ -8,7 +8,7 @@ Phase 1 of the rebuild plan added a block and chunk layer under the game. The pl
 | --- | --- |
 | `engine/` | Voxel core: `coords`, `cell`, `BlockRegistry`, `Chunk`, `ChunkStore`, `VoxelWorld`, the `WorldGenerator` interface and box `collision` ([collision.md](collision.md)). No Three.js, no React. `engine/models/` holds the block models, see [models.md](models.md). |
 | `content/` | Block definitions. `blocks.ts` registers the legacy blocks, `blocksShaped.ts` the stairs, slabs and pane (ids 80 to 92). `content/textures/` holds the generated pixel-art tiles, see [textures.md](textures.md). |
-| `meshing/` | Pure chunk mesher and the mesh worker pool, worker-safe. See [meshing.md](meshing.md). |
+| `meshing/` | Pure chunk mesher, the light engine and the mesh worker pool, worker-safe. See [meshing.md](meshing.md) and [light.md](light.md). |
 | `render/` | The Three.js chunk renderer. See [renderer.md](renderer.md). |
 | `worldgen/` | Things that implement `WorldGenerator`. `LegacyZoneAdapter` wraps the old zones. |
 | `worldConstants.ts` | Numbers and enums (`BlockType`, `LodLevel`) with no Three.js import, so generation can run in a worker. `constants.ts` re-exports them and adds the Three.js vectors. |
@@ -40,7 +40,11 @@ A model ignores state bits it does not use, so a stray bit never changes anythin
 
 ## Blocks
 
-`BlockRegistry` holds a `BlockDef` per block: id, name, flat colour, `solid`, `opaque`, `emits`, and optionally `faces`, `tint`, `model` and `holdsWater`. The legacy blocks keep their old `BlockType` numbers as ids, so the old zones work without changes. Registration rejects duplicate ids and names, any colour that is not `#rrggbb`, a `faces` object with a missing name and a `tint` other than `grass` or `foliage`.
+`BlockRegistry` holds a `BlockDef` per block: id, name, flat colour, `solid`, `opaque`, `emits`, and optionally `lightDim`, `faces`, `tint`, `model` and `holdsWater`. The legacy blocks keep their old `BlockType` numbers as ids, so the old zones work without changes. Registration rejects duplicate ids and names, any colour that is not `#rrggbb`, a `faces` object with a missing name and a `tint` other than `grass` or `foliage`.
+
+### Light
+
+`emits` (0 to 15) is the block light a block gives off and `opaque` decides whether it stops light. `lightDim` (0 to 15, default 0) is how much a see-through block soaks up: leaves use 1, so they shade what is under them. `registry.emission(id)` and `registry.lightDim(id)` are the table lookups the light engine uses. The rules and the engine are in [light.md](light.md).
 
 ### Textures on blocks
 

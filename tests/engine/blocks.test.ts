@@ -57,6 +57,12 @@ describe('default block registry', () => {
     expect(registry.get(BlockType.STONE).emits).toBe(0);
   });
 
+  it('dims light under the three kinds of leaves and nothing else', () => {
+    const dimmed = legacyTypes.filter((t) => registry.lightDim(t) > 0).sort((a, b) => a - b);
+    expect(dimmed).toEqual([BlockType.LEAVES, BlockType.BIRCH_LEAVES, BlockType.PINE_LEAVES].sort((a, b) => a - b));
+    for (const t of dimmed) expect(registry.lightDim(t)).toBe(1);
+  });
+
   it('gives every block a valid flat colour', () => {
     for (const def of registry.all()) expect(def.color).toMatch(/^#[0-9a-f]{6}$/i);
   });
