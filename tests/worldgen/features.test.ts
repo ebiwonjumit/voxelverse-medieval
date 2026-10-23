@@ -18,6 +18,7 @@ import { BirchTree, CedarTree, OakTree, PineTree, SakuraTree } from '../../world
 import { Feature } from '../../worldgen/features/Feature';
 import { Rng } from '../../worldgen/noise';
 import { createVoxelverseGenerator } from '../../worldgen/VoxelverseGenerator';
+import { timeoutMs, tolerant } from '../perf';
 
 const registry = createDefaultRegistry();
 const gen = createVoxelverseGenerator(registry);
@@ -168,7 +169,7 @@ describe('where features may grow', () => {
     expect(treeBlocks).toBeGreaterThan(2000);
     expect(waterColumns).toBeGreaterThan(500);
     expect(inWater).toBe(0);
-  }, 30000);
+  }, timeoutMs(30000));
 
   it('keeps wilderness features out of every legacy zone footprint', () => {
     // Chunks along each zone's edge. Features stay a radius and a little more away from the footprint, so nothing the
@@ -231,7 +232,7 @@ describe('where features may grow', () => {
     console.info(`blocks above the ground inside the road circle: ${withRoad} with the road, ${without} without`);
     expect(without).toBeGreaterThan(1500);
     expect(withRoad).toBe(0);
-  }, 30000);
+  }, timeoutMs(30000));
 });
 
 describe('determinism', () => {
@@ -282,7 +283,7 @@ describe('what grows where', () => {
       NatureBlock.SAKURA_PETALS, BlockType.TALL_GRASS, BlockType.SMALL_ROCK, BlockType.SAND, BlockType.SNOW,
     ].filter((id) => !present.has(id));
     expect(missing.map((id) => registry.get(id).name)).toEqual([]);
-  }, 30000);
+  }, timeoutMs(30000));
 });
 
 describe('features', () => {
@@ -414,6 +415,6 @@ describe('speed', () => {
     for (const [cx, cz] of spots) g.generateChunk(new Chunk(cx, cz));
     const ms = (performance.now() - t0) / spots.length;
     console.info(`wilderness chunk with biomes and features: ${ms.toFixed(1)} ms average over ${spots.length} chunks`);
-    expect(ms).toBeLessThan(40);
+    expect(ms).toBeLessThan(tolerant(40));
   });
 });

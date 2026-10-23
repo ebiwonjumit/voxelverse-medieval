@@ -13,6 +13,7 @@ import { newRoadHit } from '../../worldgen/roads/RoadField';
 import { GATES } from '../../worldgen/roads/layout';
 import { insideCore, zoneInfoByName } from '../../worldgen/zones/ZoneInfo';
 import { chunkHash } from './chunkHash';
+import { timeoutMs, tolerant } from '../perf';
 
 const mulberry32 = (seed: number) => () => {
   seed = (seed + 0x6d2b79f5) | 0;
@@ -137,7 +138,7 @@ describe('the road network', () => {
     for (let i = 0; i < 200000; i++) net.query((i * 37) % 4000 - 1500, (i * 91) % 3000 - 1500, hit);
     const per = ((performance.now() - t0) * 1000) / 200000;
     console.info(`query: ${per.toFixed(2)} microseconds`);
-    expect(per).toBeLessThan(20);
+    expect(per).toBeLessThan(tolerant(20));
   });
 
   it('is the same every time it is built from the same seed, and different for another seed', () => {
@@ -222,7 +223,7 @@ describe('the ground beside the roads', () => {
       }
       console.info(`${e.name}: ${columns} corridor columns, ${e.bridge.reduce((a, b) => a + b, 0)} bridge vertices, steepest step ${worst}`);
       expect(bad).toEqual([]);
-    }, 60000);
+    }, timeoutMs(60000));
   }
 });
 
@@ -235,7 +236,7 @@ describe('walking the roads', () => {
       const r = walkRoad(name);
       console.info(`${name}: ${r.steps} steps, ${r.bridgeSteps} on bridges, largest step ${r.worstStep}`);
       expect(r.worstStep).toBeLessThanOrEqual(1);
-    }, 30000);
+    }, timeoutMs(30000));
   }
 });
 
@@ -518,7 +519,7 @@ describe('determinism and agreement', () => {
     console.info(`${onRoad} road columns, ${onBridge} of them on bridges; ${nearPost} on posts`);
     expect(onRoad).toBeGreaterThan(300);
     expect(onBridge).toBeGreaterThan(100);
-  }, 60000);
+  }, timeoutMs(60000));
 
   it('agrees column by column, bottom to top, in the chunks of a bridge and of a gate', () => {
     const picks: Pt[] = [];
@@ -547,6 +548,6 @@ describe('speed', () => {
     for (const [cx, cz] of chunks) gen.generateChunk(new Chunk(cx, cz));
     const ms = (performance.now() - t0) / chunks.length;
     console.info(`chunks with a road: ${ms.toFixed(1)} ms average over ${chunks.length}`);
-    expect(ms).toBeLessThan(40);
+    expect(ms).toBeLessThan(tolerant(40));
   });
 });

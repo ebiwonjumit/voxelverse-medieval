@@ -4,6 +4,7 @@ import { Chunk } from '../../engine/Chunk';
 import { meshChunk, meshTriangleCount } from '../../meshing/ChunkMesher';
 import { PaddedChunkReader } from '../../meshing/PaddedChunkReader';
 import { LegacyZoneAdapter } from '../../worldgen/LegacyZoneAdapter';
+import { tolerant } from '../perf';
 
 const registry = createDefaultRegistry();
 const generator = new LegacyZoneAdapter(registry);
@@ -39,7 +40,7 @@ describe('chunk mesher timing (LegacyZoneAdapter chunks, node)', () => {
       console.log(`[mesher] ${name} chunk (${cx}, ${cz}): median ${med.toFixed(1)} ms, `
         + `min ${Math.min(...times).toFixed(1)} ms, max ${Math.max(...times).toFixed(1)} ms, `
         + `${meshTriangleCount(mesh)} triangles`);
-      expect(med).toBeLessThan(TARGET_MS);
+      expect(med).toBeLessThan(tolerant(TARGET_MS));
     });
   }
 });

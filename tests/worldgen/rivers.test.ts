@@ -11,6 +11,7 @@ import { ZONE_INFOS } from '../../worldgen/zones/ZoneInfo';
 import { clearanceFromZones } from '../../worldgen/zones/ZoneClearance';
 import { createVoxelverseGenerator } from '../../worldgen/VoxelverseGenerator';
 import { WORLD_SEED } from '../../worldConstants';
+import { timeoutMs } from '../perf';
 
 const gen = createVoxelverseGenerator(createDefaultRegistry());
 
@@ -56,7 +57,7 @@ describe('rivers', () => {
     expect(soft / bank).toBeGreaterThan(0.95);
     // A wide stride keeps the scan fast (the bank columns still number in the tens of thousands); the timeout is for a
     // busy machine, not for this scan.
-  }, 30000);
+  }, timeoutMs(30000));
 
   it('grow reed beds along their banks', () => {
     // Look at chunks around known river columns for reeds.
@@ -75,7 +76,7 @@ describe('rivers', () => {
     }
     console.info(`${reeds} reed blocks in ${seen.size} river chunks`);
     expect(reeds).toBeGreaterThan(50);
-  }, 30000);
+  }, timeoutMs(30000));
 
   it('fade out near the legacy zones, so the zone borders stay as continuous as before', () => {
     // A river's weight can never be more than the fade, which is a smoothstep of the distance to the nearest zone
@@ -126,7 +127,7 @@ describe('rivers', () => {
     console.info(`channel half width (99th percentile): west ${west.toFixed(1)}, middle ${middle.toFixed(1)}, east ${east.toFixed(1)}`);
     expect(west).toBeGreaterThan(2 * middle);
     expect(west).toBeGreaterThan(2 * east);
-  }, 30000);
+  }, timeoutMs(30000));
 
   it('stay out of the mountains, where the ground is high', () => {
     let river = 0;
@@ -166,5 +167,5 @@ describe('ponds', () => {
     expect(mud / water).toBeGreaterThan(0.9);
     // The pond weight can reach a little past the biome edge, but not far.
     expect(outsideWetland / pondColumns).toBeLessThan(0.15);
-  }, 30000);
+  }, timeoutMs(30000));
 });

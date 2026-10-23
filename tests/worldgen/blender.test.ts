@@ -7,6 +7,7 @@ import { LegacyZoneAdapter } from '../../worldgen/LegacyZoneAdapter';
 import { createVoxelverseGenerator } from '../../worldgen/VoxelverseGenerator';
 import { ZONE_INFOS, ZoneInfo, insetFromEdge } from '../../worldgen/zones/ZoneInfo';
 import { getTerrainHeight } from '../../utils/terrain';
+import { timeoutMs, tolerant } from '../perf';
 
 const mulberry32 = (seed: number) => () => {
   seed = (seed + 0x6d2b79f5) | 0;
@@ -224,7 +225,7 @@ describe('sampleBlock and generateChunk agree', () => {
       const lz = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
       expect(cellId(chunk.getCell(lx, yy, lz)), `at ${x},${yy},${z}`).toBe(gen.sampleBlock(x, yy, z));
     }
-  }, 60000);
+  }, timeoutMs(60000));
 
   it('every column of a chunk matches, from the bottom of the world to the top', () => {
     for (const [cx, cz] of [[10, 10], [-47, 47], [0, -20], [48, -50]] as Pt[]) {
@@ -299,7 +300,7 @@ describe('speed', () => {
     for (let i = 0; i < n; i++) gen.generateChunk(new Chunk(20 + (i % 6), 20 + Math.floor(i / 6)));
     const ms = (performance.now() - t0) / n;
     console.info(`wilderness chunk: ${ms.toFixed(1)} ms`);
-    expect(ms).toBeLessThan(40);
+    expect(ms).toBeLessThan(tolerant(40));
   });
 });
 
