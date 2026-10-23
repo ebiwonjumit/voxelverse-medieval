@@ -85,6 +85,21 @@ export const boundingSphereOf = (positions: Float32Array, pad = 0): Sphere => {
   return new Sphere(center, radius);
 };
 
+// The geometry for one bucket of a mesh. The block sandbox builds its meshes with this too.
+export const bucketGeometry = (data: BucketData, pad = 0): BufferGeometry => {
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new BufferAttribute(data.positions, 3));
+  geometry.setAttribute('normal', new BufferAttribute(data.normals, 3));
+  geometry.setAttribute('color', new BufferAttribute(data.colors, 3));
+  geometry.setAttribute('tint', new BufferAttribute(data.tints, 3));
+  geometry.setAttribute('uv', new BufferAttribute(data.uvs, 2));
+  geometry.setAttribute('texLayer', new BufferAttribute(data.layers, 2));
+  geometry.setIndex(new BufferAttribute(data.indices, 1));
+  // Set by hand: the default would scan the positions again the first time the mesh is culled.
+  geometry.boundingSphere = boundingSphereOf(data.positions, pad);
+  return geometry;
+};
+
 // Draws the world as one mesh per bucket per chunk, built in workers. It keeps the chunks inside the
 // render distance, asks for the nearest first, drops the ones that fall behind and frees their GPU memory.
 export class ChunkRenderer {
@@ -310,18 +325,8 @@ export class ChunkRenderer {
   }
 
   private buildGeometry(data: BucketData, pad: number): BufferGeometry {
-    const geometry = new BufferGeometry();
-    geometry.setAttribute('position', new BufferAttribute(data.positions, 3));
-    geometry.setAttribute('normal', new BufferAttribute(data.normals, 3));
-    geometry.setAttribute('color', new BufferAttribute(data.colors, 3));
-    geometry.setAttribute('tint', new BufferAttribute(data.tints, 3));
-    geometry.setAttribute('uv', new BufferAttribute(data.uvs, 2));
-    geometry.setAttribute('texLayer', new BufferAttribute(data.layers, 2));
-    geometry.setIndex(new BufferAttribute(data.indices, 1));
-    // Set by hand: the default would scan the positions again the first time the mesh is culled.
-    geometry.boundingSphere = boundingSphereOf(data.positions, pad);
     this.geometryCount++;
-    return geometry;
+    return bucketGeometry(data, pad);
   }
 
   private disposeGeometry(geometry: BufferGeometry): void {

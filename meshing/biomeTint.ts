@@ -5,21 +5,22 @@ import { hexToLinear } from './color';
 // This is the blend World.tsx used to do per instance, ported so it can run in a worker.
 // Output is linear rgb, like every other mesher colour.
 
-const CENTERS: ReadonlyArray<{ x: number; z: number; rgb: [number, number, number] }> = (() => {
-  const make = (x: number, z: number, hex: string) => {
-    const rgb: [number, number, number] = [0, 0, 0];
-    hexToLinear(hex, rgb);
-    return { x, z, rgb };
-  };
-  return [
-    make(0, 0, COLORS.GRASS_SAO),
-    make(3 * MILE, 0, COLORS.GRASS_TEMPEST),
-    make(-3 * MILE, 0, COLORS.GRASS_AMESTRIS),
-    make(0, -3 * MILE, COLORS.GRASS_BOSSE),
-    make(1600, -1600, COLORS.GRASS_FREMMEVILLA),
-    make(-1600, 1600, COLORS.GRASS_MAGNOLIA),
-  ];
-})();
+// Where each zone's grass colour is strongest. Exported for the block sandbox, which meshes a block right at
+// every centre to show the pure zone colour.
+export const BIOME_ZONES: ReadonlyArray<{ name: string; x: number; z: number; hex: string }> = [
+  { name: 'Town of Beginnings', x: 0, z: 0, hex: COLORS.GRASS_SAO },
+  { name: 'Tempest', x: 3 * MILE, z: 0, hex: COLORS.GRASS_TEMPEST },
+  { name: 'Amestris', x: -3 * MILE, z: 0, hex: COLORS.GRASS_AMESTRIS },
+  { name: 'Bosse', x: 0, z: -3 * MILE, hex: COLORS.GRASS_BOSSE },
+  { name: 'Fremmevilla', x: 1600, z: -1600, hex: COLORS.GRASS_FREMMEVILLA },
+  { name: 'Magnolia', x: -1600, z: 1600, hex: COLORS.GRASS_MAGNOLIA },
+];
+
+const CENTERS: ReadonlyArray<{ x: number; z: number; rgb: [number, number, number] }> = BIOME_ZONES.map((zone) => {
+  const rgb: [number, number, number] = [0, 0, 0];
+  hexToLinear(zone.hex, rgb);
+  return { x: zone.x, z: zone.z, rgb };
+});
 
 const EPS = 1;
 
