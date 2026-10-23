@@ -82,38 +82,50 @@ Open `/?bench` in a browser to run the same flythrough by hand. Baseline numbers
 
 The world is meshed in web workers, so `npm run dev` and `vite build` both bundle `meshing/mesh.worker.ts`; nothing extra to run. The `--smoke` run also checks that the page reports no errors.
 
-## 🗺️ Development Roadmap
+## 🗺️ Plan and progress
 
-### Stage 1: Environmental Distinctiveness (Completed)
-**Goal:** The player should know where they are just by looking at the sky, lighting, and terrain colors.
+VoxelVerse is partway through a rebuild. The goal is to make **Tempest and the wilderness around it** as detailed as the engine allows (textured blocks, shaped blocks, baked light, a living world), and then use that zone as the template for the other six. The rebuild runs in ten phases. Each phase ends with typecheck, tests, build and a benchmark or screenshots, and is checked by an independent review before it counts as done. Details for each piece are in `docs/`.
 
-- [x] **Zone System Architecture:** Modular file structure & optimizations.
-- [x] **Dynamic Atmosphere:** Zone-specific fog and sky tint blending.
-- [x] **Biome Blending:** Smooth transitions for ground blocks and foliage colors.
-- [x] **Visual Fidelity:** Shaders for textures, AO, and material variations.
+| Phase | What | Status |
+| --- | --- | --- |
+| P0 | Baseline and safety net: scripts, tests, a scripted flythrough benchmark, the starting numbers ([perf-baseline](docs/perf-baseline.md)) | Merged |
+| P1 | Voxel core: block registry, chunks, `VoxelWorld`, an adapter for the old zones ([engine](docs/engine.md)) | Merged |
+| P2 | Worker chunk renderer: face-culled meshes built in web workers, render distance 3 to 8 ([renderer](docs/renderer.md), [meshing](docs/meshing.md), [results](docs/perf-after-p2.md)) | Merged (PR #2) |
+| P3 | Generated textures: 16x16 tiles in a mipmapped texture array, block sandbox ([textures](docs/textures.md)) | Merged (PR #2) |
+| P4 | Shaped blocks and box collision: stairs, slabs, fences, panes, plants, stepping ([models](docs/models.md), [collision](docs/collision.md)) | Verified, in the next PR |
+| P5 | Baked sky and block light, ambient occlusion, a 20 minute day and night cycle ([light](docs/light.md), [sky](docs/sky.md)) | Verified, in the next PR |
+| P6 | Terrain, biomes, rivers and roads: seeded noise, zone blending, six roads with bridges ([worldgen](docs/worldgen.md)) | Merged (PR #1), connected to the game in the next PR |
+| P7 | Tempest city: style pack, district planner, building kits, landmarks, interiors | Not started |
+| P8 | Living world: swaying foliage, animated water, fireflies, petals, smoke | Not started |
+| P9 | Zone template: a guide for building a zone from a style pack and kits, Greensom ported as the test | Not started |
 
-### Stage 2: Zone Detailing & Visual Polish (Current Focus)
-**Goal:** Approach each zone sequentially to define its identity with specific props and details.
+### Where things stand
 
-- [x] **Greensom Village:** Crops, fences, well details.
-- [ ] **Town of Beginnings:** Market stalls, fountains, tower interior.
-- [ ] **Federation of Tempest:** Japanese roofing, stone pavements, lanterns.
-- [ ] **Amestris District:** Smokestacks, pipes, storage tanks.
-- [ ] **Bosse / Fremmevilla / Magnolia:** Unique architectural props.
+- **Merged to `main`:** P0 to P3 and P6 (PR #1 and PR #2). The game on `main` still runs the old terrain, because the new generator was merged but not yet connected.
+- **In the next PR:** P4 and P5, textures for the 23 nature blocks, the new generator running the game (biomes, rivers, roads, smooth zone edges), and this README.
+- **Speed:** on the benchmark flythrough (production build, Apple M4, headless Chrome, 8 chunks of render distance) the game holds 60 fps with no frame over 50 ms. Before the rebuild, jumping ran at 9.7 fps with 189 ms frames ([results](docs/perf-after-integration.md)). Headless Chrome caps at 60 fps, so this shows the frame budget is met, not how much headroom is left.
+- **Tests:** about 1,270 unit tests cover the voxel core, mesher, worker pool, textures, models, collision, light, sky, terrain, biomes and roads, and compare the new world with the old one.
 
-### Stage 3: The "Living" World (NPCs)
-**Goal:** Populate the world with inhabitants.
+### What comes next
 
-- [ ] **NPC Primitives:** Blocky character models.
-- [ ] **State Machines:** AI behaviors (Idle, Wander, LookAtPlayer).
-- [ ] **Themed Spawning:** Knights, Slimes, Alchemists unique to their zones.
+1. **Tempest city (P7):** a Tempest style pack (dark timber, white plaster, curved tile roofs, paper and stone lanterns, bamboo and sakura), a district planner that replaces the uniform street grid, building kits (townhouse, shop, inn, shrine and gate, watchtower, bridge, stall), hand-built landmarks (Town Hall, Coliseum, plaza fountain, city gate) and house interiors.
+2. **Living world (P8):** foliage sway, animated water, pooled particles and lantern flicker.
+3. **Zone template (P9):** `docs/zone-authoring.md`, with Greensom as the first zone built from it. The Town of Beginnings, Amestris, Bosse, Fremmevilla and Magnolia follow, in that order.
 
-### Stage 4: The Dungeon System
-**Goal:** The core gameplay loop.
+### Known issues
 
-- [ ] **Dimension Swapping:** Seamless transition to Dungeon scenes.
-- [ ] **Procedural Dungeons:** 100-floor generation logic.
-- [ ] **Mob Spawning:** Enemy encounters and combat.
+- The wilderness still has the old violet sky and fog tint, so it looks odd over sunny meadows, and grass far from every zone is a dull grey-green because the biome tint still blends by distance to the zones. Both are atmosphere settings that belong to the wilderness zone rather than to the new generator, and are not fixed yet.
+- Bosse, Fremmevilla and Magnolia are still small placeholders inside, and Amestris is basic. The new terrain blends them into the land, but their interiors wait for the zone template.
+- A few timing-sensitive unit tests can fail when the machine is heavily loaded and pass on a rerun.
+- The Phase 2 rule that the soak's geometry count stays within 10 percent of its 30 second value does not hold literally on the new scenery, because the soak loop passes through varied terrain. The count returns to the same peaks and troughs lap after lap ([explanation](docs/perf-after-integration.md)).
+- JS heap use is higher than before the textures (about 120 to 200 MB while walking), because textured vertices are larger.
+
+### Not planned in this rebuild
+
+NPCs, dungeons, combat, breaking and placing blocks, sound and multiplayer. The engine does not stop any of them, and they remain the long-term goals:
+
+- **NPCs:** blocky characters, behaviour state machines, themed spawning (knights, slimes, alchemists).
+- **Dungeons:** swapping to dungeon scenes, 100-floor generation, mobs and combat.
 
 ---
 

@@ -15,5 +15,7 @@ export default defineConfig({
   },
   test: {
     include: ['tests/**/*.test.ts'],
+    // Several generation tests take a few seconds when the machine is busy, so the 5 s default is too tight.
+    testTimeout: 30000,
   },
 });

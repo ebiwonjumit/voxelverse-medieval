@@ -1,3 +1,5 @@
+> **Superseded.** This is the original four-stage checklist. The current plan and progress are in the "Plan and progress" section of [README.md](README.md), and the detail for each phase is in `docs/`. This file is kept for its Stage 3 and Stage 4 notes.
+
 
 # VoxelVerse Development Roadmap
 
