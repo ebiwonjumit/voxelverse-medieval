@@ -62,6 +62,24 @@ The sky is a function of the height of the sun above the horizon, `e` (the sun d
 - **Zone changes** do not snap: the atmosphere the sky uses approaches the new zone's with an exponential, rate 1.2 per second (about 2 seconds to 90 percent), the same feel as the old fog lerp but independent of frame rate.
 - **`fogDensity`** sets the fog distances (`fogRange`). The fog still has to hide the edge of the loaded world, so it is never thinner than the old fixed range (near at `(RENDER_DISTANCE - 2) * 32`, far at `RENDER_DISTANCE * 32`). A density at or below the reference 0.02 leaves it alone (Greensom, SAO, Tempest, Magnolia, Bosse, Fremmevilla and the wilderness are all at or below it), and a denser one scales both distances down in proportion: Amestris, 0.035, ends at 57 percent of the render distance (146 blocks at render distance 8). The result never goes inside 48 blocks.
 
+## The wilderness atmosphere
+
+Outside the legacy zones the atmosphere is clear blue country (`zones/WildernessZone.ts` returns `WILDERNESS_BASE`: fog `#87ceeb`, the Town's open sky, a barely-there tint `#f4f9ff`, density 0.015). The old deep violet (`#4a3358` fog, `#6b4b7a` tint) is gone, so walking out of the Town into meadow changes nothing, and the sky no longer turns violet towards the horizon over sunny land.
+
+It leans a little toward the biome underfoot (`zones/wildernessAtmosphere.ts`, one `AtmosphereSettings` per biome, still hex strings and a density):
+
+| Biome | Fog | Reads as |
+| --- | --- | --- |
+| meadow | `#87ceeb` | the base |
+| birch and oak wood | `#8dcfdc`, `#8ccfd4` | a hint of green |
+| cedar and pine forest, bamboo | `#86cbcc`, `#88cad0`, `#92d4c8` | greener haze, slightly denser (0.016 to 0.018) |
+| sakura grove | `#9ccfee` | a touch of lilac light |
+| wetland | `#aed6e0` | pale mist, density 0.02 |
+| rocky hills, beach | `#98cbe9`, `#a6d9ef` | crisp |
+| alpine | `#addaf3` | crisp and pale, density 0.012 |
+
+The biome comes from the main thread's generator, the one that feeds the HUD (`SkySystem` takes it as the `biomeAt` option, `Game.tsx` passes `worldGenerator.biomeAt`). `SkySystem.update` asks for it only when the player has moved `BIOME_SAMPLE_DISTANCE` (6) blocks, and only while the player is in the wilderness; inside a zone the zone's own atmosphere holds. A change of biome re-targets the same exponential approach as a change of zone but at 0.5 per second (`biomeBlendRate`, about 5 seconds to 90 percent) instead of 1.2, so a ragged biome border never makes the sky flicker, and entering the wilderness from a zone is as fast as any other zone change. Every density stays at or below the 0.02 reference, so the fog never closes in on the horizon (a test checks it), and the day and night maths is untouched: the biome fog colour is darkened at night and blended into the horizon exactly as a zone's is. Without `biomeAt` (tests, tools) the wilderness is the plain base. The largest gap from the meadow's horizon at noon is about 0.15 of the colour range (alpine); the old violet was about 0.4 away from the clear blue.
+
 ## The dome
 
 A sphere of radius 450 that follows the camera, drawn first with no depth test or depth write (the terrain draws over it) and without fog or tone mapping. One shader, no textures: a gradient from horizon to zenith, a warm halo round the sun near the horizon (and a faint white one by day), a sun disc and a moon disc (the moon is faint by day), and stars. Stars are a hash of the view direction in a fine grid, one dot per lucky cell, faded in as the sun drops below e = 0 and hidden near the horizon. It costs one draw call and one fill of the screen. Both discs fade out below the horizon.
@@ -89,4 +107,5 @@ Also `sky-spawn-twilight` (the old look), `sky-tower-entrance-noon` and `-night`
 - **A room is dark by day and a lantern lights it.** The tower interior at noon is dark except under the opening in the middle of the roof, where the ceiling and floor take sky light, and around the lanterns on the pillars, which are as bright as at midnight. The entrance shot at noon puts a day-lit arch next to the dark hall.
 - **Corners show occlusion.** The wall and floor joins and the steps of the spiral stair darken in the interior shots.
 - **No light seams on chunk borders.** The tower interior spans a chunk border (the tower is centred on the corner of four chunks) and shows none; `tests/meshing/light-seams.test.ts` checks every border vertex of real chunk pairs numerically.
+- **The wilderness is blue.** The before and after shots in [screens/polish/](screens/polish/) (`before-*` and `after-*`, noon, same viewpoints) show the violet horizon of the old wilderness atmosphere turned into the clear blue of the zones; `after-highway-400-dusk` and `-night` show the dusk glow and the stars unchanged by it.
 - **Time of day changes only colour and light:** the interior at dawn, noon and dusk is the same image except where sky light reaches.
