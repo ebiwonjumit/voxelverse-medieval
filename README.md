@@ -1,11 +1,11 @@
 
 # VoxelVerse: Anime Worlds
 
-**VoxelVerse** is an ambitious open-world procedural voxel exploration engine built with React Three Fiber. It features an infinite world inspired by iconic fantasy anime settings, where every zone offers a distinct atmosphere, architectural style, and biome.
+**VoxelVerse** is an open-world voxel exploration game built with React Three Fiber. It features a large seeded world inspired by iconic fantasy anime settings: seven hand-built zones with their own atmosphere and architecture, joined by roads and bridges through eleven biomes of forest, meadow, wetland, coast and mountain, all under a day and night cycle.
 
 ## 🌍 The World
 
-The world is generated procedurally using noise functions and a custom "Zone System" that blends different thematic areas seamlessly.
+The land between the zones is generated from a seed (`WORLD_SEED`): the same world every time, built chunk by chunk in web workers and answered block by block on the main thread, with both agreeing exactly (see docs/worldgen.md). The zones keep their hand-built interiors and blend into the wilderness at their edges.
 
 ### Current Zones
 1.  **Greensom Village (Spawn)**: A humble starting area with a central well, detailed cottages, farming plots, and a meandering stream.
@@ -33,19 +33,23 @@ The world is generated procedurally using noise functions and a custom "Zone Sys
 
 ## ✨ Key Features
 
-*   **Infinite Procedural Terrain**: Rolling hills, mountains, and rivers generated on the fly.
-*   **Modular Architecture**:
+*   **Seeded World** (docs/worldgen.md):
+    *   **Biomes**: Meadow, birch and oak woods, cedar forest, pine forest, bamboo and sakura groves, wetland, rocky hills, alpine snow and beaches, laid out by climate noise with ragged borders. A cedar and sakura belt rings Tempest, the south is dense forest, the east climbs to snow-capped mountains and the west ends at a sea.
+    *   **Rivers and ponds**: Meandering rivers that widen towards the coast, with sand and gravel banks and reed beds; ponds in the wetlands.
+    *   **Roads and bridges**: Six roads link the zones gate to gate, bend gently, change from cobblestone to path to dirt with distance from civilisation, level the ground they cross and carry fence-post lanterns every 64 blocks. Where a road meets a river it becomes a plank bridge with rails and log piers.
+    *   **Zone edges**: The old cliffs at the borders of Bosse and Amestris are gone: each zone's ground blends into the wilderness over its outer band.
+    *   **Vegetation**: Oak, birch, pine, cedar, sakura and bamboo, undergrowth, fallen logs, boulders, mushrooms and wildflowers, placed so a tree that crosses a chunk border is the same in both chunks.
+*   **Zones** (docs/engine.md):
     *   **Zone System**: Each anime world is encapsulated in its own module, allowing for infinite expansion of new themes without cluttering the core logic.
     *   **Atmosphere Control**: Each zone dictates its own fog color, density, and lighting, which blend smoothly as you travel.
-*   **Dynamic Atmosphere**:
-    *   **Day/Night Cycle**: A 20 minute day with a moving sun and moon, dawn and dusk colours, stars, and baked sky light that fades to night while lanterns keep shining. Each zone's `skyTint`, `fogColor` and `fogDensity` shape the sky and the fog (see docs/sky.md).
+*   **Day and Night** (docs/sky.md, docs/light.md):
+    *   **Cycle**: A 20 minute day with a moving sun and moon, dawn and dusk colours, stars, and baked sky light that fades to night while lanterns keep shining. Each zone's `skyTint`, `fogColor` and `fogDensity` shape the sky and the fog.
+    *   **Smooth light**: Sky light and block light are baked into the chunk meshes with ambient occlusion, so time of day re-meshes nothing.
     *   **Biome Blending**: Grass and foliage colors interpolate between zones (e.g., from clear blue SAO skies to industrial Amestris smog).
-*   **Organic World Generation**:
-    *   **Roads**: Paths wander organically using noise-based dithering and change materials based on distance from civilization.
-    *   **Vegetation**: Procedural placement of trees (Oak, Birch, Pine), flowers, and crops.
-*   **Visual Fidelity**:
-    *   **Custom Shaders**: Procedural noise textures, edge darkening (AO), and directional material logic (Dirt sides on Grass blocks).
-    *   **Optimized Rendering**: Face-culled chunk meshes built in web workers, 8 chunks of render distance, upload budget per frame (see docs/renderer.md).
+*   **Blocks** (docs/textures.md, docs/models.md):
+    *   **Textured**: Pixel-art tiles generated in code for every block, packed in one texture array, with grass sides, tinted leaves and animated water.
+    *   **Shaped blocks**: Stairs in eight orientations, slabs, fences and panes that join their neighbours, plants, crops and small props, each with its own collision box; the player steps up stairs and slabs.
+*   **Performance** (docs/renderer.md, docs/perf-after-integration.md): Face-culled chunk meshes built in web workers, 8 chunks of render distance, an upload budget per frame, and 60 fps with no frame over 50 ms on the benchmark flythrough and the soak.
 
 ## 🛠️ Development
 
@@ -56,7 +60,9 @@ npm test            # Vitest unit tests (tests/)
 npm run bench       # scripted flythrough in headless Chrome, needs the dev server running
 npm run textures:sheet   # dump the texture catalog to docs/screens/p3/catalog.png
 npm run bench -- --smoke   # loads the real game, lands the player, walks forward, presses F4 and ] to check the sky keys, reports page errors
-npm run bench -- --soak    # 90 s closed-loop walk, prints geometry and triangle counts every 5 s
+npm run bench -- --soak    # 90 s closed-loop walk, prints geometry and triangle counts every 5 s (?bench=soak&soakSeconds=260 for a longer one)
+npm run map         # biome, road and block maps of the generated world into docs/maps/ (docs/worldgen.md#tools)
+npx vite-node tools/bench-generators.ts   # chunk generation time, new generator against the legacy one
 npm run bench -- --shot docs/screens/p2/spawn.png --url "http://localhost:3000/?shot=0,10,300,0,0"
 node bench/shots.mjs --prefix before --url http://localhost:3000   # every viewpoint in bench/viewpoints.json
 node bench/shots.mjs --prefix world --dir docs/screens/p3 --url http://localhost:3000   # the same, into another folder
@@ -72,7 +78,7 @@ Block sandbox: `/?sandbox=blocks` replaces the game with every registered block 
 
 Model sandbox: `/?sandbox=models` shows every block model in every state (stairs in all eight, slabs top and bottom, how fences and panes join their neighbours, plants and the rest), labelled, plus a small house built from stairs, slabs, fences and panes. `&view=close`, `&view=joins` and `&view=house` frame parts of it and `&cam=px,py,pz,tx,ty,tz` sets the camera; it raises `__SHOT_READY__` too (see [docs/models.md](docs/models.md#model-sandbox)).
 
-Open `/?bench` in a browser to run the same flythrough by hand. Baseline numbers and how to read them are in [docs/perf-baseline.md](docs/perf-baseline.md); the results after the Phase 2 rebuild are in [docs/perf-after-p2.md](docs/perf-after-p2.md) and after the textures in [docs/perf-after-p3.md](docs/perf-after-p3.md). The block and chunk layer is described in [docs/engine.md](docs/engine.md), the mesher in [docs/meshing.md](docs/meshing.md), baked sky and block light, smooth lighting, the worker's chunk cache and the lit materials in [docs/light.md](docs/light.md), the day/night clock, sky dome, fog and zone atmosphere in [docs/sky.md](docs/sky.md) (measured in [docs/perf-after-p5.md](docs/perf-after-p5.md)), the block models (stairs, slabs, fences, panes, plants) in [docs/models.md](docs/models.md), player collision and stepping in [docs/collision.md](docs/collision.md), the renderer and workers in [docs/renderer.md](docs/renderer.md), and the block textures, the texture array and the material in [docs/textures.md](docs/textures.md).
+Open `/?bench` in a browser to run the same flythrough by hand. Baseline numbers and how to read them are in [docs/perf-baseline.md](docs/perf-baseline.md); the results after the Phase 2 rebuild are in [docs/perf-after-p2.md](docs/perf-after-p2.md) and after the textures in [docs/perf-after-p3.md](docs/perf-after-p3.md). The generated world (noise, zones, biomes, rivers, roads, how it is wired into the game) is in [docs/worldgen.md](docs/worldgen.md) and what it costs in [docs/perf-after-integration.md](docs/perf-after-integration.md). The block and chunk layer is described in [docs/engine.md](docs/engine.md), the mesher in [docs/meshing.md](docs/meshing.md), baked sky and block light, smooth lighting, the worker's chunk cache and the lit materials in [docs/light.md](docs/light.md), the day/night clock, sky dome, fog and zone atmosphere in [docs/sky.md](docs/sky.md) (measured in [docs/perf-after-p5.md](docs/perf-after-p5.md)), the block models (stairs, slabs, fences, panes, plants) in [docs/models.md](docs/models.md), player collision and stepping in [docs/collision.md](docs/collision.md), the renderer and workers in [docs/renderer.md](docs/renderer.md), and the block textures, the texture array and the material in [docs/textures.md](docs/textures.md).
 
 The world is meshed in web workers, so `npm run dev` and `vite build` both bundle `meshing/mesh.worker.ts`; nothing extra to run. The `--smoke` run also checks that the page reports no errors.
 

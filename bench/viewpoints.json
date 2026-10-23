@@ -4,5 +4,15 @@
   { "name": "tempest-plaza", "shot": "1380,12,0,-90,0" },
   { "name": "amestris", "shot": "-1500,14,0,90,0" },
   { "name": "bosse-castle", "shot": "0,40,-1400,0,10" },
-  { "name": "distant-terrain", "shot": "0,45,250,0,-6" }
+  { "name": "distant-terrain", "shot": "0,45,250,0,-6" },
+  { "name": "highway-400", "shot": "400,17,-8,-90,-4" },
+  { "name": "highway-800", "shot": "800,21,3,-90,-4" },
+  { "name": "highway-1200", "shot": "1200,14,0,-90,0" },
+  { "name": "tempest-belt", "shot": "1500,32,1050,0,-12" },
+  { "name": "bridge", "shot": "-842,16,1114,109,-12" },
+  { "name": "bosse-edge", "shot": "60,40,-700,0,-10" },
+  { "name": "east-mountains", "shot": "11150,85,0,-90,-3" },
+  { "name": "bridge-small", "shot": "-84,22,538,127,-12" },
+  { "name": "town-gate", "shot": "170,13,0,-90,-3" },
+  { "name": "tempest-gate", "shot": "880,14,0,-90,-3" }
 ]

@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Vector3 } from 'three';
 import { MOVE_SPEED, PLAYER_HEIGHT } from '../constants';
-import { getTerrainHeight } from '../utils/terrain';
+import { voxelWorld } from '../gameWorld';
 import { FrameStats, summarizeFrames } from './stats';
 import { playerState } from '../playerState';
 import { getWorldProbe } from './worldProbe';
@@ -38,6 +38,9 @@ export interface LegResult extends FrameStats {
   geometries: number;
   textures: number;
   heapMB: number | null;
+  // The world renderer's own counters at the end of the leg (worker time per job, chunks generated, all since the page
+  // loaded), so a leg's share is the difference from the one before.
+  stats: Record<string, number> | null;
 }
 
 export interface BenchResult {
@@ -60,6 +63,12 @@ const SOAK_LOOP: Waypoint[] = [
   SPAWN, PLAZA_EDGE, [-60, 0], [-140, 0], [-60, 0], [0, -60], [60, 0], [140, 0], [60, 0], PLAZA_EDGE, SPAWN,
 ];
 const SOAK_SECONDS = 90;
+// ?bench=soak&soakSeconds=250 runs longer (a lap of the loop is about 82 s), to see whether the counts return to the
+// same values lap after lap.
+const soakSeconds = (): number => {
+  const asked = Number(new URLSearchParams(window.location.search).get('soakSeconds'));
+  return Number.isFinite(asked) && asked > 0 ? asked : SOAK_SECONDS;
+};
 const SOAK_INTERVAL = 5;
 
 const SPRINT = MOVE_SPEED * 2;
@@ -74,7 +83,7 @@ const buildLegs = (mode: BenchMode): LegDef[] => {
   if (mode === 'soak') {
     return [
       { name: 'load', path: [SPAWN], speed: 0, duration: 6 },
-      { name: 'soak', path: SOAK_LOOP, speed: SPRINT, duration: SOAK_SECONDS, loop: true, soak: true },
+      { name: 'soak', path: SOAK_LOOP, speed: SPRINT, duration: soakSeconds(), loop: true, soak: true },
     ];
   }
   const quick = mode === 'quick';
@@ -158,6 +167,7 @@ const Benchmark: React.FC<BenchProps> = ({ mode, onProgress, onDone }) => {
       geometries: info.memory.geometries,
       textures: info.memory.textures,
       heapMB: heapMB(),
+      stats: getWorldProbe()?.getStats?.() ?? null,
     });
     r.all.push(...r.frames);
     r.frames = [];
@@ -226,7 +236,7 @@ const Benchmark: React.FC<BenchProps> = ({ mode, onProgress, onDone }) => {
       }
     }
 
-    const y = getTerrainHeight(Math.round(x), Math.round(z)) + 0.5 + PLAYER_HEIGHT + jumpOffset;
+    const y = voxelWorld.terrainHeight(Math.round(x), Math.round(z)) + 0.5 + PLAYER_HEIGHT + jumpOffset;
     camera.position.set(x, y, z);
     look.current.set(x + dx * 10, y - 0.5, z + dz * 10);
     camera.lookAt(look.current);

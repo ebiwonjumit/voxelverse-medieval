@@ -1,18 +1,18 @@
 # Voxel core
 
-Phase 1 of the rebuild plan added a block and chunk layer under the game. The player and the HUD read from it on the main thread, and since Phase 2 the mesh workers build chunks from the same generator. How they get on screen is in [renderer.md](renderer.md).
+Phase 1 of the rebuild plan added a block and chunk layer under the game. The player and the HUD read from it on the main thread, and since Phase 2 the mesh workers build chunks from the same generator, which since the integration step is the Phase 6 generator ([worldgen.md](worldgen.md#wired-into-the-game)). How they get on screen is in [renderer.md](renderer.md).
 
 ## Layout
 
 | Folder | What is in it |
 | --- | --- |
-| `engine/` | Voxel core: `coords`, `cell`, `BlockRegistry`, `Chunk`, `ChunkStore`, `VoxelWorld`, the `WorldGenerator` interface and box `collision` ([collision.md](collision.md)). No Three.js, no React. `engine/models/` holds the block models, see [models.md](models.md). |
+| `engine/` | Voxel core: `coords`, `cell`, `BlockRegistry`, `Chunk`, `ChunkStore`, `VoxelWorld`, the `WorldGenerator` interface, box `collision` ([collision.md](collision.md)) and `spawn` (`standingEyeY`, the eye height for standing on a column). No Three.js, no React. `engine/models/` holds the block models, see [models.md](models.md). |
 | `content/` | Block definitions. `blocks.ts` registers the legacy blocks (ids 0 to 47), then calls `registerNatureBlocks` (`blocksNature.ts`, ids 48 to 79) for the wilderness and `registerShapedBlocks` (`blocksShaped.ts`, the stairs, slabs and pane at ids 80 to 92). `content/textures/` holds the generated pixel-art tiles, see [textures.md](textures.md). |
 | `meshing/` | Pure chunk mesher, the light engine and the mesh worker pool, worker-safe. See [meshing.md](meshing.md) and [light.md](light.md). |
 | `render/` | The Three.js chunk renderer and `SkySystem`, the day/night clock, sky dome and fog. See [renderer.md](renderer.md) and [sky.md](sky.md). |
-| `worldgen/` | Things that implement `WorldGenerator`. `LegacyZoneAdapter` wraps the old zones; `VoxelverseGenerator` is the Phase 6 generator described in [worldgen.md](worldgen.md). |
+| `worldgen/` | Things that implement `WorldGenerator`. `VoxelverseGenerator` is the Phase 6 generator described in [worldgen.md](worldgen.md): biomes, rivers, vegetation, roads and bridges between the zones, the legacy zone interiors inside them. It is what the game runs on (`createWorkerGenerator.ts` for the workers, `gameWorld.ts` for the main thread). `LegacyZoneAdapter` wraps the old zones alone and is kept as the reference the parity and timing tests compare against; the game does not use it. |
 | `worldConstants.ts` | Numbers and enums (`BlockType`, `LodLevel`) with no Three.js import, so generation can run in a worker. `constants.ts` re-exports them and adds the Three.js vectors. |
-| `gameWorld.ts` | The `voxelWorld` and `blockRegistry` the game uses on the main thread. |
+| `gameWorld.ts` | The `voxelWorld`, `blockRegistry` and `worldGenerator` (a `VoxelverseGenerator`) the game uses on the main thread. |
 
 `engine/` never imports from `worldgen/`, `content/` or `zones/` (a test checks it). `meshing/` reads the engine but, like it, has no Three.js or DOM. The generator is passed in.
 
@@ -84,11 +84,11 @@ Loaded chunks answer from their stored cells. Anything else, which means a chunk
 
 ## Generator interface
 
-`generateChunk(chunk, options?)` takes an optional `{ lod }`: `LodLevel.HIGH` (the default) or `LodLevel.LOW`, which a generator may use to leave out small detail that nobody can see from far away. `VoxelWorld.loadChunk` and the parity tests use the default. The mesh workers pass HIGH within 2 chunks of the player and LOW beyond. `sampleBlock` always answers at full detail. A generator may also implement `sampleCell(x, y, z)`, the whole cell with its state, which the mesher uses for the ring around a chunk and `VoxelWorld.getCell` for unloaded chunks; without it the state of those cells reads as 0 (the legacy zones place none).
+`generateChunk(chunk, options?)` takes an optional `{ lod }`: `LodLevel.HIGH` (the default) or `LodLevel.LOW`, which a generator may use to leave out small detail that nobody can see from far away. `VoxelWorld.loadChunk` and the parity tests use the default. The mesh workers pass HIGH within 2 chunks of the player and LOW beyond. `sampleBlock` always answers at full detail. A generator may also implement `sampleCell(x, y, z)`, the whole cell with its state, which the mesher uses for the ring around a chunk and `VoxelWorld.getCell` for unloaded chunks; without it the state of those cells reads as 0 (neither the legacy zones nor the Phase 6 generator place any).
 
 ## Legacy adapter
 
-`LegacyZoneAdapter` fills a chunk exactly the way `getBlockAt` answers a single block (at HIGH detail; at LOW it passes `LodLevel.LOW` to the zones, which then skip lanterns, crops, lily pads and the like): stone below the ground, water above it up to the water level, and the zone's own blocks from the ground up to 64 blocks above. Tests compare it with the old function:
+The game no longer uses it (see [worldgen.md](worldgen.md#wired-into-the-game)); it stays as the reference that the Phase 6 generator's zone cores are checked against, and these parity tests keep guarding the zones themselves. `LegacyZoneAdapter` fills a chunk exactly the way `getBlockAt` answers a single block (at HIGH detail; at LOW it passes `LodLevel.LOW` to the zones, which then skip lanterns, crops, lily pads and the like): stone below the ground, water above it up to the water level, and the zone's own blocks from the ground up to 64 blocks above. Tests compare it with the old function:
 
 - 10,000 random points across 50 chunks, including the coast and mountains.
 - Every block above the ground in 12 landmark chunks (the Great Tower, Tempest's Coliseum and Town Hall, Greensom, Bosse, Fremmevilla, Magnolia), more than 500,000 comparisons.
@@ -110,7 +110,7 @@ World (React) -> ChunkRenderer.setDaylight / setSkyLightColor, ChunkRenderer.upd
   yes: wanted ring = 8 chunks, LOD by ring
        MeshWorkerPool.request(cx, cz, lod) -->  mesh.worker.ts
                                                  ChunkCache: the chunk and its 8 neighbours
-                                                   (LegacyZoneAdapter.generateChunk (lod), kept in a small LRU)
+                                                   (VoxelverseGenerator.generateChunk (lod), kept in a small LRU)
                                                  computeChunkLight (sky and block light, 3x3 chunks)
                                                  NeighbourReader (chunk + 1 block ring from the neighbours)
                                                  meshChunk -> opaque / cutout / water
@@ -122,7 +122,7 @@ World (React) -> ChunkRenderer.setDaylight / setSkyLightColor, ChunkRenderer.upd
     Player: moveAABB(voxelWorld, player box, velocity * dt) against the block models, see collision.md
 ```
 
-- **Two copies of the world, on purpose.** Workers generate the chunk they mesh and, for its light, the eight around it (cached per worker, see [light.md](light.md#the-worker)). The main thread keeps its own `VoxelWorld` for collision and the HUD, answered by the generator block by block, so physics never waits on rendering. Both use the same `LegacyZoneAdapter`, and the parity tests keep the generator's `sampleBlock` and `generateChunk` identical, which is why chunk borders meet without a seam.
+- **Two copies of the world, on purpose.** Workers generate the chunk they mesh and, for its light, the eight around it (cached per worker, see [light.md](light.md#the-worker)). The main thread keeps its own `VoxelWorld` for collision and the HUD, answered by the generator block by block, so physics never waits on rendering. Both build the same `VoxelverseGenerator` from the same seed, and the tests keep its `sampleBlock` and `generateChunk` identical and the two threads in agreement (`tests/worldgen/integration.test.ts`), which is why chunk borders meet without a seam.
 - **Nothing on the main thread depends on height.** The renderer recomputes only when the player's chunk changes, so a jump sends no job and rebuilds nothing. The old renderer rebuilt every visible chunk because `playerY` was a React dependency.
 - **Meshes are plain Three.js objects, not React.** `components/World.tsx` creates one `ChunkRenderer` and calls `update` from a frame hook. There is no per-chunk component, no instancing and no per-chunk material.
 - **Faces are culled in the mesher** (a face is drawn unless the block beside it covers the side it looks at, which a model decides, see [models.md](models.md)), each vertex carries a layer of the block texture array, a uv, a biome tint and its baked light (sky, block light, ambient occlusion and glow, see [light.md](light.md)). Chunk materials are unlit and shade from that light with `uDaylight` and `uSkyLight` uniforms that the sky clock sets every frame, so there are no Three.js scene lights at all and day and night re-mesh nothing. The fog colour and distances come from the sky system (the time of day blended with the player's zone `fogColor` and `fogDensity`, never thinner than the render distance needs); the water wave is unchanged. See [sky.md](sky.md).
@@ -130,6 +130,6 @@ World (React) -> ChunkRenderer.setDaylight / setSkyLightColor, ChunkRenderer.upd
 - **One layout, two builders.** The mesher writes texture layer numbers into vertices in a worker; the atlas builder fills the texture array on the main thread. Both build an `engine/TextureLayout` from the same catalog and registry (`content/textures/layout.ts`), which is deterministic, so layer numbers agree without passing any texture data to the worker. A test checks the layout is identical when built twice.
 - **Layers.** `meshing/` and `engine/` import neither Three.js nor React (a test checks both), so a worker can load them. `render/` and `components/` are the only places that touch Three.js; `mesh.worker.ts` is the only file in `meshing/` that imports `content/` and `worldgen/`.
 
-Details: [meshing.md](meshing.md) for the mesher, [renderer.md](renderer.md) for the pool and the Three.js side, [light.md](light.md) for baked light and [sky.md](sky.md) for the clock, the sky and the fog. Measured results against the baseline, with the soak and before and after screenshots, are in [perf-after-p2.md](perf-after-p2.md).
+Details: [meshing.md](meshing.md) for the mesher, [renderer.md](renderer.md) for the pool and the Three.js side, [light.md](light.md) for baked light and [sky.md](sky.md) for the clock, the sky and the fog. Measured results against the baseline, with the soak and before and after screenshots, are in [perf-after-p2.md](perf-after-p2.md), and with the Phase 6 world in the game in [perf-after-integration.md](perf-after-integration.md).
 - **A page to look at blocks.** `?sandbox=blocks` (`components/sandbox/`) meshes every registered block with the same `meshChunk`, layout, texture array and materials as the world and shows them on a grid under neutral light. It is selected in `App.tsx` before the game mounts and needs no world, workers or player. See [textures.md](textures.md#block-sandbox).
 - **A page to look at models.** `?sandbox=models` (also in `components/sandbox/`, sharing the page code of the block sandbox) shows every block that has a model in every state, labelled, under the same neutral light, and a small house built from stairs, slabs, fences and panes. `&view=close`, `&view=joins` and `&view=house` frame parts of it. See [models.md](models.md#model-sandbox).

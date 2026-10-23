@@ -38,7 +38,7 @@ Every face is four vertices and six indices, counter-clockwise from outside. `me
 
 ## Reading cells
 
-`CellReader.getCell(x, y, z)` answers for the chunk and a one block ring around it, which is all the mesher asks about. It returns whole cells, state included: the mesher's padded grid holds cells, and its tables (kind, covered sides, opaque, wet) are indexed by the cell, so a stair facing north and one facing east cull differently. `PaddedChunkReader` reads the chunk from its own cells and the ring from `generator.sampleCell`, or `sampleBlock` with state 0 for a generator without one, so a worker generates exactly one chunk per job. For the legacy adapter `sampleBlock` equals what `generateChunk` would put in a neighbour (the parity tests prove it), so seams match.
+`CellReader.getCell(x, y, z)` answers for the chunk and a one block ring around it, which is all the mesher asks about. It returns whole cells, state included: the mesher's padded grid holds cells, and its tables (kind, covered sides, opaque, wet) are indexed by the cell, so a stair facing north and one facing east cull differently. `PaddedChunkReader` reads the chunk from its own cells and the ring from `generator.sampleCell`, or `sampleBlock` with state 0 for a generator without one, so a worker generates exactly one chunk per job. For both generators `sampleBlock` equals what `generateChunk` would put in a neighbour (the parity and seam tests prove it), so seams match, and the main thread's `sampleBlock` equals the chunk a worker builds (`tests/worldgen/integration.test.ts`).
 
 Two optional reader methods exist for speed. `yRange()` tells the mesher which heights can hold blocks, so it skips empty sky. `copyChunkCells()` copies the chunk's cells in bulk instead of one `getCell` call per cell. Without them the mesher still works, only slower; a test checks both paths give identical meshes. `Chunk` has `allocatedYRange()` and `copyCells()` for this.
 
@@ -76,7 +76,7 @@ Shaped blocks use the same tables through the face kind each quad carries (top, 
 
 ## Speed
 
-Meshing alone, measured by `tests/meshing/mesher-timing.test.ts` in node on an Apple M4, with AO on (the default), no light data and chunks from `LegacyZoneAdapter` with ring sampling included (median of 9 runs after warm-up; generating the chunk is not counted). Phase 2 measured 6.3 to 10.0 ms on the same chunks with AO off:
+Meshing alone, measured by `tests/meshing/mesher-timing.test.ts` in node on an Apple M4, with AO on (the default), no light data and chunks from `LegacyZoneAdapter` (these timing tests still use it; the Phase 6 generator makes chunks of the same size and shape, see [perf-after-integration.md](perf-after-integration.md) for the game itself) with ring sampling included (median of 9 runs after warm-up; generating the chunk is not counted). Phase 2 measured 6.3 to 10.0 ms on the same chunks with AO off:
 
 | Chunk | Median | Triangles |
 | --- | ---: | ---: |

@@ -67,7 +67,7 @@ The player is moved against these boxes by `engine/collision.ts`, which also cli
 
 ## State across chunk borders
 
-The mesher reads the ring of blocks around a chunk through `WorldGenerator.sampleCell(x, y, z)` when the generator has it, and through `sampleBlock` (state 0) when it does not. A generator that places stairs must implement `sampleCell`, or the stair on the far side of a border is read facing north and its neighbour draws or hides the wrong faces. The legacy zones place no states, so `LegacyZoneAdapter` has none. `VoxelWorld.getCell` uses it too.
+The mesher reads the ring of blocks around a chunk through `WorldGenerator.sampleCell(x, y, z)` when the generator has it, and through `sampleBlock` (state 0) when it does not. A generator that places stairs must implement `sampleCell`, or the stair on the far side of a border is read facing north and its neighbour draws or hides the wrong faces. The legacy zones place no states, so neither `LegacyZoneAdapter` nor `VoxelverseGenerator` (which only builds the zones' blocks, trees, plants, roads and bridges) has a `sampleCell`. `VoxelWorld.getCell` uses it too.
 
 ## The legacy blocks
 

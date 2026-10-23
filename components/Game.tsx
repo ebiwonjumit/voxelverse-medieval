@@ -6,7 +6,8 @@ import SkyRig from './SkyRig';
 import Player from './Player';
 import { MILE } from '../constants';
 import { SkyClock, SkySystem, parseSkyOptions } from '../render/SkySystem';
-import { voxelWorld } from '../gameWorld';
+import { voxelWorld, worldGenerator } from '../gameWorld';
+import { biomeName } from '../worldgen/biomes/Biome';
 import { playerState } from '../playerState';
 import Benchmark, { BenchMode, BenchResult } from '../bench/Benchmark';
 import BenchResults from '../bench/BenchResults';
@@ -86,6 +87,8 @@ const Game: React.FC = () => {
     const z = Math.round(playerPos.z);
     
     const currentZone = voxelWorld.zoneNameAt(x, z);
+    // Between the zones the generator has biomes; inside a zone the zone is the place.
+    const biome = currentZone === 'Wilderness' ? biomeName(worldGenerator.biomeAt(x, z)).replace(/_/g, ' ') : null;
     
     // Calculate distance to zone EDGE (distance to center - radius)
     // If negative (inside zone), show 0.0
@@ -107,7 +110,7 @@ const Game: React.FC = () => {
     const distToCenter_Magnolia = Math.sqrt(Math.pow(x - (-1600), 2) + Math.pow(z - 1600, 2));
     const distMagnolia = (Math.max(0, distToCenter_Magnolia - 250) / MILE).toFixed(1);
 
-    return { x, y, z, currentZone, distSAO, distTempest, distAmestris, distBosse, distFremme, distMagnolia };
+    return { x, y, z, currentZone, biome, distSAO, distTempest, distAmestris, distBosse, distFremme, distMagnolia };
   }
 
   const hud = getHUDInfo();
@@ -122,6 +125,7 @@ const Game: React.FC = () => {
           <div className="border-b border-white/20 pb-2">
             <p className="text-xs text-gray-400">CURRENT LOCATION</p>
             <p className="text-xl font-bold text-yellow-400">{hud.currentZone}</p>
+            {hud.biome && <p className="text-xs text-gray-300 capitalize">{hud.biome}</p>}
           </div>
           
           <div className="space-y-1">
@@ -187,7 +191,7 @@ const Game: React.FC = () => {
           <div className="bg-black/80 p-3 rounded-lg text-xs font-mono space-y-1 border border-white/10">
             <div className="text-yellow-400">DEBUG INFO</div>
             <div>Position: {hud.x}, {hud.y}, {hud.z}</div>
-            <div>Zone: {hud.currentZone}</div>
+            <div>Zone: {hud.currentZone}{hud.biome ? ` (${hud.biome})` : ''}</div>
             <div>Chunks Loaded: {loadedChunks}</div>
             <div>Time: {skyInfo}</div>
             <div className="text-gray-400 text-xs mt-2">Press F3 to toggle</div>

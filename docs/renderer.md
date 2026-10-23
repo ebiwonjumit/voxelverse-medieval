@@ -23,7 +23,7 @@ ChunkRenderer.update(x, z)         main thread, every frame
 | `meshing/mesh.worker.ts` | Worker entry point. Builds its own registry, generator and chunk cache, answers jobs. |
 | `meshing/runMeshJob.ts` | The work of one job (neighbourhood, light, mesh, timing), separate from the messaging so tests can run it. |
 | `meshing/ChunkCache.ts` | The worker's LRU of generated chunks, see [light.md](light.md#the-worker). |
-| `worldgen/createWorkerGenerator.ts` | Says which generator the workers use. |
+| `worldgen/createWorkerGenerator.ts` | Says which generator the workers use: `VoxelverseGenerator`, the same one `gameWorld.ts` builds on the main thread. |
 | `playerState.ts` | Mutable `{ x, y, z }` the player writes every frame. |
 
 ## Which chunks are held
@@ -38,7 +38,7 @@ ChunkRenderer.update(x, z)         main thread, every frame
 
 `MeshWorkerPool` starts `min(max(hardwareConcurrency - 1, 1), 4)` workers. Queued jobs are ranked by distance to the player when a worker frees up, not when the job was queued, so a long queue follows the player. A chunk has at most one live request: asking again replaces it. `cancel(cx, cz)` removes a job that has not started and returns true; for a running job it returns false and the result is dropped when it arrives. A worker error is reported once and the chunk is asked for again the next time the player changes chunk.
 
-Each worker holds its own registry, `LegacyZoneAdapter` and a cache of the chunks it has generated (64, so the 3x3 neighbourhood the light needs is not generated again for the next chunk over), so a job is just `{ id, cx, cz, lod }`. The main thread keeps its own `VoxelWorld` for collision, exactly as before, and never generates chunks for it.
+Each worker holds its own registry, `VoxelverseGenerator` (the Phase 6 world, see [worldgen.md](worldgen.md#wired-into-the-game)) and a cache of the chunks it has generated (64, so the 3x3 neighbourhood the light needs is not generated again for the next chunk over), so a job is just `{ id, cx, cz, lod }`. The main thread keeps its own `VoxelWorld` for collision, exactly as before, and never generates chunks for it.
 
 ## Upload budget
 
@@ -70,3 +70,5 @@ Production build, render distance 8, headless Chrome on an Apple M4. Every leg o
 After Phase 3 (textures) the frame numbers are unchanged within noise (60 fps, p99 17.7 ms, no frame over 50 ms in the walking legs) and draw calls, triangles and geometry counts are identical; the JS heap is higher because vertices are 76 bytes. See [perf-after-p3.md](perf-after-p3.md). `bucketGeometry` (exported from `render/ChunkRenderer.ts`) builds the Three.js geometry of one bucket and is shared with the block sandbox ([textures.md](textures.md#block-sandbox)).
 
 After Phase 5 step 2 (baked light) the frame numbers are again unchanged within noise (60 fps, p99 17.7 ms, no frame over 50 ms) and the vertex is 4 bytes bigger; the numbers, including the worker time per job, are in [light.md](light.md#the-worker).
+
+After wiring in the Phase 6 generator the frame numbers are unchanged again (60 fps, p99 18.6 ms, nothing over 50 ms; the benchmark route now runs over the new terrain); per job a worker generates about 5 chunks in 8 to 13 ms, against 22 ms with the legacy zones. See [perf-after-integration.md](perf-after-integration.md).

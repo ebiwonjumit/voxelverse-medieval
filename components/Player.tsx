@@ -8,6 +8,7 @@ import { voxelWorld } from '../gameWorld';
 import { playerState } from '../playerState';
 import { CollisionWorld, moveAABB, playerBox } from '../engine/collision';
 import { Cell } from '../engine/cell';
+import { standingEyeY } from '../engine/spawn';
 
 // The main thread's world answers unloaded chunks from the generator one block at a time, which is slow enough to
 // notice when asked dozens of times a frame. Blocks around the player are remembered for two seconds instead.
@@ -30,6 +31,10 @@ const collisionWorld: CollisionWorld = {
   },
 };
 
+// Where the player starts and where a fall into the void puts it back: Greensom, standing on whatever the generator
+// built there (the old fixed height of 15 dropped the player onto the ground from above).
+const SPAWN = new Vector3(INITIAL_SPAWN.x, standingEyeY(voxelWorld, INITIAL_SPAWN.x, INITIAL_SPAWN.z), INITIAL_SPAWN.z);
+
 // A long frame (a stalled tab) must not turn into one huge fall or a huge sweep.
 const MAX_STEP = 0.1;
 // How fast the camera catches up after the player steps up onto a stair or slab, per second.
@@ -39,7 +44,7 @@ const Player: React.FC = () => {
   const { camera } = useThree();
   const { moveForward, moveBackward, moveLeft, moveRight, jump, sprint } = useKeyboardControls();
   const velocity = useRef(new Vector3(0, 0, 0));
-  const position = useRef(INITIAL_SPAWN.clone());
+  const position = useRef(SPAWN.clone());
   const isGrounded = useRef(false);
   const controlsRef = useRef<any>(null);
   const bobTime = useRef(0);
@@ -49,7 +54,7 @@ const Player: React.FC = () => {
   const stepOffset = useRef(0); // how far the camera lags below the body after a step up
 
   useEffect(() => {
-    camera.position.copy(INITIAL_SPAWN);
+    camera.position.copy(SPAWN);
   }, [camera]);
 
   useFrame((_state, frameDelta) => {
@@ -182,7 +187,7 @@ const Player: React.FC = () => {
 
     // Void protection
     if (position.current.y < -20) {
-      position.current.copy(INITIAL_SPAWN);
+      position.current.copy(SPAWN);
       velocity.current.set(0, 0, 0);
       isGrounded.current = false;
       wasGroundedLastFrame.current = false;

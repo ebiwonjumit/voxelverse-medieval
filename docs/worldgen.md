@@ -1,6 +1,6 @@
 # World generation
 
-Phase 6 of the rebuild replaces the wilderness and the land between the zones with a seeded generator. The legacy zones keep their interiors. This page describes what is built: seeded noise, the zone blender, biomes, vegetation and rivers, and the road network.
+Phase 6 of the rebuild replaces the wilderness and the land between the zones with a seeded generator. The legacy zones keep their interiors. This page describes what is built: seeded noise, the zone blender, biomes, vegetation and rivers, and the road network. The game runs on it: both the mesh workers and the main thread build it (see [Wired into the game](#wired-into-the-game)).
 
 ## Seed
 
@@ -213,7 +213,7 @@ A fence post (three fence blocks) with a lantern on top stands about every 64 bl
 
 ## `worldgen/VoxelverseGenerator.ts`
 
-`createVoxelverseGenerator(registry, seed = WORLD_SEED, keepClear?)` returns a `WorldGenerator`. It is not wired into the game yet (see below).
+`createVoxelverseGenerator(registry, seed = WORLD_SEED, keepClear?)` returns a `WorldGenerator`. It is the generator the game uses, on the main thread and in the workers (see [Wired into the game](#wired-into-the-game)).
 
 - `ColumnSampler` decides for each column which zone owns it, the ground height (roads included), and for the wilderness the biome and the surface. `generateChunk` and `sampleBlock` both go through it.
 - Zone columns: stone below the ground, water above it up to `WATER_LEVEL`, and whatever the legacy zone's `getBlock` says for the blended ground height, up to 64 blocks above it. Where a road is painted onto the zone: the paving, and air above it.
@@ -239,13 +239,25 @@ A fence post (three fence blocks) with a lantern on top stands about every 64 bl
 
 A feature must never depend on anything but its origin, the column at its origin and the seed. That is what makes a tree that crosses a chunk border come out the same in both chunks.
 
-## Wiring the generator into the game (not done yet)
+## Wired into the game
 
-The integration waits for the renderer branch to merge. When it does:
+Done in the integration step after the ten-phase rebuild. Two lines choose the generator, and nothing else knows which one it is:
 
-1. `gameWorld.ts`: replace `new LegacyZoneAdapter(blockRegistry)` with `createVoxelverseGenerator(blockRegistry)` (imported from `./worldgen/VoxelverseGenerator`). Nothing else on the main thread changes: `VoxelWorld` only knows the `WorldGenerator` interface, and `terrainHeight` and `zoneNameAt` keep their meaning.
-2. The worker: wherever chunks are generated off the main thread, build the generator there with `createDefaultRegistry()` and `createVoxelverseGenerator(registry)` once at start-up (it needs the same seed as the main thread, `WORLD_SEED` unless the game passes one in the worker's init message), and call `generateChunk(chunk, { lod })` per request, passing `lod: 0` for far chunks. `engine/WorldGenerator.ts` needs `generateChunk(chunk, options?: { lod?: number })`, which the renderer branch adds; the generator already accepts it. Nothing under `worldgen/`, `content/` or `engine/` imports Three.js, React or the DOM, so it runs in a worker as is.
-3. Keep `LegacyZoneAdapter` and its parity tests: they are the reference the zone cores are checked against.
+| Where | What it builds |
+| --- | --- |
+| `worldgen/createWorkerGenerator.ts` | `createVoxelverseGenerator(registry)`, once per mesh worker at start-up (`meshing/mesh.worker.ts`). The worker's `ChunkCache` calls `generateChunk(chunk, { lod })` with `LodLevel.LOW` (0) for chunks more than 2 chunks from the player and `HIGH` within that. |
+| `gameWorld.ts` | `createVoxelverseGenerator(blockRegistry)` for the main thread, exported as `worldGenerator` and wrapped in `voxelWorld`. Player collision, the HUD zone name and biome, the benchmark camera and the spawn height read it. |
+
+Both use `WORLD_SEED` and a registry from `createDefaultRegistry()`, so the same coordinates give the same block on both threads. `tests/worldgen/integration.test.ts` keeps it that way: at random points of chunks built the way a worker builds them (including whole columns at chunk borders, roads, bridges, the forest belt, the coast and the mountains), `voxelWorld.getBlock` on the main thread answers the same block, and a chunk meshed from the worker's nine chunks gives the same geometry as one meshed by asking the main thread block by block. The same file checks that neither `gameWorld.ts` nor the worker build a `LegacyZoneAdapter`.
+
+Details that came up in wiring it:
+
+- **Spawn.** The player spawns at Greensom (0, 300) and a fall into the void (eyes below y = -20) puts it back there. `engine/spawn.ts` (`standingEyeY`) finds the eye height for that column from the generator: the first solid cell from the ground up with three free cells above it, so the player stands on the village road and the first frame does not drop it from a fixed height. The ground at Greensom is y = 7, so the eyes are at 9.3. Tests check the floor is solid, the head room is free and the zone is Greensom.
+- **HUD.** The zone name is `voxelWorld.zoneNameAt`, which asks the blender. In the wilderness the HUD and the F3 panel also show the biome (`worldGenerator.biomeAt`, for example "cedar forest"). The `--smoke` run checks that the HUD says Greensom Village at the spawn.
+- **Level of detail.** `LodLevel.LOW` is 0 and `VoxelverseGenerator` treats `lod: 0` as far, so the engine's option already means what the generator expects. At LOW the wilderness drops about 90 percent of its plant blocks and the zones their small props; trees, rocks, logs, roads, bridges and waypoints stay. A test compares one forest chunk at both levels and finds only plants differ (where a bamboo clump hidden under undergrowth shows through at LOW, the low cell is a plant of another kind).
+- **Cost in the workers.** Per chunk the new generator is no slower than the legacy adapter: in node about 7 ms in the Town, Tempest and the belt (the same as legacy), 7 to 10 ms in the home meadows, the south forest and the mountains where legacy took 13 to 20 ms (`npx vite-node tools/bench-generators.ts`). In the browser a job generated 5 chunks and 8 to 13 ms on average, against 5 chunks and 22 ms before. The chunk cache and the job order were left alone: [perf-after-integration.md](perf-after-integration.md).
+- **Collision.** Walking each of the six roads end to end with the game's own physics (`tests/worldgen/road-walk.test.ts`): no road sticks or falls. A player has to jump at each one-block rise (1 jump on the 30 block Greensom road, 23 to 62 on the others) as before; bridges are walked on their planks.
+- **Legacy.** `LegacyZoneAdapter` stays in `worldgen/` as the reference the zone cores, the parity tests and the mesher timing tests are checked against. Nothing in the game imports it.
 
 ## Tools
 
@@ -272,6 +284,8 @@ What the maps show, judged by looking at them:
 Known weak spots: the rivers are many and thin on the overview and read a little like spaghetti, and the mountain front east of x = 10000 is roughly a north-south line (it comes from `TerrainField`'s uplift, which step 6.2 owns).
 
 ## Tests
+
+`tests/worldgen/integration.test.ts` and `tests/worldgen/road-walk.test.ts` cover the wiring, see [Wired into the game](#wired-into-the-game).
 
 `tests/worldgen/blender.test.ts` checks: no height step above 2 along rays that cross every zone border (120 crossing rays per zone at many angles and positions plus sweeps along the border across the road strips), the open wilderness being walkable (rivers and ponds included), the cores of the Town, Greensom, Tempest and Amestris matching `LegacyZoneAdapter` at 3,000 random points and cell for cell in seven landmark chunks, `sampleBlock` equal to `generateChunk` at 3,000 random points and down whole columns, heights inside the terrain bounds with nothing piled on them, the same seed giving the same chunk hash, LOD 0 only dropping plants, wilderness chunks averaging under 40 ms, and `ZoneInfo` agreeing with the legacy zones. `terrain.test.ts` covers `softLimit` and the geography of `TerrainField`.
 
