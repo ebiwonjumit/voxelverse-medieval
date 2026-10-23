@@ -7,7 +7,7 @@ Phase 1 of the rebuild plan added a block and chunk layer under the game. The pl
 | Folder | What is in it |
 | --- | --- |
 | `engine/` | Voxel core: `coords`, `cell`, `BlockRegistry`, `Chunk`, `ChunkStore`, `VoxelWorld`, the `WorldGenerator` interface, box `collision` ([collision.md](collision.md)) and `spawn` (`standingEyeY`, the eye height for standing on a column). No Three.js, no React. `engine/models/` holds the block models, see [models.md](models.md). |
-| `content/` | Block definitions. `blocks.ts` registers the legacy blocks (ids 0 to 47), then calls `registerNatureBlocks` (`blocksNature.ts`, ids 48 to 79) for the wilderness and `registerShapedBlocks` (`blocksShaped.ts`, the stairs, slabs and pane at ids 80 to 92). `content/textures/` holds the generated pixel-art tiles, see [textures.md](textures.md). |
+| `content/` | Block definitions. `blocks.ts` registers the legacy blocks (ids 0 to 47), then calls `registerNatureBlocks` (`blocksNature.ts`, ids 48 to 79) for the wilderness, `registerShapedBlocks` (`blocksShaped.ts`, the stairs, slabs and pane at ids 80 to 92) and `registerTempestBlocks` (`blocksTempest.ts`, the 72 blocks of the city at ids 128 to 199, see [tempest-blocks.md](tempest-blocks.md); 200 to 255 are kept for its buildings). `content/textures/` holds the generated pixel-art tiles, see [textures.md](textures.md). |
 | `meshing/` | Pure chunk mesher, the light engine and the mesh worker pool, worker-safe. See [meshing.md](meshing.md) and [light.md](light.md). |
 | `render/` | The Three.js chunk renderer and `SkySystem`, the day/night clock, sky dome and fog. See [renderer.md](renderer.md) and [sky.md](sky.md). |
 | `worldgen/` | Things that implement `WorldGenerator`. `VoxelverseGenerator` is the Phase 6 generator described in [worldgen.md](worldgen.md): biomes, rivers, vegetation, roads and bridges between the zones, the legacy zone interiors inside them. It is what the game runs on (`createWorkerGenerator.ts` for the workers, `gameWorld.ts` for the main thread). `LegacyZoneAdapter` wraps the old zones alone and is kept as the reference the parity and timing tests compare against; the game does not use it. |
@@ -35,6 +35,7 @@ What the state bits mean, per model (`engine/models/`, details and the quads eac
 | `StairModel` | bits 0-1, bit 2 | facing, the way you climb (the tall back is on that side): 0 north (-z), 1 east (+x), 2 south (+z), 3 west (-x); bit 2 set is upside down. Build it with `stairState(facing, upsideDown)` |
 | `FenceModel`, `PaneModel` | none | which sides they join is read from the four neighbours whenever the block is meshed or bumped into, never stored |
 | `CrossModel`, `CropModel`, `BoxModel`, `PlateModel` | none | one look each (a crop's growth stage is a block of its own) |
+| `OrientedBoxModel` | bits 0-1 | quarter turns clockwise from how the boxes are written, 0 to 3: a ridge cap with its horn, an awning, a curtain, a sign. The texture turns with the boxes |
 
 A model ignores state bits it does not use, so a stray bit never changes anything. Bit 3 of a stair's state and bits 1 to 3 of a slab's are unused today; a model that starts using bits must say so in this table. A new model kind declares its states here and in [models.md](models.md), and shows up in `?sandbox=models` by itself.
 

@@ -3,6 +3,7 @@ import { createDefaultRegistry } from '../../content/blocks';
 import { createDefaultCatalog } from '../../content/textures/TextureCatalog';
 import { natureBlockIds } from '../../content/blocksNature';
 import { SHAPED_FIRST_ID, SHAPED_LAST_ID } from '../../content/blocksShaped';
+import { TEMPEST_ID_MIN } from '../../content/blocksTempest';
 import { BlockType } from '../../worldConstants';
 
 const registry = createDefaultRegistry();
@@ -11,7 +12,7 @@ const LEGACY_LAST_ID = 47;
 
 describe('default block registry', () => {
   it('registers every legacy BlockType under its own numeric id', () => {
-    // Count by range: the wilderness blocks (48..79) and the shaped blocks (80..127) are registered after the legacy ones.
+    // Count by range: the wilderness blocks (48..79), the shaped blocks (80..127) and the Tempest set (128..199) are registered after the legacy ones.
     expect(registry.all().filter((d) => d.id <= LEGACY_LAST_ID).length).toBe(legacyTypes.length);
     for (const type of legacyTypes) {
       expect(registry.get(type).id).toBe(type);
@@ -108,8 +109,9 @@ describe('default block registry', () => {
     // A cheap guard against two blocks sharing a texture by accident: the pairs that do are all deliberate.
     const byTop = new Map<string, string[]>();
     for (const def of registry.all()) {
-      // Stairs, slabs and panes wear the tile of the cube they are cut from, on purpose.
-      if (!def.faces || (def.id >= SHAPED_FIRST_ID && def.id <= SHAPED_LAST_ID)) continue;
+      // Stairs, slabs and panes wear the tile of the cube they are cut from, on purpose. The Tempest set (128 and up) shares
+      // tiles the same way, and tests/textures/tempest.test.ts lists exactly which blocks may.
+      if (!def.faces || (def.id >= SHAPED_FIRST_ID && def.id <= SHAPED_LAST_ID) || def.id >= TEMPEST_ID_MIN) continue;
       const list = byTop.get(def.faces.top) ?? [];
       list.push(def.name.replace('voxelverse:', ''));
       byTop.set(def.faces.top, list);

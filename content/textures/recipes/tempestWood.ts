@@ -39,16 +39,24 @@ const vermilionTop = new DrawnTile('vermilion_log_top', (c, rng) => {
   });
 }, { tiling: 'none' });
 
-/** A dark timber post, planed: long straight grain lines, a few pale flecks. */
+/**
+ * A dark timber post, planed: long straight grain lines down a smooth dark face, a pale flat edge on the lit side and a
+ * deep shade on the other, and only two pale flecks of knot. Two shades dominate, so a stack of posts reads as one
+ * clean timber and not as bark.
+ */
+const POST = palette('#2c1d14', '#432f20', '#5b4231', '#765842');
 const timberPost = new DrawnTile('timber_post_side', (c, rng) => {
   const field = ranks(layers(rng, [[10, 2, 1], [16, 3, 0.5]]));
-  fillRamp(c, TIMBER, field);
-  for (let k = 0; k < 5; k++) {
-    const x = rng.int(N);
+  c.paint((x, y) => {
+    const edge = x <= 1 ? 0.24 - x * 0.12 : x >= N - 2 ? -0.22 : 0;
+    return ramp(POST, clamp01(field[at(x, y)] * 0.6 + 0.22 + edge));
+  });
+  for (let k = 0; k < 4; k++) {
+    const x = 2 + rng.int(N - 4);
     const phase = rng.range(0, 6);
-    for (let y = 0; y < N; y++) c.set(x + Math.round(Math.sin((y + phase) * 0.4) * 0.6), y, TIMBER[0]);
+    for (let y = 0; y < N; y++) c.set(x + Math.round(Math.sin((y + phase) * 0.4) * 0.6), y, POST[0]);
   }
-  glints(c, rng, hex('#7c5c42'), 9);
+  glints(c, rng, hex('#8d6a4c'), 3);
 });
 
 /** The end grain of a post or beam: square rings, the way a squared timber is cut. */
@@ -64,19 +72,23 @@ const timberEnd = new DrawnTile('timber_end', (c, rng) => {
   });
 }, { tiling: 'none' });
 
-/** A horizontal beam: grain runs along it, the top edge catches light and the underside is in shade, two dowel heads. */
+/**
+ * A horizontal beam: grain runs along it, in a warmer and lighter wood than the posts so a frame reads as post and beam;
+ * the top edge catches light, the underside is in shade, and two dowel heads sit in the face.
+ */
+const BEAM = palette('#3b281b', '#523827', '#6c4d37', '#8a6648');
 const timberBeam = new DrawnTile('timber_beam', (c, rng) => {
   const field = ranks(layers(rng, [[2, 10, 1], [3, 16, 0.5]]));
   c.paint((x, y) => {
-    const edge = y < 2 ? 0.28 - y * 0.08 : y >= N - 2 ? -0.3 : 0;
-    return ramp(TIMBER, clamp01(field[at(x, y)] * 0.7 + 0.15 + edge));
+    const edge = y < 2 ? 0.3 - y * 0.08 : y >= N - 2 ? -0.3 : 0;
+    return ramp(BEAM, clamp01(field[at(x, y)] * 0.7 + 0.2 + edge));
   });
   for (const x of [3, 11]) {
-    c.set(x, 8, hex('#6e5039'));
-    c.set(x + 1, 8, TIMBER[0]);
-    c.set(x, 9, TIMBER[0]);
+    c.set(x, 8, hex('#9a7552'));
+    c.set(x + 1, 8, BEAM[0]);
+    c.set(x, 9, BEAM[0]);
   }
-  glints(c, rng, hex('#7c5c42'), 6, (_, y) => y > 1 && y < N - 2);
+  glints(c, rng, hex('#a58260'), 6, (_, y) => y > 1 && y < N - 2);
 }, { tiling: 'x' });
 
 // --- Bamboo --------------------------------------------------------------------------------------------------

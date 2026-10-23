@@ -1,7 +1,7 @@
 import { BlockDef, BlockRegistry } from '../../engine/BlockRegistry';
 import {
-  BlockModel, BoxModel, CropModel, CrossModel, FenceModel, PaneModel, PlateModel, SLAB_BOTTOM, SLAB_TOP, SlabModel,
-  StairModel, stairState,
+  BlockModel, BoxModel, CropModel, CrossModel, FenceModel, OrientedBoxModel, PaneModel, PlateModel, SLAB_BOTTOM, SLAB_TOP,
+  SlabModel, StairModel, stairState,
 } from '../../engine/models';
 import { CameraPose, FrameBox, SandboxLabel, Stage, StageBlock, shortName } from './sandboxLayout';
 
@@ -9,7 +9,7 @@ import { CameraPose, FrameBox, SandboxLabel, Stage, StageBlock, shortName } from
 // from stairs, slabs, fences and panes. Like the block sandbox it is built from the registry, so a block another
 // branch gives a model shows up here without a change; the page draws it through the real mesher.
 
-export type ModelView = 'all' | 'close' | 'joins' | 'house';
+export type ModelView = 'all' | 'close' | 'joins' | 'house' | 'oriented';
 
 export interface ModelSandboxOptions {
   view: ModelView;
@@ -21,7 +21,7 @@ export const parseModelSandbox = (search: string): ModelSandboxOptions | null =>
   const params = new URLSearchParams(search);
   if (params.get('sandbox') !== 'models') return null;
   const v = params.get('view');
-  const view: ModelView = v === 'close' || v === 'joins' || v === 'house' ? v : 'all';
+  const view: ModelView = v === 'close' || v === 'joins' || v === 'house' || v === 'oriented' ? v : 'all';
 
   let cam: CameraPose | null = null;
   const camParam = params.get('cam');
@@ -36,7 +36,7 @@ export const parseModelSandbox = (search: string): ModelSandboxOptions | null =>
 
 // --- Kinds -------------------------------------------------------------------------------------------------
 
-export type ModelKind = 'cube' | 'slab' | 'stairs' | 'fence' | 'pane' | 'cross' | 'crop' | 'box' | 'plate' | 'other';
+export type ModelKind = 'cube' | 'slab' | 'stairs' | 'fence' | 'pane' | 'cross' | 'crop' | 'box' | 'plate' | 'oriented' | 'other';
 
 /** What a model is, for grouping. By class, not by name: the production build mangles class names. */
 export const modelKind = (model: BlockModel): ModelKind => {
@@ -49,6 +49,7 @@ export const modelKind = (model: BlockModel): ModelKind => {
   if (model instanceof CropModel) return 'crop';
   if (model instanceof BoxModel) return 'box';
   if (model instanceof PlateModel) return 'plate';
+  if (model instanceof OrientedBoxModel) return 'oriented';
   return 'other';
 };
 
@@ -58,6 +59,7 @@ export const FACING_NAMES = ['north', 'east', 'south', 'west'] as const;
 export const statesOf = (kind: ModelKind): number[] => {
   if (kind === 'stairs') return [0, 1, 2, 3, 4, 5, 6, 7];
   if (kind === 'slab') return [SLAB_BOTTOM, SLAB_TOP];
+  if (kind === 'oriented') return [0, 1, 2, 3];
   return [0];
 };
 
@@ -143,12 +145,13 @@ const SURROUNDS: readonly Surround[] = [
 ];
 
 /** Fences and panes keep nothing in their state; this shows how they join what stands beside them. */
-const connectSection = (registry: BlockRegistry, kind: 'fence' | 'pane'): ModelSection => {
-  const def = blocksOfKind(registry, [kind])[0];
+const connectSection = (registry: BlockRegistry, kind: 'fence' | 'pane', every: boolean): ModelSection => {
+  // The close view of the joins shows the first of each (the wood fence, the glass pane); the whole page shows them all.
+  const defs = blocksOfKind(registry, [kind]).slice(0, every ? Infinity : 1);
   const stone = registry.byName('voxelverse:stone_brick');
   const glass = registry.byName('voxelverse:glass');
   const cells: ModelCell[] = [];
-  if (def) {
+  for (const def of defs) {
     for (const s of SURROUNDS) {
       const blocks: StageBlock[] = [{ id: def.id, x: 1, y: 0, z: 1 }];
       for (const [dx, dz] of s.same) blocks.push({ id: def.id, x: 1 + dx, y: 0, z: 1 + dz });
@@ -168,6 +171,24 @@ const connectSection = (registry: BlockRegistry, kind: 'fence' | 'pane'): ModelS
       note: 'joins panes and every solid cube, glass too; alone it draws the cross',
       cols: 8, stepX: 4, stepZ: 5, cells,
     };
+};
+
+/**
+ * The models that stand four ways (ridge caps, awnings, curtains, signs): one cell per block and state, captioned with the
+ * number of quarter turns clockwise from how the boxes are written.
+ */
+const orientedSection = (registry: BlockRegistry, cols = 8): ModelSection => {
+  const cells: ModelCell[] = [];
+  for (const def of blocksOfKind(registry, ['oriented'])) {
+    for (const state of statesOf('oriented')) {
+      cells.push(single(def, state, state === 0 ? shortName(def) : `turn ${state}`, `${state === 0 ? `#${def.id} ` : ''}s${state}`));
+    }
+  }
+  return {
+    title: 'oriented boxes: 4 states each',
+    note: 'bits 0-1: quarter turns clockwise from how the boxes are written; the texture turns with them',
+    cols, stepX: 3, stepZ: 3, cells,
+  };
 };
 
 /** Every other model: one look each, with its kind under it. */
@@ -302,10 +323,11 @@ const sectionsFor = (registry: BlockRegistry, view: ModelView) => {
   // The close view is narrow so it can be near: the four facings in a row, then the same four upside down.
   const stairs = shapedSection(registry, 'stairs', close ? 1 : Infinity, close ? 4 : 8, close ? 2 : 3, close ? 4 : 3);
   const slabs = shapedSection(registry, 'slab', close ? 2 : Infinity, close ? 4 : 8, close ? 2 : 3);
-  const fence = connectSection(registry, 'fence');
-  const pane = connectSection(registry, 'pane');
+  const fence = connectSection(registry, 'fence', view === 'all');
+  const pane = connectSection(registry, 'pane', view === 'all');
   const other = otherSection(registry);
-  return { stairs, slabs, fence, pane, other };
+  const oriented = orientedSection(registry, view === 'oriented' ? 8 : 4);
+  return { stairs, slabs, fence, pane, other, oriented };
 };
 
 export interface ModelsLayout extends FrameBox {
@@ -378,6 +400,11 @@ export const layoutModels = (registry: BlockRegistry, view: ModelView = 'all'): 
     };
   }
 
+  if (view === 'oriented') {
+    const { width, depth } = stack([s.oriented], 0, 0);
+    return { stages: [{ blocks, shiftX: 0, shiftZ: 0 }], labels, cells, sections: shown, view, width, depth, height: 1.4, elevation: 36 };
+  }
+
   if (view === 'joins') {
     const { width, depth } = stack([s.fence, s.pane], 0, 0);
     return { stages: [{ blocks, shiftX: 0, shiftZ: 0 }], labels, cells, sections: shown, view, width, depth, height: 1.6, elevation: 38 };
@@ -386,7 +413,7 @@ export const layoutModels = (registry: BlockRegistry, view: ModelView = 'all'): 
   const left = stack([s.stairs, s.slabs], 0, 0);
   const rightX = left.width + COLUMN_GAP;
   const h = placeHouse(rightX, 0);
-  const right = stack([s.fence, s.pane, s.other], rightX, h.depth + SECTION_GAP);
+  const right = stack([s.fence, s.pane, s.oriented, s.other], rightX, h.depth + SECTION_GAP);
   return {
     stages: [{ blocks, shiftX: 0, shiftZ: 0 }], labels, cells, sections: shown, view,
     width: rightX + Math.max(right.width, h.width), depth: Math.max(left.depth, h.depth + SECTION_GAP + right.depth),

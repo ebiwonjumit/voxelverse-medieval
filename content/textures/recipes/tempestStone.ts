@@ -54,8 +54,8 @@ const stonePaving = new DrawnTile('stone_paving', (c, rng) => {
  * disc is its upper arch. Discs are drawn at wrapped positions so the tile repeats.
  */
 const fanPaving = new DrawnTile('fan_paving', (c, rng) => {
-  const stone = palette('#a2938c', '#b8aaa2', '#cdbfb6', '#e0d4cb');
-  const joint = hex('#74665f');
+  const stone = palette('#b0a099', '#c6b8af', '#d9ccc2', '#ebe0d6');
+  const joint = hex('#7c6e66');
   const R = 4.2;
   const disc = (cx: number, cy: number, tone: number): void => {
     for (let y = Math.floor(cy - R); y <= Math.ceil(cy + R); y++) {

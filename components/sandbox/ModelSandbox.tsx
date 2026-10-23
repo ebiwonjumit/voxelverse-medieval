@@ -10,6 +10,7 @@ import { ModelSandboxOptions, layoutModels } from './modelsLayout';
 //   ?sandbox=models&view=close          one stair block in all 8 states and two slab blocks, close up
 //   ?sandbox=models&view=joins          how a fence and a pane join their neighbours, close up
 //   ?sandbox=models&view=house          the house alone, from the south east
+//   ?sandbox=models&view=oriented       the ridge caps, awnings, curtains and signs in their four turns
 //   ?sandbox=models&cam=px,py,pz,tx,ty,tz     explicit camera
 
 const ModelSandbox: React.FC<{ options: ModelSandboxOptions }> = ({ options }) => {

@@ -119,6 +119,32 @@ describe('Tempest faces and tiles', () => {
     expect(all.slice(all.length - 63)).toEqual(tileNames);
   });
 
+  it('share a top tile only inside a kit: a roof with its stairs and slab, a ridge with its horn, the parts of a lantern', () => {
+    // The guard in tests/engine/blocks.test.ts covers the older ranges. Here every deliberate share is listed, so a tile
+    // reused by accident for something else shows up as a new line.
+    const byTop = new Map<string, string[]>();
+    for (const id of ids) {
+      const list = byTop.get(defOf(id).faces!.top) ?? [];
+      list.push(shortName(id));
+      byTop.set(defOf(id).faces!.top, list);
+    }
+    const shared = [...byTop.entries()].filter(([, names]) => names.length > 1).map(([tile, names]) => `${tile}: ${names.join(',')}`);
+    expect(shared.sort()).toEqual([
+      'black_lacquer: paper_lantern_red,paper_lantern_striped,low_table',
+      'dark_ridge: dark_ridge,dark_ridge_horn',
+      'dark_tile_roof: dark_tile_roof,dark_tile_roof_stairs,dark_tile_roof_slab',
+      'green_tile_roof: green_tile_roof,green_tile_roof_stairs,green_tile_roof_slab',
+      'lantern_stone: stone_lantern_base,stone_lantern_light,stone_lantern_cap,stone_bollard',
+      'mossy_stone: mossy_stone,mossy_stone_slab,mossy_stone_stairs',
+      'plaster_white: plaster_white,plaster_stairs,white_column',
+      'teal_roof: teal_roof,teal_roof_stairs,teal_roof_slab',
+      'terracotta_ridge: terracotta_ridge,terracotta_ridge_horn',
+      'terracotta_roof: terracotta_roof,terracotta_roof_stairs,terracotta_roof_slab',
+      'thatch_roof: thatch_roof,thatch_roof_stairs,thatch_roof_slab',
+      'vermilion_planks: vermilion_planks,vermilion_rail',
+    ].sort());
+  });
+
   it('keep opaque blocks to opaque tiles and cutout tiles to see-through blocks', () => {
     for (const id of ids) {
       const def = defOf(id);

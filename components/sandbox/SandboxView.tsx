@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Html, OrbitControls } from '@react-three/drei';
-import { DataArrayTexture, DoubleSide, Group, Mesh, PerspectiveCamera } from 'three';
+import { DataArrayTexture, DoubleSide, Group, Mesh, PerspectiveCamera, Vector3 } from 'three';
 import { createDefaultRegistry } from '../../content/blocks';
 import { createDefaultTextureLayout } from '../../content/textures/layout';
 import { createDefaultCatalog } from '../../content/textures/TextureCatalog';
@@ -23,6 +23,14 @@ import {
 const BACKGROUND = '#2b2f36';
 const FLOOR = '#30353c';
 
+// ?night=1: the same page with the block light baked into the meshes and the sky light turned down to the game's night
+// values (render/SkySystem.ts: NIGHT_DAYLIGHT and the first palette key's sky light colour), so lanterns and lit screens
+// show what they do in the world after dark.
+const NIGHT_DAYLIGHT = 0.15;
+const NIGHT_SKY_LIGHT: [number, number, number] = [0.55, 0.72, 1.15];
+const NIGHT_BACKGROUND = '#070b18';
+const NIGHT_FLOOR = '#0c1018';
+
 // Frames to wait after building before saying the picture is final, so the screenshot sees the textured result.
 const READY_FRAMES = 4;
 
@@ -41,9 +49,11 @@ interface SceneProps {
   build: (registry: BlockRegistry) => SandboxContent;
   cam: CameraPose | null;
   onCount: (n: number) => void;
+  night: boolean;
+  fov: number;
 }
 
-const Scene: React.FC<SceneProps> = ({ build, cam, onCount }) => {
+const Scene: React.FC<SceneProps> = ({ build, cam, onCount, night, fov }) => {
   const { camera, size } = useThree();
   const group = useRef<Group>(null);
   const controls = useRef<any>(null);
@@ -56,12 +66,14 @@ const Scene: React.FC<SceneProps> = ({ build, cam, onCount }) => {
     const atlas = buildAtlas(catalog, textureLayout);
     const textures: { value: DataArrayTexture | null } = { value: atlas.texture };
     const time = { value: 0 };
-    const materials = createBlockMaterials(textures, time);
+    const materials = createBlockMaterials(
+      textures, time, { value: night ? NIGHT_DAYLIGHT : 1 }, { value: new Vector3(...(night ? NIGHT_SKY_LIGHT : [1, 1, 1])) },
+    );
     const layout = build(registry);
 
     const meshes: Mesh[] = [];
     for (const stage of layout.stages) {
-      for (const { mesh, offsetX, offsetZ } of meshStage(stage, registry, textureLayout)) {
+      for (const { mesh, offsetX, offsetZ } of meshStage(stage, registry, textureLayout, night)) {
         for (const name of BUCKET_NAMES) {
           const bucket = mesh[name];
           if (bucket.indices.length === 0) continue;
@@ -72,7 +84,7 @@ const Scene: React.FC<SceneProps> = ({ build, cam, onCount }) => {
       }
     }
     return { layout, meshes, materials, atlas, time };
-  }, [build]);
+  }, [build, night]);
 
   useEffect(() => {
     const node = group.current;
@@ -98,7 +110,7 @@ const Scene: React.FC<SceneProps> = ({ build, cam, onCount }) => {
   );
   useEffect(() => {
     const cam = camera as PerspectiveCamera;
-    cam.fov = CAMERA_FOV;
+    cam.fov = fov;
     cam.near = 0.1;
     cam.far = 400;
     cam.position.set(...pose.position);
@@ -106,7 +118,7 @@ const Scene: React.FC<SceneProps> = ({ build, cam, onCount }) => {
     cam.updateProjectionMatrix();
     controls.current?.target.set(...pose.target);
     controls.current?.update();
-  }, [camera, pose]);
+  }, [camera, pose, fov]);
 
   const frames = useRef(0);
   useEffect(() => {
@@ -125,19 +137,19 @@ const Scene: React.FC<SceneProps> = ({ build, cam, onCount }) => {
 
   return (
     <>
-      <color attach="background" args={[BACKGROUND]} />
+      <color attach="background" args={[night ? NIGHT_BACKGROUND : BACKGROUND]} />
       {/* The blocks take no light from the scene: their materials shade from the baked light in the vertices (here open sky,
           daylight 1), so every block shows the way it does at noon. These lights are for the floor plane only. */}
-      <ambientLight intensity={1.5} />
-      <directionalLight position={[-8, 14, depth + 10]} intensity={1.9} />
-      <directionalLight position={[width + 10, 6, depth + 4]} intensity={0.8} />
+      <ambientLight intensity={night ? 0.12 : 1.5} />
+      <directionalLight position={[-8, 14, depth + 10]} intensity={night ? 0.1 : 1.9} />
+      <directionalLight position={[width + 10, 6, depth + 4]} intensity={night ? 0.04 : 0.8} />
 
       <mesh rotation-x={-Math.PI / 2} position={[width / 2, -0.01, depth / 2 + 0.5]}>
         <planeGeometry args={[floorSize, floorSize]} />
-        <meshStandardMaterial color={FLOOR} roughness={1} metalness={0} side={DoubleSide} />
+        <meshStandardMaterial color={night ? NIGHT_FLOOR : FLOOR} roughness={1} metalness={0} side={DoubleSide} />
       </mesh>
       <gridHelper
-        args={[floorSize, floorSize, '#555c67', '#444a54']}
+        args={[floorSize, floorSize, night ? '#1d2433' : '#555c67', night ? '#151b28' : '#444a54']}
         position={[width / 2, 0, depth / 2 + 0.5]}
       />
 
@@ -173,9 +185,13 @@ export interface SandboxViewProps {
   caption: string;
   build: (registry: BlockRegistry) => SandboxContent;
   cam: CameraPose | null;
+  /** Bake block light and show a night sky (?night=1). */
+  night?: boolean;
+  /** Vertical field of view in degrees (?fov=), CAMERA_FOV when left out. The default camera is framed for CAMERA_FOV. */
+  fov?: number;
 }
 
-const SandboxView: React.FC<SandboxViewProps> = ({ title, caption, build, cam }) => {
+const SandboxView: React.FC<SandboxViewProps> = ({ title, caption, build, cam, night = false, fov = CAMERA_FOV }) => {
   const [count, setCount] = React.useState(0);
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', background: BACKGROUND }}>
@@ -188,8 +204,8 @@ const SandboxView: React.FC<SandboxViewProps> = ({ title, caption, build, cam })
         <div style={{ fontSize: 15, fontWeight: 600, color: '#fff' }}>{title}</div>
         <div>{count} {caption} Drag to orbit, wheel to zoom.</div>
       </div>
-      <Canvas flat camera={{ fov: CAMERA_FOV, position: [10, 14, 20] }}>
-        <Scene build={build} cam={cam} onCount={setCount} />
+      <Canvas flat camera={{ fov, position: [10, 14, 20] }}>
+        <Scene build={build} cam={cam} onCount={setCount} night={night} fov={fov} />
       </Canvas>
     </div>
   );

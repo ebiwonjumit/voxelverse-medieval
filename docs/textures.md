@@ -16,8 +16,8 @@ The folder follows the layer rules for `content/`: no Three.js, no React, no DOM
 | `Rng.ts` | `SeededRng` (mulberry32) and `hashString`. Every tile has a fixed default seed, the hash of its name. |
 | `Pixels.ts` | Hex colours, palettes, `ramp` (pick a shade by value) and `Canvas`, a 16x16 RGBA buffer whose coordinates wrap. |
 | `noise.ts` | Wrapping value noise (`tileNoise`, `layers`), `ranks`, wrapping Voronoi cells and diagonal vein waves. Everything wraps at the tile edge, so patterns built from it tile without extra work. |
-| `recipes/` | The recipe classes, grouped as `natural`, `masonry`, `wood`, `materials`, `plants`, `wilds` (cedar, blossom and snowy pine foliage, gravel, moss, granite, mud, podzol and the soil sides) and `undergrowth` (bamboo, fern, reeds, wildflowers, mushrooms and the litter carpets). |
-| `TextureCatalog.ts` | Names mapped to recipes. `createDefaultCatalog()` registers the 78 tiles below. |
+| `recipes/` | The recipe classes, grouped as `natural`, `masonry`, `wood`, `materials`, `plants`, `wilds` (cedar, blossom and snowy pine foliage, gravel, moss, granite, mud, podzol and the soil sides) and `undergrowth` (bamboo, fern, reeds, wildflowers, mushrooms and the litter carpets). The Tempest tiles are in `tempestWood`, `tempestMasonry`, `tempestStone`, `tempestLight` and `tempestProps`, collected by `tempest.ts` and drawn with the helpers of `tempestKit` (`DrawnTile`, a recipe that is a name and a painting function). |
+| `TextureCatalog.ts` | Names mapped to recipes. `createDefaultCatalog()` registers the 141 tiles below (78 legacy and nature tiles, then the 63 of Tempest). |
 | `tint.ts` | `applyTint(pixels, mask, rgb)`, the multiply the renderer does for tinted tiles (the shader does the same). |
 | `layout.ts` | `createDefaultTextureLayout(registry)`: describes the catalog to `engine/TextureLayout` and builds the layout the game uses. |
 | `recipes/plants.ts` | `TallGrass`, `Sugarcane`, `Flower`, `LilyPad` and `Apple`, the cutout tiles of the small plants. |
@@ -47,8 +47,9 @@ catalog.tintMask('grass_side');      // Uint8Array(256), 255 where the biome col
 | Wilderness plants | `bamboo`, `bamboo_leaves`, `fern`, `reeds`, `wildflower_blue`, `wildflower_white`, `wildflower_pink`, `wildflower_purple`, `mushroom_red`, `mushroom_brown` (cutouts for crossed quads), `fallen_leaves`, `sakura_petals` (cutouts for a thin plate on the ground) |
 | Wilderness ground | `gravel`, `moss`, `moss_side`, `podzol`, `podzol_side`, `granite`, `mud` |
 | Utility | `speckle`: neutral grey grain, the generic `Speckle` recipe |
+| Tempest | 63 tiles for the blocks of ids 128 to 199: timber, plaster, five roofs, lanterns, paving, props and cloth. Listed in [tempest-blocks.md](tempest-blocks.md#tiles) |
 
-Tile names are not block names. Which tile goes on which face of which block is decided by the `faces` of each block in `content/blocks.ts` (the legacy blocks) and `content/blocksNature.ts` (the wilderness blocks).
+Tile names are not block names. Which tile goes on which face of which block is decided by the `faces` of each block in `content/blocks.ts` (the legacy blocks), `content/blocksNature.ts` (the wilderness blocks) and `content/blocksTempest.ts` (the city, see [tempest-blocks.md](tempest-blocks.md)).
 
 ## Nature block tiles
 
@@ -82,6 +83,12 @@ The 23 blocks in `content/blocksNature.ts` (ids 48 to 70, [worldgen.md](worldgen
 **Solid and opaque flags are unchanged and now checked against the tiles:** blocks whose faces are cutouts (leaves, plants, litter) are not opaque, cubes with opaque tiles are, plants are not solid and leaves are.
 
 **Plant model choices.** `CrossModel` maps the tile onto two planes crossing on the diagonals of the cell (each plane is `width` x 1.414 long), so tall things use `CrossModel(0.9, 1)` like sugarcane. A mushroom is a small thing whose tile fills its plane, so it uses a narrower, shorter cross. Fallen leaves and petals would look wrong standing up, so they lie on a thin plate. Registration is in `content/blocksNature.ts`; the `faces`, the `model` and the `tint` of a block live next to its colour.
+
+## Tempest block tiles
+
+The 72 blocks of `content/blocksTempest.ts` (ids 128 to 199) have 63 tiles, one table of blocks with their tiles, models and light in [tempest-blocks.md](tempest-blocks.md). They follow the art rules below and add two habits of their own. Tiles that a shaped block lays over the whole cell (a lantern, a barrel, a futon) are **drawn pixel by pixel as a picture of the object** where it stands, and the model's `cell` mapping shows the part each box covers, so the tile's comment says which rows and columns the boxes use. And a tile is told apart from its neighbours by its pattern and not only its colour: the five roofs are a barrel tile, a bold-ridged kawara, flat glazed tiles, standing seams and thatch. No Tempest tile takes a biome tint (tested). The sandbox shows them with `?sandbox=blocks&view=tempest`, by day or with `&night=1`:
+
+![The Tempest blocks](screens/p7/tempest-blocks.png)
 
 ## Brightness against the flat colours (art review polish)
 
@@ -133,7 +140,7 @@ Every textured block used to be a flat colour, and the world was tuned against t
 2. For each partly tinted tile (the grass side) a second layer holding its tint mask, named `<tile>#tint`.
 3. One flat tile per distinct registry colour that a block without textures needs, named `flat:#rrggbb`, and the magenta `flat:#ff00ff` that unregistered ids use.
 
-81 layers now (78 tiles, the grass side's tint overlay, and the flat `#000000` of air and `#ff00ff` of unknown ids), well under the 256 every WebGL2 device guarantees. Blocks added later by other branches add at most one flat layer per new colour until they get tiles of their own.
+144 layers now (141 tiles, the grass side's tint overlay, and the flat `#000000` of air and `#ff00ff` of unknown ids), well under the 256 every WebGL2 device guarantees (it was 81 before the Tempest tiles). Blocks added later by other branches add at most one flat layer per new colour until they get tiles of their own.
 
 How the texture is set up, and why:
 
@@ -158,6 +165,10 @@ It draws through the same path as the world, not a copy of it: the cubes are mes
 | --- | --- |
 | `?sandbox=blocks` | every block, plus the biome rows |
 | `?sandbox=blocks&view=nature` | the 23 nature blocks (ids 48 to 70) six to a row, the picture above |
+| `?sandbox=blocks&view=tempest` | the 72 Tempest blocks (ids 128 to 199) nine to a row ([tempest-blocks.md](tempest-blocks.md)) |
+| `?sandbox=blocks&view=street` | a Tempest street built from the set: shops, a hall, a plaza, a garden |
+| `?sandbox=blocks&night=1` | any of these with the block light baked in (the world's own light engine) under the game's night sky values, on a floor of stone; `&sky=night` is the same |
+| `?sandbox=blocks&fov=60` | the camera's field of view in degrees (20 to 110), for eye-level shots with `&cam=` |
 | `?sandbox=blocks&cols=6` | the columns of the grid, with any `focus` or `view` |
 | `?sandbox=blocks&view=close` | eight materials (grass, planks, stone brick, log, cobblestone, red brick, marble, gold), close up |
 | `?sandbox=blocks&focus=wood_plank,marble` | any blocks by short name (the registry name without `voxelverse:`), close up, four to a row |

@@ -6,6 +6,9 @@ import { CellReader } from '../../meshing/CellReader';
 import { MeshData, meshChunk } from '../../meshing/ChunkMesher';
 import { BIOME_ZONES } from '../../meshing/biomeTint';
 import { NatureBlock, natureBlockIds } from '../../content/blocksNature';
+import { tempestBlockNames } from '../../content/blocksTempest';
+import { Chunk } from '../../engine/Chunk';
+import { ChunkGrid, computeChunkLight } from '../../meshing/LightEngine';
 
 // The pure half of the ?sandbox=blocks page: which block goes where, which blocks to mesh together and where
 // the camera starts. Three.js and React stay in BlockSandbox.tsx, so all of this runs in the tests.
@@ -21,6 +24,11 @@ export const CLOSE_FOCUS = ['grass', 'wood_plank', 'stone_brick', 'wood_log', 'c
 export const NATURE_FOCUS = natureBlockIds().map((id) => NatureBlock[id].toLowerCase());
 /** Columns of the nature view: wide, so the 23 blocks fit four rows. */
 export const NATURE_COLS = 6;
+
+/** Blocks shown by ?sandbox=blocks&view=tempest: the Tempest set, ids 128 to 199, in id order. */
+export const TEMPEST_FOCUS = tempestBlockNames();
+/** Columns of the Tempest view: nine wide, so the 72 blocks fit eight rows. */
+export const TEMPEST_COLS = 9;
 
 /** Distance between neighbouring cubes, in blocks. Labels are wide, so the gaps are wider than the cubes. */
 export const SLOT_SPACING_X = 3;
@@ -38,6 +46,12 @@ export interface SandboxOptions {
   cam: CameraPose | null;
   /** Grid columns from ?cols=n, or the view's own (the nature view is eight wide). Left out when not given. */
   cols?: number;
+  /** ?night=1 (or ?sky=night): bake block light into the stage and show it under a night sky. Left out when not given. */
+  night?: boolean;
+  /** ?view=street: the Tempest street scene instead of a grid of blocks. Left out when not given. */
+  scene?: 'street';
+  /** ?fov=degrees (20 to 110): the camera's field of view, for eye-level views. Left out when not given. */
+  fov?: number;
 }
 
 /** Reads the page's query string. Returns null unless it says sandbox=blocks, so nothing else selects the page. */
@@ -49,11 +63,15 @@ export const parseSandbox = (search: string): SandboxOptions | null => {
   const view = params.get('view');
   const focus = focusParam
     ? focusParam.split(',').map((s) => s.trim()).filter(Boolean)
-    : view === 'close' ? CLOSE_FOCUS : view === 'nature' ? NATURE_FOCUS : null;
+    : view === 'close' ? CLOSE_FOCUS : view === 'nature' ? NATURE_FOCUS : view === 'tempest' ? TEMPEST_FOCUS : null;
   const colsParam = Number(params.get('cols'));
   const cols = Number.isInteger(colsParam) && colsParam >= 1 && colsParam <= 40
     ? colsParam
-    : !focusParam && view === 'nature' ? NATURE_COLS : undefined;
+    : !focusParam && view === 'nature' ? NATURE_COLS : !focusParam && view === 'tempest' ? TEMPEST_COLS : undefined;
+  const night = params.get('night') === '1' || params.get('sky') === 'night';
+  const scene = view === 'street' ? ('street' as const) : undefined;
+  const fovParam = Number(params.get('fov'));
+  const fov = Number.isFinite(fovParam) && fovParam >= 20 && fovParam <= 110 && params.get('fov') ? fovParam : undefined;
 
   let cam: CameraPose | null = null;
   const camParam = params.get('cam');
@@ -63,7 +81,11 @@ export const parseSandbox = (search: string): SandboxOptions | null => {
       cam = { position: [n[0], n[1], n[2]], target: [n[3], n[4], n[5]] };
     }
   }
-  return { focus: focus && focus.length > 0 ? focus : null, cam, ...(cols !== undefined ? { cols } : {}) };
+  return {
+    focus: focus && focus.length > 0 ? focus : null, cam,
+    ...(cols !== undefined ? { cols } : {}), ...(night ? { night } : {}), ...(scene ? { scene } : {}),
+    ...(fov !== undefined ? { fov } : {}),
+  };
 };
 
 /** "voxelverse:wood_plank" shown as "wood_plank". */
@@ -211,8 +233,39 @@ export interface StageMesh {
   offsetZ: number;
 }
 
-/** Meshes a stage with the real mesher, one chunk at a time, and says where each result goes. */
-export const meshStage = (stage: Stage, registry: BlockRegistry, layout: TextureLayout): StageMesh[] => {
+/**
+ * Light for the chunks of a stage, the way the world's worker computes it: every chunk the stage touches and the ring
+ * round them, so a lantern at the edge of one chunk still lights the next. Blocks beyond the stage are open sky.
+ */
+const stageLight = (blocks: Stage['blocks']): ChunkGrid => {
+  const grid = new ChunkGrid();
+  const get = (cx: number, cz: number): Chunk => {
+    let chunk = grid.getChunk(cx, cz);
+    if (!chunk) {
+      chunk = new Chunk(cx, cz);
+      grid.add(chunk);
+    }
+    return chunk;
+  };
+  const touched = new Map<string, [number, number]>();
+  for (const b of blocks) {
+    const cx = Math.floor(b.x / CHUNK_SIZE);
+    const cz = Math.floor(b.z / CHUNK_SIZE);
+    get(cx, cz).setCell(b.x - cx * CHUNK_SIZE, b.y, b.z - cz * CHUNK_SIZE, packCell(b.id, b.state ?? 0));
+    touched.set(`${cx},${cz}`, [cx, cz]);
+  }
+  // The light engine wants the chunk and its eight neighbours; the empty ones read as open sky.
+  for (const [cx, cz] of touched.values()) {
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) get(cx + dx, cz + dz);
+  }
+  return grid;
+};
+
+/**
+ * Meshes a stage with the real mesher, one chunk at a time, and says where each result goes. With `lit` the stage's
+ * block light is baked into the vertices (sky light is still open everywhere), which is what a night view needs.
+ */
+export const meshStage = (stage: Stage, registry: BlockRegistry, layout: TextureLayout, lit = false): StageMesh[] => {
   const reader = new StageReader(stage.blocks);
   const chunks = new Map<string, [number, number]>();
   for (const b of stage.blocks) {
@@ -220,10 +273,11 @@ export const meshStage = (stage: Stage, registry: BlockRegistry, layout: Texture
     const cz = Math.floor(b.z / CHUNK_SIZE);
     chunks.set(`${cx},${cz}`, [cx, cz]);
   }
+  const grid = lit ? stageLight(stage.blocks) : null;
   const out: StageMesh[] = [];
   for (const [cx, cz] of chunks.values()) {
     out.push({
-      mesh: meshChunk(reader, cx, cz, registry, { layout }),
+      mesh: meshChunk(reader, cx, cz, registry, { layout, light: grid ? computeChunkLight(grid, cx, cz, registry) : undefined }),
       offsetX: cx * CHUNK_SIZE + stage.shiftX,
       offsetZ: cz * CHUNK_SIZE + stage.shiftZ,
     });
