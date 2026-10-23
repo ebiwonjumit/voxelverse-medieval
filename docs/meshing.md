@@ -29,7 +29,7 @@
 
 Every face is four vertices and six indices, counter-clockwise from outside. `meshTransferables(mesh)` lists the 21 buffers for `postMessage`.
 
-- Positions are chunk-local: x and z run 0 to 32, y is the world height. A block at (x, y, z) fills the unit cube from (x, y, z) to (x+1, y+1, z+1). The old renderer centred cubes on whole numbers, so the render code must place each chunk mesh half a block back on all three axes to look the same and to match the player's `Math.round` collision.
+- Positions are chunk-local: x and z run 0 to 32, y is the world height. A block at (x, y, z) fills the unit cube from (x, y, z) to (x+1, y+1, z+1). The old renderer centred cubes on whole numbers, so the render code must place each chunk mesh half a block back on all three axes to look the same and to match the player's collision, which uses the same block-centred coordinates (see [collision.md](collision.md)).
 - Vertex colours are linear rgb (ambient occlusion, when it is switched on, see below), so the material needs `vertexColors: true`. The block's own colour no longer lives in the vertices: it comes from the texture layer. Face shading is not baked in: the Three.js lights do that through the normals.
 - Buckets: `opaque` is every block the registry marks opaque, whatever its shape (cubes, stairs, slabs, farmland). `water` is water. `cutout` is everything else that draws: leaves, glass, panes, fences, plants and the small boxes. Each bucket has its own material (see [renderer.md](renderer.md)): no alpha test for opaque, alpha test for cutout, blending and the wave for water.
 

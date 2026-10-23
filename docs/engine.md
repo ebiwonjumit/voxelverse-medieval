@@ -6,7 +6,7 @@ Phase 1 of the rebuild plan added a block and chunk layer under the game. The pl
 
 | Folder | What is in it |
 | --- | --- |
-| `engine/` | Voxel core: `coords`, `cell`, `BlockRegistry`, `Chunk`, `ChunkStore`, `VoxelWorld` and the `WorldGenerator` interface. No Three.js, no React. `engine/models/` holds the block models, see [models.md](models.md). |
+| `engine/` | Voxel core: `coords`, `cell`, `BlockRegistry`, `Chunk`, `ChunkStore`, `VoxelWorld`, the `WorldGenerator` interface and box `collision` ([collision.md](collision.md)). No Three.js, no React. `engine/models/` holds the block models, see [models.md](models.md). |
 | `content/` | Block definitions. `blocks.ts` registers the legacy blocks, `blocksShaped.ts` the stairs, slabs and pane (ids 80 to 92). `content/textures/` holds the generated pixel-art tiles, see [textures.md](textures.md). |
 | `meshing/` | Pure chunk mesher and the mesh worker pool, worker-safe. See [meshing.md](meshing.md). |
 | `render/` | The Three.js chunk renderer. See [renderer.md](renderer.md). |
@@ -64,7 +64,7 @@ voxelWorld.loadChunk(cx, cz);   // generate and keep a chunk
 voxelWorld.unloadChunk(cx, cz);
 ```
 
-Loaded chunks answer from their stored cells. Anything else, which means a chunk that is not loaded or a height outside the world, is answered by the generator one block at a time. So the player's collision checks never cause a chunk to be generated.
+Loaded chunks answer from their stored cells. Anything else, which means a chunk that is not loaded or a height outside the world, is answered by the generator one block at a time. So the player's collision checks never cause a chunk to be generated. Collision reads whole cells through `getCell`, so it sees block models and their state, not only the solid flag.
 
 ## Generator interface
 
@@ -99,6 +99,7 @@ World (React) -> ChunkRenderer.update(x, z)
   upload queue, 2 geometries per frame
   Mesh per bucket in ChunkRenderer.group, three shared materials sampling one texture array
   collision and HUD: voxelWorld (main thread, never generates chunks for rendering)
+    Player: moveAABB(voxelWorld, player box, velocity * dt) against the block models, see collision.md
 ```
 
 - **Two copies of the world, on purpose.** Workers generate the chunk they mesh. The main thread keeps its own `VoxelWorld` for collision and the HUD, answered by the generator block by block, so physics never waits on rendering. Both use the same `LegacyZoneAdapter`, and the parity tests keep the generator's `sampleBlock` and `generateChunk` identical, which is why chunk borders meet without a seam.

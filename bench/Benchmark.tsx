@@ -64,8 +64,10 @@ const SOAK_INTERVAL = 5;
 
 const SPRINT = MOVE_SPEED * 2;
 const JUMP_PERIOD = 1.2; // seconds between jumps
-const JUMP_AIR_TIME = 0.89; // 2 * JUMP_FORCE / GRAVITY
-const JUMP_PEAK = 1.78;     // JUMP_FORCE^2 / (2 * GRAVITY)
+// The jump is fixed at the Phase 0 values (JUMP_FORCE 8) so runs stay comparable with the baseline, even though
+// the player has jumped about 1.25 blocks since Phase 4 (see docs/collision.md).
+const JUMP_AIR_TIME = 0.89; // 2 * 8 / GRAVITY
+const JUMP_PEAK = 1.78;     // 8^2 / (2 * GRAVITY)
 
 // The quick mode only checks that the harness works. Its numbers are not comparable with a full run.
 const buildLegs = (mode: BenchMode): LegDef[] => {

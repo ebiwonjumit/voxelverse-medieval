@@ -3,13 +3,37 @@ import { useThree, useFrame } from '@react-three/fiber';
 import { Vector3, Euler } from 'three';
 import { PointerLockControls } from '@react-three/drei';
 import { useKeyboardControls } from '../hooks/useKeyboardControls';
-import { GRAVITY, JUMP_FORCE, MOVE_SPEED, PLAYER_HEIGHT, PLAYER_RADIUS, INITIAL_SPAWN } from '../constants';
+import { GRAVITY, JUMP_FORCE, MOVE_SPEED, INITIAL_SPAWN } from '../constants';
 import { voxelWorld } from '../gameWorld';
 import { playerState } from '../playerState';
+import { CollisionWorld, moveAABB, playerBox } from '../engine/collision';
+import { Cell } from '../engine/cell';
 
-// Cache for collision checks to avoid repeated getBlockAt calls
-const collisionCache = new Map<string, boolean>();
+// The main thread's world answers unloaded chunks from the generator one block at a time, which is slow enough to
+// notice when asked dozens of times a frame. Blocks around the player are remembered for two seconds instead.
+// (Nothing changes blocks yet; when something does, it must clear this.)
+const CELL_CACHE_FRAMES = 120;
+const cellCache = new Map<number, Cell>();
 let cacheFrameCount = 0;
+
+const collisionWorld: CollisionWorld = {
+  registry: voxelWorld.registry,
+  getCell(x, y, z) {
+    // x and z within +-2^20 and y within -256..255 fit in one exact number.
+    const key = ((x + 1048576) * 2097152 + (z + 1048576)) * 512 + (y + 256);
+    let cell = cellCache.get(key);
+    if (cell === undefined) {
+      cell = voxelWorld.getCell(x, y, z);
+      cellCache.set(key, cell);
+    }
+    return cell;
+  },
+};
+
+// A long frame (a stalled tab) must not turn into one huge fall or a huge sweep.
+const MAX_STEP = 0.1;
+// How fast the camera catches up after the player steps up onto a stair or slab, per second.
+const STEP_SMOOTHING = 14;
 
 const Player: React.FC = () => {
   const { camera } = useThree();
@@ -22,105 +46,20 @@ const Player: React.FC = () => {
   const jumpPressed = useRef(false);
   const jumpCooldown = useRef(0); 
   const wasGroundedLastFrame = useRef(false); // Track if we were grounded last frame
+  const stepOffset = useRef(0); // how far the camera lags below the body after a step up
 
   useEffect(() => {
     camera.position.copy(INITIAL_SPAWN);
   }, [camera]);
 
-  // Cached solid check
-  const isSolid = (x: number, y: number, z: number): boolean => {
-    const key = `${Math.round(x)},${Math.round(y)},${Math.round(z)}`;
-    
-    // Clear cache every 120 frames (2 seconds at 60fps) - reduced frequency
-    if (cacheFrameCount > 120) {
-      collisionCache.clear();
+  useFrame((_state, frameDelta) => {
+    cacheFrameCount++;
+    if (cacheFrameCount > CELL_CACHE_FRAMES) {
+      cellCache.clear();
       cacheFrameCount = 0;
     }
-    
-    if (collisionCache.has(key)) {
-      return collisionCache.get(key)!;
-    }
-    
-    const solid = voxelWorld.isSolid(Math.round(x), Math.round(y), Math.round(z));
-    
-    collisionCache.set(key, solid);
-    return solid;
-  };
+    const delta = Math.min(frameDelta, MAX_STEP);
 
-  // Optimized collision check - only check likely collision points
-  const checkCollision = (pos: Vector3, isVertical: boolean = false): boolean => {
-    const feetY = pos.y - PLAYER_HEIGHT;
-    const headY = pos.y - 0.2;
-
-    if (isVertical) {
-      // For vertical movement, only check head and feet positions
-      const checkPoints = [
-        { x: pos.x, y: feetY, z: pos.z },
-        { x: pos.x, y: headY, z: pos.z },
-      ];
-      
-      for (const point of checkPoints) {
-        if (isSolid(point.x, point.y, point.z)) {
-          return true;
-        }
-      }
-    } else {
-      // For horizontal movement, check 4 cardinal points (reduced from 8)
-      const angles = 4;
-      for (let i = 0; i < angles; i++) {
-        const angle = (i / angles) * Math.PI * 2;
-        const x = pos.x + Math.cos(angle) * PLAYER_RADIUS;
-        const z = pos.z + Math.sin(angle) * PLAYER_RADIUS;
-        
-        // Check at fewer heights (2 instead of 4+)
-        if (isSolid(x, feetY, z) || isSolid(x, headY, z)) {
-          return true;
-        }
-      }
-    }
-    
-    return false;
-  };
-
-  // Check if player is on ground
-  const checkGrounded = (pos: Vector3): boolean => {
-    const feetY = pos.y - PLAYER_HEIGHT - 0.1; // Slightly below feet
-    
-    // Check center and 2 corner points (reduced from 5)
-    const points = [
-      { x: pos.x, z: pos.z },
-      { x: pos.x + PLAYER_RADIUS * 0.7, z: pos.z + PLAYER_RADIUS * 0.7 },
-      { x: pos.x - PLAYER_RADIUS * 0.7, z: pos.z - PLAYER_RADIUS * 0.7 },
-    ];
-    
-    for (const point of points) {
-      if (isSolid(point.x, feetY, point.z)) {
-        return true;
-      }
-    }
-    return false;
-  };
-
-  // Auto step-up for single blocks
-  const tryStepUp = (pos: Vector3, originalPos: Vector3): boolean => {
-    const stepHeight = 0.6; // Can step up 0.6 blocks
-    const testPos = pos.clone();
-    testPos.y += stepHeight;
-    
-    if (!checkCollision(testPos, false)) {
-      // Check if there's a block to step on
-      const feetY = pos.y - PLAYER_HEIGHT;
-      if (isSolid(pos.x, feetY, pos.z)) {
-        position.current.y = originalPos.y + stepHeight;
-        return true;
-      }
-    }
-    return false;
-  };
-
-  useFrame((state, delta) => {
-    cacheFrameCount++;
-    
     // Decrement jump cooldown 
     // At 60fps, we need ~30 frames for 0.5s
     if (jumpCooldown.current > 0) {
@@ -135,7 +74,8 @@ const Player: React.FC = () => {
     if (moveLeft) inputVector.x -= 1;
     if (moveRight) inputVector.x += 1;
 
-    if (inputVector.length() > 0) {
+    const moving = inputVector.length() > 0;
+    if (moving) {
       inputVector.normalize();
 
       const forward = new Vector3();
@@ -164,9 +104,6 @@ const Player: React.FC = () => {
       // Camera bobbing when moving
       if (isGrounded.current) {
         bobTime.current += delta * 10;
-        const bobAmount = 0.05;
-        const bob = Math.sin(bobTime.current) * bobAmount;
-        camera.position.y = position.current.y + bob;
       }
     } else {
       // Smooth deceleration
@@ -183,32 +120,17 @@ const Player: React.FC = () => {
     // Terminal velocity
     velocity.current.y = Math.max(velocity.current.y, -50);
 
-    const originalPos = position.current.clone();
-    
     // Store grounded state from last frame for Minecraft-style jump logic
     wasGroundedLastFrame.current = isGrounded.current;
-    
-    // Y Movement first (so we can check grounded state after)
-    position.current.y += velocity.current.y * delta;
-    if (checkCollision(position.current, true)) {
-      position.current.y = originalPos.y;
-      velocity.current.y = 0;
-      // Only set grounded when we hit something from above (falling down)
-      isGrounded.current = true;
-    } else {
-      // In air, check if we're actually on ground
-      isGrounded.current = checkGrounded(position.current);
-    }
-    
-   
-    const canJump = (wasGroundedLastFrame.current || isGrounded.current) && 
-                    jumpCooldown.current === 0;
+
+    // Jump before moving, from what the last move found: the box sweep below is the only collision test
+    const canJump = wasGroundedLastFrame.current && jumpCooldown.current === 0;
     
     if (jump && canJump && !jumpPressed.current) {
       velocity.current.y = JUMP_FORCE;
       
       // Sprint-jumping bonus (Minecraft adds 0.2 units horizontal momentum)
-      if (sprint && inputVector.length() > 0) {
+      if (sprint && moving) {
         const forward = new Vector3();
         camera.getWorldDirection(forward);
         forward.y = 0;
@@ -228,7 +150,6 @@ const Player: React.FC = () => {
         velocity.current.z += direction.z * 0.2;
       }
       
-      isGrounded.current = false;
       jumpPressed.current = true;
       jumpCooldown.current = 30; // ~0.5 seconds at 60fps (Minecraft uses 10 ticks at 20tps)
     }
@@ -237,32 +158,28 @@ const Player: React.FC = () => {
     if (!jump) {
       jumpPressed.current = false;
     }
-    
+
+    // One sweep of the player's box against the block models: it stops at slabs, stairs and fences as drawn,
+    // walks up anything 0.6 high or less, and cannot tunnel however long the frame.
+    const pos = position.current;
+    const move = moveAABB(collisionWorld, playerBox(pos.x, pos.y, pos.z), {
+      x: velocity.current.x * delta,
+      y: velocity.current.y * delta,
+      z: velocity.current.z * delta,
+    });
+    pos.x += move.dx;
+    pos.y += move.dy;
+    pos.z += move.dz;
+    if (move.hitX) velocity.current.x = 0;
+    if (move.hitZ) velocity.current.z = 0;
+    if (move.hitY) velocity.current.y = 0;
+    isGrounded.current = move.onGround;
+
     // Reset cooldown when we land (Minecraft does this)
     if (isGrounded.current && !wasGroundedLastFrame.current) {
       jumpCooldown.current = 0;
     }
-    
-    // X Movement
-    position.current.x += velocity.current.x * delta;
-    if (checkCollision(position.current, false)) {
-      // Try step-up
-      if (!tryStepUp(position.current, originalPos)) {
-        position.current.x = originalPos.x;
-        velocity.current.x = 0;
-      }
-    }
 
-    // Z Movement  
-    position.current.z += velocity.current.z * delta;
-    if (checkCollision(position.current, false)) {
-      // Try step-up
-      if (!tryStepUp(position.current, originalPos)) {
-        position.current.z = originalPos.z;
-        velocity.current.z = 0;
-      }
-    }
-    
     // Void protection
     if (position.current.y < -20) {
       position.current.copy(INITIAL_SPAWN);
@@ -270,19 +187,13 @@ const Player: React.FC = () => {
       isGrounded.current = false;
       wasGroundedLastFrame.current = false;
       jumpCooldown.current = 0;
+      stepOffset.current = 0;
     }
 
-    // Update Camera (with smooth following)
-    if (!inputVector.length()) {
-      camera.position.copy(position.current);
-    } else {
-      camera.position.x = position.current.x;
-      camera.position.z = position.current.z;
-      // Y is set by bobbing or directly
-      if (!isGrounded.current) {
-        camera.position.y = position.current.y;
-      }
-    }
+    // Update Camera. A step up is a jump of up to 0.6 in one frame for the body, so the eyes ease up after it.
+    stepOffset.current = (stepOffset.current - move.stepped) * Math.exp(-STEP_SMOOTHING * delta);
+    const bob = moving && isGrounded.current ? Math.sin(bobTime.current) * 0.05 : 0;
+    camera.position.set(position.current.x, position.current.y + stepOffset.current + bob, position.current.z);
     
     // Publish the position for the HUD and the atmosphere. This is a plain object, so it costs no React render.
     playerState.x = position.current.x;

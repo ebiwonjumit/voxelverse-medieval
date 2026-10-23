@@ -63,7 +63,7 @@ Unchanged for cubes and still off by default (`AO_STRENGTH`). Only blocks that c
 
 `collisionBoxes(state, nb)` returns the boxes in cell coordinates that stop the player, and the block's own `solid` flag still decides whether they are used (plants and lily pads are not solid, so nobody collides with their planes). A slab is one box, a stair two (the low step and the back), a fence the post plus a box for each joined side, all **1.5 high** so nobody jumps over it, a pane its pillar and arms, boxes and farmland their own boxes, planes none. Fences and panes need a neighbourhood for their arms; asked without one they give the post alone.
 
-`Player.tsx` still samples `registry.isSolid` at points, so stairs, slabs and fences collide as full cubes for now. Walking up stairs and being stopped by a fence from these boxes is the next step of the phase.
+The player is moved against these boxes by `engine/collision.ts`, which also climbs stairs and slabs; see [collision.md](collision.md).
 
 ## State across chunk borders
 
