@@ -1,6 +1,6 @@
 import { Canvas, RGB, hex, mix, palette, ramp, scale } from '../Pixels';
 import { SeededRng } from '../Rng';
-import { TILE_SIZE, TextureRecipe, Tiling } from '../TextureRecipe';
+import { TILE_SIZE, TextureRecipe, Tiling, TintKind } from '../TextureRecipe';
 import { layers, ranks, voronoi } from '../noise';
 
 const N = TILE_SIZE;
@@ -290,18 +290,32 @@ export class Wheat extends TextureRecipe {
 
 export type LeafStyle = 'clump' | 'needle';
 
-/** Foliage with real holes (alpha 0) for cutout rendering. */
+/**
+ * Foliage with real holes (alpha 0) for cutout rendering. With tint 'grass' the palette should be neutral grey:
+ * the renderer multiplies every visible pixel by the biome colour, so the leaf pattern survives and the hue
+ * follows the zone.
+ */
 export class Leaves extends TextureRecipe {
   readonly opaque = false;
   readonly tiling: Tiling = 'both';
+  readonly tint: TintKind;
 
   constructor(
     readonly id: string,
     private readonly shades: readonly RGB[],
     private readonly style: LeafStyle = 'clump',
     private readonly holeRate = 0.2,
+    tint: TintKind = 'none',
   ) {
     super();
+    this.tint = tint;
+  }
+
+  tintMask(rng: SeededRng): Uint8Array {
+    const pixels = this.generate(rng);
+    const mask = new Uint8Array(N * N);
+    for (let p = 0; p < mask.length; p++) mask[p] = pixels[p * 4 + 3] ? 255 : 0;
+    return mask;
   }
 
   generate(rng: SeededRng): Uint8Array {

@@ -3,6 +3,7 @@ import { TextureRecipe } from './TextureRecipe';
 import { Basalt, Brick, Cobble, HangarWall, Marble, MossyCobble, Plaster, RoofTile, StoneBrick } from './recipes/masonry';
 import { BirchLog, Log, Plank } from './recipes/wood';
 import { Crystal, Glass, Gold, Iron, Lantern, MagicStone, Obsidian, Slime, Steel } from './recipes/materials';
+import { Apple, Flower, LilyPad, Sugarcane, TallGrass } from './recipes/plants';
 import { Dirt, Farmland, GrassSide, GrassTop, Leaves, Path, Sand, Snow, Speckle, Stone, Water, Wheat } from './recipes/natural';
 import { hex, palette } from './Pixels';
 
@@ -65,12 +66,18 @@ export const createDefaultCatalog = (): TextureCatalog =>
     .register('wheat_stage_1', new Wheat('wheat_stage_1', 'sprout'))
     .register('wheat_stage_2', new Wheat('wheat_stage_2', 'growing'))
     .register('wheat_ripe', new Wheat('wheat_ripe', 'ripe'))
+    .register('tall_grass', new TallGrass())
+    .register('sugarcane', new Sugarcane())
+    .register('flower_yellow', new Flower('flower_yellow', palette('#c98f10', '#e8b21c', '#f8d23e', '#fff08a'), hex('#8a4a12')))
+    .register('flower_red', new Flower('flower_red', palette('#8a1420', '#b8202e', '#dc3c46', '#f27a78'), hex('#f2d24a')))
+    .register('lily_pad', new LilyPad())
+    .register('red_apple', new Apple())
     // Trees
     .register('log_side', new Log('side'))
     .register('log_top', new Log('top'))
     .register('birch_log_side', new BirchLog('side'))
     .register('birch_log_top', new BirchLog('top'))
-    .register('leaves_oak', new Leaves('leaves_oak', palette('#1f4f22', '#2d6a2c', '#3d8a37', '#55a64a')))
+    .register('leaves_oak', new Leaves('leaves_oak', palette('#8e8e8e', '#b0b0b0', '#d0d0d0', '#eeeeee'), 'clump', 0.2, 'grass'))
     .register('leaves_birch', new Leaves('leaves_birch', palette('#3b6e2a', '#55902f', '#74ad3e', '#97c95a')))
     .register('leaves_pine', new Leaves('leaves_pine', palette('#0c3318', '#154a24', '#1f6330', '#2c7c3f'), 'needle', 0.16))
     // Masonry

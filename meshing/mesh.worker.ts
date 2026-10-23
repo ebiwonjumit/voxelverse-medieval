@@ -1,4 +1,5 @@
 import { createDefaultRegistry } from '../content/blocks';
+import { createDefaultTextureLayout } from '../content/textures/layout';
 import { createWorkerGenerator } from '../worldgen/createWorkerGenerator';
 import { meshTransferables } from './ChunkMesher';
 import { MeshJobMessage, MeshResultMessage } from './MeshWorkerPool';
@@ -8,6 +9,8 @@ import { runMeshJob } from './runMeshJob';
 // because a worker has to build its own registry and generator: nothing but messages crosses over.
 const registry = createDefaultRegistry();
 const generator = createWorkerGenerator(registry);
+// Built from the same catalog and registry as the main thread's atlas, so a layer number means the same tile on both sides.
+const layout = createDefaultTextureLayout(registry);
 
 const scope = self as unknown as {
   onmessage: ((event: { data: MeshJobMessage }) => void) | null;
@@ -16,7 +19,7 @@ const scope = self as unknown as {
 
 scope.onmessage = ({ data }) => {
   try {
-    const mesh = runMeshJob(data.cx, data.cz, data.lod, generator, registry);
+    const mesh = runMeshJob(data.cx, data.cz, data.lod, generator, registry, layout);
     scope.postMessage({ id: data.id, mesh }, meshTransferables(mesh));
   } catch (err) {
     scope.postMessage({ id: data.id, error: err instanceof Error ? err.message : String(err) }, []);

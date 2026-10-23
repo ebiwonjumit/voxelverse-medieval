@@ -2,7 +2,11 @@ import { Color } from 'three';
 import { describe, expect, it } from 'vitest';
 import { grassTint, leavesTint } from '../../meshing/biomeTint';
 import { hexToLinear } from '../../meshing/color';
+import { createDefaultTextureLayout } from '../../content/textures/layout';
+import { createDefaultCatalog } from '../../content/textures/TextureCatalog';
+import { createTextureLayout } from '../../engine/TextureLayout';
 import { meshChunk } from '../../meshing/ChunkMesher';
+import { buildAtlasPixels } from '../../render/AtlasBuilder';
 import { BlockType, COLORS, MILE } from '../../worldConstants';
 import { MapReader, quadsOf, registry } from './helpers';
 
@@ -94,41 +98,62 @@ describe('biomeTint', () => {
 });
 
 describe('mesher colours', () => {
-  const topFace = (id: number, x: number, z: number, cx: number, cz: number) => {
-    const m = meshChunk(new MapReader([[x, 5, z, id]]), cx, cz, registry);
-    const b = id === BlockType.LEAVES ? m.cutout : m.opaque;
-    return quadsOf(b).find((q) => q.normal[1] === 1)!.corners[0].rgb;
+  const layout = createDefaultTextureLayout(registry);
+  const face = (id: number, x: number, z: number, cx: number, cz: number, normalY: number, withLayout = true) => {
+    const m = meshChunk(new MapReader([[x, 5, z, id]]), cx, cz, registry, withLayout ? { layout } : {});
+    const b = [m.opaque, m.cutout].find((bucket) => bucket.indices.length > 0)!;
+    return quadsOf(b).find((q) => q.normal[1] === normalY)!;
+  };
+  const nearly = (got: ArrayLike<number>, want: Color) => {
+    expect(got[0]).toBeCloseTo(want.r, 5);
+    expect(got[1]).toBeCloseTo(want.g, 5);
+    expect(got[2]).toBeCloseTo(want.b, 5);
   };
 
-  it('uses the registry colour for plain blocks, in linear space', () => {
-    const rgb = topFace(BlockType.STONE, 3, 3, 0, 0);
-    const want = new Color(COLORS.STONE);
-    expect(rgb[0]).toBeCloseTo(want.r, 5);
-    expect(rgb[1]).toBeCloseTo(want.g, 5);
-    expect(rgb[2]).toBeCloseTo(want.b, 5);
+  it('leaves the vertex colour white now that colour comes from the texture', () => {
+    for (const id of [BlockType.STONE, BlockType.GRASS, BlockType.LEAVES]) {
+      for (const c of face(id, 3, 3, 0, 0, 1).corners) expect(c.rgb).toEqual([1, 1, 1]);
+    }
+  });
+
+  it('draws a block without faces as a flat tile of its registry colour', () => {
+    const quad = face(BlockType.STONE, 3, 3, 0, 0, 1, false);
+    const flat = createTextureLayout([], registry);
+    expect(flat.layerNames[quad.layer]).toBe(`flat:${COLORS.STONE.toLowerCase()}`);
+    // The same pixels the atlas puts in that layer: the registry colour, opaque.
+    const pixels = buildAtlasPixels(createDefaultCatalog(), flat);
+    const want = new Color(COLORS.STONE).convertLinearToSRGB();
+    expect(Array.from(pixels.slice(quad.layer * 1024, quad.layer * 1024 + 4)))
+      .toEqual([Math.round(want.r * 255), Math.round(want.g * 255), Math.round(want.b * 255), 255]);
+    for (const c of quad.corners) expect(c.tint).toEqual([1, 1, 1]);
   });
 
   it('tints grass by where the block is in the world', () => {
     // Block at world (-100, -200) in chunk (-4, -7), local (28, 24).
-    const rgb = topFace(BlockType.GRASS, -100, -200, -4, -7);
-    const want = oldTint(-100, -200, false);
-    expect(rgb[0]).toBeCloseTo(want.r, 5);
-    expect(rgb[1]).toBeCloseTo(want.g, 5);
-    expect(rgb[2]).toBeCloseTo(want.b, 5);
+    for (const c of face(BlockType.GRASS, -100, -200, -4, -7, 1).corners) nearly(c.tint, oldTint(-100, -200, false));
+  });
+
+  it('tints the grass side fringe with the same biome colour as the top', () => {
+    const side = quadsOf(meshChunk(new MapReader([[-100, 5, -200, BlockType.GRASS]]), -4, -7, registry, { layout }).opaque)
+      .find((q) => q.normal[0] === 1)!;
+    expect(side.overlay).toBeGreaterThanOrEqual(0);
+    for (const c of side.corners) nearly(c.tint, oldTint(-100, -200, false));
   });
 
   it('tints leaves like grass, darkened', () => {
-    const rgb = topFace(BlockType.LEAVES, 1540, 3, 48, 0);
-    const want = oldTint(1540, 3, true);
-    expect(rgb[0]).toBeCloseTo(want.r, 5);
-    expect(rgb[1]).toBeCloseTo(want.g, 5);
-    expect(rgb[2]).toBeCloseTo(want.b, 5);
+    for (const c of face(BlockType.LEAVES, 1540, 3, 48, 0, 1).corners) nearly(c.tint, oldTint(1540, 3, true));
   });
 
-  it('colours other leaf types from the registry', () => {
-    const m = meshChunk(new MapReader([[3, 3, 3, BlockType.PINE_LEAVES]]), 0, 0, registry);
-    const want = new Color(COLORS.PINE_LEAVES);
-    expect(m.cutout.colors[0]).toBeCloseTo(want.r, 5);
-    expect(m.cutout.colors[1]).toBeCloseTo(want.g, 5);
+  it('gives leaves their pattern from the texture and not from a flat colour', () => {
+    const quad = face(BlockType.LEAVES, 1540, 3, 48, 0, 1);
+    expect(layout.layerNames[quad.layer]).toBe('leaves_oak');
+  });
+
+  it('takes other leaf types, which the old renderer did not tint, from their own tile', () => {
+    const m = meshChunk(new MapReader([[3, 3, 3, BlockType.PINE_LEAVES]]), 0, 0, registry, { layout });
+    for (const q of quadsOf(m.cutout)) {
+      expect(layout.layerNames[q.layer]).toBe('leaves_pine');
+      for (const c of q.corners) expect(c.tint).toEqual([1, 1, 1]);
+    }
   });
 });

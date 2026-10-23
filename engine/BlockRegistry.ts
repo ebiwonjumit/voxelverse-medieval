@@ -1,14 +1,28 @@
 import { MAX_BLOCK_ID } from './cell';
 
+// Texture names for the three kinds of face of a block. Names refer to the texture catalog; the engine only
+// carries them, it never looks them up.
+export interface BlockFaces {
+  top: string;
+  bottom: string;
+  side: string;
+}
+
+// Which biome colour multiplies the block's tintable faces: 'grass' is the zone's grass colour, 'foliage' the
+// same colour darkened for leaves. Only faces whose texture can take a tint are affected (see TextureLayout).
+export type BlockTint = 'grass' | 'foliage';
+
 // Block definitions are data. Textures, models and lighting rules are looked up from them,
 // so adding a block never means touching the renderer.
 export interface BlockDef {
   id: number;       // 0..4095, stored in the low bits of a cell
   name: string;     // "namespace:block_name"
-  color: string;    // flat colour as #rrggbb, used until blocks get textures
+  color: string;    // flat colour as #rrggbb, drawn as a flat tile when the block has no faces
   solid: boolean;   // blocks the player
   opaque: boolean;  // hides the faces of neighbouring blocks
   emits: number;    // block light level 0..15
+  faces?: BlockFaces; // texture names; a block without them is drawn in its flat colour
+  tint?: BlockTint;
 }
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
@@ -40,7 +54,17 @@ export class BlockRegistry {
     if (this.names.has(def.name)) {
       throw new Error(`Block name ${def.name} is already registered with id ${this.names.get(def.name)!.id}`);
     }
-    const frozen = Object.freeze({ ...def });
+    if (def.faces) {
+      for (const key of ['top', 'bottom', 'side'] as const) {
+        if (typeof def.faces[key] !== 'string' || !def.faces[key]) {
+          throw new Error(`Block ${def.name} has no texture name for its ${key} face`);
+        }
+      }
+    }
+    if (def.tint !== undefined && def.tint !== 'grass' && def.tint !== 'foliage') {
+      throw new Error(`Block ${def.name} has tint ${String(def.tint)}, expected grass or foliage`);
+    }
+    const frozen = Object.freeze({ ...def, faces: def.faces ? Object.freeze({ ...def.faces }) : undefined });
     this.defs.set(frozen.id, frozen);
     this.names.set(frozen.name, frozen);
     this.solidTable[frozen.id] = frozen.solid ? 1 : 0;

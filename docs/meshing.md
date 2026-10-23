@@ -15,11 +15,23 @@
 
 ## Output
 
-`MeshData` is `{ cx, cz, opaque, cutout, water }`. Each bucket holds `positions`, `normals`, `colors` (Float32Array, three per vertex) and `indices` (Uint32Array). Every face is four vertices and six indices, counter-clockwise from outside. `meshTransferables(mesh)` lists the twelve buffers for `postMessage`.
+`MeshData` is `{ cx, cz, opaque, cutout, water }`. Each bucket holds these buffers (all Float32Array except the indices):
+
+| Buffer | Per vertex | What it is |
+| --- | --- | --- |
+| `positions` | 3 | Chunk-local position. |
+| `normals` | 3 | Outward face normal. |
+| `colors` | 3 | Linear rgb multiplier for ambient occlusion; white while AO is off. |
+| `tints` | 3 | Linear rgb biome tint; white on faces that take none. |
+| `uvs` | 2 | Position inside the tile, 0 to 1. `v = 0` is the top row of the tile. |
+| `layers` | 2 | Texture array layer of the face, and the layer of its tint overlay or -1. |
+| `indices` (Uint32Array) | 6 per face | Two triangles. |
+
+Every face is four vertices and six indices, counter-clockwise from outside. `meshTransferables(mesh)` lists the 21 buffers for `postMessage`.
 
 - Positions are chunk-local: x and z run 0 to 32, y is the world height. A block at (x, y, z) fills the unit cube from (x, y, z) to (x+1, y+1, z+1). The old renderer centred cubes on whole numbers, so the render code must place each chunk mesh half a block back on all three axes to look the same and to match the player's `Math.round` collision.
-- Colours are linear rgb (with ambient occlusion multiplied in when it is switched on, see below), so the material needs `vertexColors: true`. Face shading is not baked in: the Three.js lights do that through the normals.
-- Buckets: `opaque` is every block the registry marks opaque. `water` is water. `cutout` is everything else that draws: leaves, glass, and the shaped legacy blocks. A bucket exists so each can get its own material later (alpha test for cutout, blending for water).
+- Vertex colours are linear rgb (ambient occlusion, when it is switched on, see below), so the material needs `vertexColors: true`. The block's own colour no longer lives in the vertices: it comes from the texture layer. Face shading is not baked in: the Three.js lights do that through the normals.
+- Buckets: `opaque` is every block the registry marks opaque. `water` is water. `cutout` is everything else that draws: leaves, glass, and the shaped legacy blocks. Each bucket has its own material (see [renderer.md](renderer.md)): no alpha test for opaque, alpha test for cutout, blending and the wave for water.
 
 ## Reading cells
 
@@ -35,7 +47,7 @@ A face is drawn unless the block beside it is opaque. Details:
 - Full-cube blocks that are not opaque (leaves, glass) hide faces against a neighbour of the same id, and are drawn against anything else.
 - Below the bottom of the world counts as solid, so the underside of the world is never drawn.
 - A lily pad cell also holds a water cube, as the old renderer drew one under every pad.
-- Ids the registry does not know are drawn as magenta cubes, so a missing registration is visible rather than silent.
+- Ids the registry does not know are drawn as magenta cubes (the layout's unknown tile, a flat `#ff00ff`), so a missing registration is visible rather than silent.
 
 ## Legacy shapes
 
@@ -45,11 +57,18 @@ A face is drawn unless the block beside it is opaque. Details:
 
 Full cubes (not water, not boxes) can get per-vertex occlusion with the usual three-neighbour method over the layer in front of each face: two side blocks and the diagonal one, using the registry's `opaque` flag. Both sides solid gives the darkest level, otherwise the level is 3 minus the number of solid neighbours. At full strength levels map to multipliers `[0.55, 0.7, 0.85, 1.0]`. The quad is split along the diagonal that joins the two brighter corners, which avoids the crease you get when the wrong diagonal is interpolated.
 
-**It is off by default.** Phase 2 promises the same look as the old renderer (flat colours, same lights), and the old renderer had no AO. The single switch is `AO_STRENGTH` in `ChunkMesher.ts`: 0 means every multiplier is 1.0 and the neighbour lookups are skipped entirely (the quad keeps its default split); 1 is the full range above, and values between scale the darkening linearly. `meshChunk` also takes `{ aoStrength }` as a fifth argument, which is how the tests run the AO code at strength 1 while a separate test pins the shipped default to 0. Phase 6 (baked light) is the place to turn it on, and it will have to be rebalanced against the baked light then.
+**It is off by default.** Phase 2 promises the same look as the old renderer (flat colours, same lights), and the old renderer had no AO. The single switch is `AO_STRENGTH` in `ChunkMesher.ts`: 0 means every multiplier is 1.0 and the neighbour lookups are skipped entirely (the quad keeps its default split); 1 is the full range above, and values between scale the darkening linearly. `meshChunk` also takes `{ aoStrength, layout }` as a fifth argument, which is how the tests run the AO code at strength 1 while a separate test pins the shipped default to 0. Phase 6 (baked light) is the place to turn it on, and it will have to be rebalanced against the baked light then.
 
-## Colours
+## Textures
 
-Block colour is the registry colour. Grass and leaves use `biomeTint`: each zone centre contributes its grass colour weighted by 1 / (distance + 1), and leaves are that blend times 0.7. Tests compare it with a copy of the old formula, run through Three.js `Color`, at sample points across the map.
+The mesher is given a `TextureLayout` (`meshChunk(reader, cx, cz, registry, { layout })`; `runMeshJob` and the worker pass it). The layout answers two questions per block face, from tables, with no string lookups in the hot loop:
+
+- **Which layer.** `layout.faceLayers[id * 3 + kind]`, where kind is top, bottom or side. A block with `faces` gets the layer of that tile. A block without them, or naming a tile the catalog lacks, gets a flat tile of its registry colour (`flat:#rrggbb`, one per distinct colour). Unregistered ids get the magenta tile. Without a layout, `meshChunk` builds a flat-only one, which is what most mesher tests use.
+- **Which tint.** `layout.faceTint` is non-zero only if the block asks for a tint and the face's tile takes one. A tinted face carries the biome colour (`biomeTint.ts`: each zone centre contributes its grass colour weighted by 1 / (distance + 1); `foliage` is that times 0.7) in its `tints` vertices. A face of a partly tinted tile, the grass side, also carries the layer of the tile's tint mask in `layers.y`; the shader paints the tint only where that mask is set. Tests compare the blend with a copy of the old formula, run through Three.js `Color`, at sample points across the map.
+
+Every face stretches its tile over the whole face. Walls are upright and read left to right as seen from outside, so a tile is never mirrored or turned. On the top face `v = 0` points north (-z), on the bottom face south.
+
+Shaped legacy blocks (the boxes below) use the same tables, so a fence is a plank-textured box and a flower is a flower tile on a small box until Phase 4.
 
 ## Speed
 

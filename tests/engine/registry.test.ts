@@ -55,4 +55,29 @@ describe('BlockRegistry', () => {
     r.register(def({ id: 2, name: 'b' }));
     expect(r.all().map((d) => d.id)).toEqual([2, 5]);
   });
+
+  it('keeps texture faces and tint with the block, frozen', () => {
+    const r = new BlockRegistry();
+    const faces = { top: 'grass_top', bottom: 'dirt', side: 'grass_side' };
+    r.register(def({ faces, tint: 'grass' }));
+    expect(r.get(1).faces).toEqual(faces);
+    expect(r.get(1).tint).toBe('grass');
+    expect(Object.isFrozen(r.get(1).faces)).toBe(true);
+    faces.top = 'changed';
+    expect(r.get(1).faces!.top).toBe('grass_top'); // a copy, not the caller's object
+  });
+
+  it('leaves faces and tint empty for a block that has none', () => {
+    const r = new BlockRegistry();
+    r.register(def());
+    expect(r.get(1).faces).toBeUndefined();
+    expect(r.get(1).tint).toBeUndefined();
+  });
+
+  it('rejects faces with a missing name and unknown tints', () => {
+    const r = new BlockRegistry();
+    expect(() => r.register(def({ faces: { top: 'a', bottom: '', side: 'c' } }))).toThrow(/bottom/);
+    expect(() => r.register(def({ faces: { top: 'a', bottom: 'b' } as never }))).toThrow(/side/);
+    expect(() => r.register(def({ tint: 'water' as never }))).toThrow(/tint/);
+  });
 });

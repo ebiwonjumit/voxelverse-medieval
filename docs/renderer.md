@@ -16,6 +16,8 @@ ChunkRenderer.update(x, z)         main thread, every frame
 | File | Role |
 | --- | --- |
 | `render/ChunkRenderer.ts` | Three.js side: which chunks to hold, uploads, materials, disposal, stats. |
+| `render/AtlasBuilder.ts` | Packs the texture catalog into the block texture array (`DataArrayTexture`). |
+| `render/BlockMaterials.ts` | The three shared materials (opaque, cutout, water) and the shader patch that samples the array. |
 | `render/createMeshWorker.ts` | The one `new Worker(new URL(...))` call, in the form Vite bundles. |
 | `meshing/MeshWorkerPool.ts` | Pool, priority queue, cancel, stale results. No Three.js. |
 | `meshing/mesh.worker.ts` | Worker entry point. Builds its own registry and generator, answers jobs. |
@@ -45,7 +47,9 @@ Three.js sends a geometry to the GPU the first time it is drawn, so the number o
 
 - One mesh per non-empty bucket per chunk. Vertices are chunk-local; `mesh.position` is the chunk origin minus half a block on each axis (the mesher's cubes run from the block coordinate upward, the old renderer centred them). `matrixAutoUpdate` is off.
 - The bounding sphere is set from the buffer's own bounds, and padded for water, so frustum culling works per bucket without Three.js scanning the buffer again.
-- One shared `MeshStandardMaterial` (vertex colours, roughness 0.8, metalness 0.1) for opaque and cutout, and one shared water material (vertex colours, transparent, opacity 0.75, roughness 0.1, metalness 0.8, flat shading). There is no per-chunk material and no distance fade.
+- Three shared materials, all `MeshStandardMaterial` patched with `onBeforeCompile`: **opaque** (vertex colours, roughness 0.8, metalness 0.1, no alpha test, so early depth rejection still works), **cutout** (same, with `alphaTest` 0.5, for leaves, glass and shaped blocks; the tiles' alpha is only ever 0 or 255, so nothing needs sorting) and **water** (vertex colours, transparent, opacity 0.75, roughness 0.1, metalness 0.8, flat shading, with the wave). There is no per-chunk material and no distance fade. Because they stay `MeshStandardMaterial`, the scene's lights and fog apply unchanged.
+- The patch replaces only where the diffuse colour comes from. In the fragment shader `diffuseColor *= texel`, where the texel is sampled from the array at the vertex's layer and uv, then multiplied by the biome tint (`vTint`), then Three.js multiplies the vertex colour (ambient occlusion) as usual. For a grass side there are two layers: the base tile (dirt where the fringe is) and the fringe mask, and the result is `mix(base, mask * tint, mask.a)`, so only the fringe takes the zone colour. Layer numbers are `flat` varyings, so they are never interpolated.
+- Sampling uses `textureGrad` with derivatives taken outside the branch, so the mip level is the same on both sides of the overlay `if` and the cutout edge never picks a different level than its neighbour pixel.
 - The water wave is in the vertex shader and reads the vertex's world position, `sin(x * 0.5 + t) * 0.2 + cos(z * 0.4 + t * 1.2) * 0.15`, the same formula the instanced version applied per block. It needs no instancing, and neighbouring faces move together.
 - Lights are unchanged. Fog now scales with the render distance: near `(RENDER_DISTANCE - 2) * 32`, far `RENDER_DISTANCE * 32`, with the same per-zone colour logic.
 

@@ -34,7 +34,14 @@ export const totalFaces = (mesh: MeshData): number =>
 export interface Quad {
   index: number;  // which quad in the bucket
   normal: [number, number, number];
-  corners: Array<{ pos: [number, number, number]; rgb: [number, number, number] }>;
+  corners: Array<{
+    pos: [number, number, number];
+    rgb: [number, number, number];  // ambient occlusion multiplier
+    tint: [number, number, number]; // biome tint, white when the face takes none
+    uv: [number, number];
+  }>;
+  layer: number;   // base texture layer
+  overlay: number; // tint overlay layer, or -1
   indices: number[]; // the six indices, relative to the quad's first vertex
 }
 
@@ -49,6 +56,8 @@ export const quadsOf = (bucket: BucketData): Quad[] => {
       corners.push({
         pos: [bucket.positions[o], bucket.positions[o + 1], bucket.positions[o + 2]] as [number, number, number],
         rgb: [bucket.colors[o], bucket.colors[o + 1], bucket.colors[o + 2]] as [number, number, number],
+        tint: [bucket.tints[o], bucket.tints[o + 1], bucket.tints[o + 2]] as [number, number, number],
+        uv: [bucket.uvs[(v0 + i) * 2], bucket.uvs[(v0 + i) * 2 + 1]] as [number, number],
       });
     }
     const o = v0 * 3;
@@ -56,6 +65,8 @@ export const quadsOf = (bucket: BucketData): Quad[] => {
       index: q,
       normal: [bucket.normals[o], bucket.normals[o + 1], bucket.normals[o + 2]],
       corners,
+      layer: bucket.layers[v0 * 2],
+      overlay: bucket.layers[v0 * 2 + 1],
       indices: Array.from(bucket.indices.slice(q * 6, q * 6 + 6)).map((i) => i - v0),
     });
   }

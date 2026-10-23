@@ -28,7 +28,20 @@ One cell is a `Uint16`: the low 12 bits are the block id (0 to 4095), the high 4
 
 ## Blocks
 
-`BlockRegistry` holds a `BlockDef` per block: id, name, flat colour, `solid`, `opaque` and `emits`. The legacy blocks keep their old `BlockType` numbers as ids, so the old zones work without changes. Registration rejects duplicate ids and names, and any colour that is not `#rrggbb`.
+`BlockRegistry` holds a `BlockDef` per block: id, name, flat colour, `solid`, `opaque`, `emits`, and optionally `faces` and `tint`. The legacy blocks keep their old `BlockType` numbers as ids, so the old zones work without changes. Registration rejects duplicate ids and names, any colour that is not `#rrggbb`, a `faces` object with a missing name and a `tint` other than `grass` or `foliage`.
+
+### Textures on blocks
+
+```ts
+faces?: { top: string; bottom: string; side: string };  // names from the texture catalog
+tint?: 'grass' | 'foliage';
+```
+
+`faces` names a tile for the top, the bottom and the four sides. The engine only carries the names; `render/AtlasBuilder.ts` and `engine/TextureLayout.ts` turn them into texture array layers (see [textures.md](textures.md)). All 47 legacy blocks except air have faces, assigned in `content/blocks.ts` (grass is `grass_top` / `dirt` / `grass_side`, logs are `log_top` on both ends and `log_side` around). Shaped blocks that are still boxes (fences, flowers, crops) wear one tile on every face until Phase 4 models them.
+
+A block with no `faces`, or whose face names a tile the catalog does not have, is drawn as a full cube in a flat tile of its registry `color`. That is the contract for blocks added by other branches: register an id and a colour and it shows up, textured later. The layout records unknown names in `layout.missing`.
+
+`tint` says which biome colour multiplies the block's tintable faces: `grass` is the zone blend, `foliage` is the same blend times 0.7 (as the old leaves were). A face is only tinted if its tile takes a tint (grey tiles flagged `tint` in the catalog), so grass gets it on the top and the side fringe but not on the dirt bottom, and oak leaves get it everywhere. Birch and pine leaves are not tinted, as before.
 
 ## Querying blocks
 
@@ -58,7 +71,7 @@ Loaded chunks answer from their stored cells. Anything else, which means a chunk
 
 ## Meshing and rendering architecture
 
-The whole path from block data to pixels, as of the end of Phase 2:
+The whole path from block data to pixels, as of Phase 3 step 2 (textured blocks):
 
 ```
 main thread                                   worker (1 to 4)
@@ -72,17 +85,19 @@ World (React) -> ChunkRenderer.update(x, z)
                                                  LegacyZoneAdapter.generateChunk (lod)
                                                  PaddedChunkReader (chunk + 1 block ring)
                                                  meshChunk -> opaque / cutout / water
-  <-- MeshData, 12 buffers transferred      <--
+                                                   (texture layer, uv and tint per vertex)
+  <-- MeshData, 21 buffers transferred      <--
   upload queue, 2 geometries per frame
-  Mesh per bucket in ChunkRenderer.group
+  Mesh per bucket in ChunkRenderer.group, three shared materials sampling one texture array
   collision and HUD: voxelWorld (main thread, never generates chunks for rendering)
 ```
 
 - **Two copies of the world, on purpose.** Workers generate the chunk they mesh. The main thread keeps its own `VoxelWorld` for collision and the HUD, answered by the generator block by block, so physics never waits on rendering. Both use the same `LegacyZoneAdapter`, and the parity tests keep the generator's `sampleBlock` and `generateChunk` identical, which is why chunk borders meet without a seam.
 - **Nothing on the main thread depends on height.** The renderer recomputes only when the player's chunk changes, so a jump sends no job and rebuilds nothing. The old renderer rebuilt every visible chunk because `playerY` was a React dependency.
 - **Meshes are plain Three.js objects, not React.** `components/World.tsx` creates one `ChunkRenderer` and calls `update` from a frame hook. There is no per-chunk component, no instancing and no per-chunk material.
-- **Faces are culled in the mesher** (a face is drawn unless the block beside it is opaque), colours are flat per block (vertex ambient occlusion exists in the mesher but is off by default, see [meshing.md](meshing.md)), and the lights, fog colours and water wave are unchanged apart from fog distances, which scale with the render distance.
+- **Faces are culled in the mesher** (a face is drawn unless the block beside it is opaque), each vertex carries a layer of the block texture array, a uv and a biome tint (vertex ambient occlusion exists in the mesher but is off by default, see [meshing.md](meshing.md)), and the lights, fog colours and water wave are unchanged apart from fog distances, which scale with the render distance.
 - **Budgets keep frames even.** At most 2 geometries are uploaded per frame, nearest chunk first. The job queue is ranked by distance to the player when a worker frees up. Chunks are dropped one chunk beyond the render distance (hysteresis) and their geometries disposed.
+- **One layout, two builders.** The mesher writes texture layer numbers into vertices in a worker; the atlas builder fills the texture array on the main thread. Both build an `engine/TextureLayout` from the same catalog and registry (`content/textures/layout.ts`), which is deterministic, so layer numbers agree without passing any texture data to the worker. A test checks the layout is identical when built twice.
 - **Layers.** `meshing/` and `engine/` import neither Three.js nor React (a test checks both), so a worker can load them. `render/` and `components/` are the only places that touch Three.js; `mesh.worker.ts` is the only file in `meshing/` that imports `content/` and `worldgen/`.
 
 Details: [meshing.md](meshing.md) for the mesher, [renderer.md](renderer.md) for the pool and the Three.js side. Measured results against the baseline, with the soak and before and after screenshots, are in [perf-after-p2.md](perf-after-p2.md).

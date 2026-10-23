@@ -6,9 +6,25 @@ import { applyTint } from '../../content/textures/tint';
 const catalog = createDefaultCatalog();
 
 describe('grass tint', () => {
-  it('marks only the grass tiles as tinted', () => {
+  it('marks only the grass tiles and the oak leaves as tinted', () => {
     const tinted = catalog.names().filter((n) => catalog.get(n).recipe.tint === 'grass');
-    expect(tinted.sort()).toEqual(['grass_side', 'grass_top']);
+    expect(tinted.sort()).toEqual(['grass_side', 'grass_top', 'leaves_oak']);
+  });
+
+  it('tints exactly the visible pixels of the oak leaves, which are neutral grey', () => {
+    const t = catalog.render('leaves_oak');
+    const mask = catalog.tintMask('leaves_oak');
+    let visible = 0;
+    for (let p = 0; p < 256; p++) {
+      expect(mask[p] === 255, `pixel ${p}`).toBe(t[p * 4 + 3] === 255);
+      if (t[p * 4 + 3]) {
+        visible++;
+        expect(t[p * 4]).toBe(t[p * 4 + 1]);
+        expect(t[p * 4 + 1]).toBe(t[p * 4 + 2]);
+      }
+    }
+    expect(visible).toBeGreaterThan(0);
+    expect(visible).toBeLessThan(256);
   });
 
   it('gives untinted tiles an empty mask', () => {

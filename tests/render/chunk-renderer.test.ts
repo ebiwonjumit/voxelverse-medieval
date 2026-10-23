@@ -1,4 +1,4 @@
-import { Mesh, MeshStandardMaterial } from 'three';
+import { DataArrayTexture, Mesh, MeshStandardMaterial } from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getWorldProbe } from '../../bench/worldProbe';
 import { MeshData } from '../../meshing/ChunkMesher';
@@ -33,6 +33,13 @@ const drain = (workers: FakeWorker[], build?: (cx: number, cz: number) => MeshDa
 const frames = (renderer: ChunkRenderer, x: number, z: number, n: number) => {
   for (let i = 0; i < n; i++) renderer.update(x, z, i / 60);
 };
+
+// What three hands onBeforeCompile, cut down to the chunks the patches look for.
+const patchedShader = () => ({
+  uniforms: {} as Record<string, { value: unknown }>,
+  vertexShader: 'void main() {\n#include <begin_vertex>\n#include <color_vertex>\n}',
+  fragmentShader: 'void main() {\n#include <map_fragment>\n}',
+});
 
 const meshesIn = (renderer: ChunkRenderer): Mesh[] => renderer.group.children as Mesh[];
 
@@ -324,21 +331,27 @@ describe('ChunkRenderer', () => {
       expect(boundingSphereOf(new Float32Array(0)).radius).toBe(0);
     });
 
-    it('uses one shared material for opaque and cutout, and one for water, whatever the chunk', () => {
+    it('uses one shared material per bucket, whatever the chunk', () => {
       const { renderer } = upload(['opaque', 'cutout', 'water']);
       const meshes = meshesIn(renderer);
       expect(meshes.length).toBeGreaterThan(3);
-      const materials = new Set(meshes.map((m) => m.material));
-      expect(materials.size).toBe(2);
+      expect(new Set(meshes.map((m) => m.material)).size).toBe(3);
 
       const solid = meshes.filter((m) => !(m.material as MeshStandardMaterial).transparent);
       const water = meshes.filter((m) => (m.material as MeshStandardMaterial).transparent);
-      expect(new Set(solid.map((m) => m.material)).size).toBe(1);
-      expect(new Set(water.map((m) => m.material)).size).toBe(1);
+      const opaque = solid.filter((m) => (m.material as MeshStandardMaterial).alphaTest === 0);
+      const cutout = solid.filter((m) => (m.material as MeshStandardMaterial).alphaTest > 0);
+      for (const group of [opaque, cutout, water]) {
+        expect(group.length).toBeGreaterThan(0);
+        expect(new Set(group.map((m) => m.material)).size).toBe(1);
+      }
 
-      const s = solid[0].material as MeshStandardMaterial;
-      expect(s.vertexColors).toBe(true);
-      expect(s.transparent).toBe(false);
+      const o = opaque[0].material as MeshStandardMaterial;
+      expect(o.vertexColors).toBe(true);
+      expect(o.transparent).toBe(false);
+      const c = cutout[0].material as MeshStandardMaterial;
+      expect(c.vertexColors).toBe(true);
+      expect(c.alphaTest).toBe(0.5);
       const w = water[0].material as MeshStandardMaterial;
       expect(w.vertexColors).toBe(true);
       expect(w.opacity).toBe(0.75);
@@ -346,15 +359,60 @@ describe('ChunkRenderer', () => {
       expect(w.metalness).toBe(0.8);
     });
 
+    it('gives each geometry the texture attributes the mesher wrote', () => {
+      const { renderer } = upload(['opaque']);
+      for (const mesh of meshesIn(renderer)) {
+        const g = mesh.geometry;
+        expect(g.getAttribute('tint').itemSize).toBe(3);
+        expect(g.getAttribute('uv').itemSize).toBe(2);
+        expect(g.getAttribute('texLayer').itemSize).toBe(2);
+        expect(g.getAttribute('tint').count).toBe(g.getAttribute('position').count);
+        expect(g.getAttribute('uv').count).toBe(g.getAttribute('position').count);
+        expect(g.getAttribute('texLayer').count).toBe(g.getAttribute('position').count);
+      }
+    });
+
+    it('feeds every material the one texture array', () => {
+      const { renderer } = upload(['opaque', 'cutout', 'water']);
+      const textures = new Set<unknown>();
+      for (const mesh of meshesIn(renderer)) {
+        const shader = patchedShader();
+        (mesh.material as MeshStandardMaterial).onBeforeCompile(shader as never, null as never);
+        expect(shader.fragmentShader).toContain('textureGrad');
+        expect(shader.vertexShader).toContain('attribute vec2 texLayer');
+        textures.add(shader.uniforms.uBlockTextures.value);
+      }
+      expect(textures.size).toBe(1);
+      expect([...textures][0]).toBeInstanceOf(DataArrayTexture);
+    });
+
+    it('builds the atlas itself unless given one, and only disposes its own', () => {
+      const own = make({ renderDistance: 1, poolSize: 1 });
+      const disposed = vi.fn();
+      const texture = ((): DataArrayTexture => {
+        const t = new DataArrayTexture(new Uint8Array(1024), 16, 16, 1);
+        t.addEventListener('dispose', disposed);
+        return t;
+      })();
+      const given = new ChunkRenderer({
+        workerFactory: fakeWorkerFactory().factory, registerProbe: false, poolSize: 1,
+        atlas: { texture, layout: null as never, layerOf: () => 0, dispose: () => texture.dispose() },
+      });
+      given.dispose();
+      expect(disposed).not.toHaveBeenCalled();
+      own.renderer.dispose();
+    });
+
     it('moves the water wave into a vertex shader that reads the vertex world position', () => {
       const { renderer } = upload(['water']);
       const water = meshesIn(renderer)[0].material as MeshStandardMaterial;
-      const shader = { uniforms: {} as Record<string, { value: number }>, vertexShader: '#include <begin_vertex>\nvoid main(){}' };
+      const shader = patchedShader();
       water.onBeforeCompile(shader as never, null as never);
       expect(shader.vertexShader).toContain('uniform float uTime');
       expect(shader.vertexShader).toContain('modelMatrix');
       expect(shader.vertexShader).not.toContain('instanceMatrix');
       expect(shader.vertexShader).not.toContain('USE_INSTANCING');
+      expect(shader.vertexShader).toContain('vTexUv = uv'); // and still samples the water texture
 
       renderer.update(...inChunk(3, -2), 12.5);
       expect(shader.uniforms.uTime.value).toBe(12.5);

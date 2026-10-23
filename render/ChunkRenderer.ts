@@ -1,11 +1,14 @@
-import {
-  BufferAttribute, BufferGeometry, Group, Material, Mesh, MeshStandardMaterial, Sphere, Vector3,
-} from 'three';
+import { BufferAttribute, BufferGeometry, DataArrayTexture, Group, Mesh, Sphere, Vector3 } from 'three';
+import { createDefaultRegistry } from '../content/blocks';
+import { createDefaultTextureLayout } from '../content/textures/layout';
+import { createDefaultCatalog } from '../content/textures/TextureCatalog';
 import { ChunkStore } from '../engine/ChunkStore';
 import { BUCKET_NAMES, BucketData, MeshData } from '../meshing/ChunkMesher';
 import { MeshWorkerPool, WorkerFactory, defaultPoolSize } from '../meshing/MeshWorkerPool';
 import { registerWorldProbe } from '../bench/worldProbe';
 import { CHUNK_SIZE, LodLevel, RENDER_DISTANCE } from '../worldConstants';
+import { Atlas, buildAtlas } from './AtlasBuilder';
+import { BlockMaterials, createBlockMaterials } from './BlockMaterials';
 import { createMeshWorker } from './createMeshWorker';
 
 // Chunks this close to the player (in chunks) are built with full detail, the rest without small decorations.
@@ -56,6 +59,9 @@ export interface ChunkRendererOptions {
   renderDistance?: number;
   workerFactory?: WorkerFactory;
   poolSize?: number;
+  // The texture array the meshes sample. By default the renderer builds the game's own from the default
+  // catalog and block registry, which is what the mesh workers lay their layers out by.
+  atlas?: Atlas;
   // Tests turn this off so they do not fight over the one registered probe.
   registerProbe?: boolean;
 }
@@ -90,11 +96,11 @@ export class ChunkRenderer {
   private readonly uploads = new Map<number, UploadItem>();
   private readonly unregisterProbe: (() => void) | null;
 
-  // One material for everything solid. Opaque and cutout buckets both use it.
-  private readonly solidMaterial = new MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.1 });
-  private readonly waterMaterial = new MeshStandardMaterial({
-    vertexColors: true, transparent: true, opacity: 0.75, roughness: 0.1, metalness: 0.8, flatShading: true,
-  });
+  // Three shared materials (opaque, cutout, water), all sampling the one texture array.
+  private readonly atlas: Atlas;
+  private readonly ownsAtlas: boolean;
+  private readonly textureUniform: { value: DataArrayTexture | null };
+  private readonly materials: BlockMaterials;
   private readonly timeUniform = { value: 0 };
 
   private playerCx = 0;
@@ -108,7 +114,11 @@ export class ChunkRenderer {
   constructor(options: ChunkRendererOptions = {}) {
     this.renderDistance = options.renderDistance ?? RENDER_DISTANCE;
     this.group.name = 'chunks';
-    this.configureWater();
+    this.ownsAtlas = !options.atlas;
+    this.atlas = options.atlas
+      ?? buildAtlas(createDefaultCatalog(), createDefaultTextureLayout(createDefaultRegistry()));
+    this.textureUniform = { value: this.atlas.texture };
+    this.materials = createBlockMaterials(this.textureUniform, this.timeUniform);
 
     const factory = options.workerFactory ?? createMeshWorker;
     const size = options.poolSize ?? defaultPoolSize(typeof navigator === 'undefined' ? undefined : navigator.hardwareConcurrency);
@@ -173,8 +183,8 @@ export class ChunkRenderer {
     this.chunks.clear();
     this.uploads.clear();
     this.group.clear();
-    this.solidMaterial.dispose();
-    this.waterMaterial.dispose();
+    this.materials.dispose();
+    if (this.ownsAtlas) this.atlas.dispose();
   }
 
   private distance(cx: number, cz: number): number {
@@ -290,7 +300,7 @@ export class ChunkRenderer {
       return true;
     }
 
-    const mesh = new Mesh(geometry, name === 'water' ? this.waterMaterial : this.solidMaterial);
+    const mesh = new Mesh(geometry, this.materials[name]);
     mesh.position.set(entry.cx * CHUNK_SIZE + CHUNK_OFFSET, CHUNK_OFFSET, entry.cz * CHUNK_SIZE + CHUNK_OFFSET);
     mesh.matrixAutoUpdate = false;
     mesh.updateMatrix();
@@ -304,6 +314,9 @@ export class ChunkRenderer {
     geometry.setAttribute('position', new BufferAttribute(data.positions, 3));
     geometry.setAttribute('normal', new BufferAttribute(data.normals, 3));
     geometry.setAttribute('color', new BufferAttribute(data.colors, 3));
+    geometry.setAttribute('tint', new BufferAttribute(data.tints, 3));
+    geometry.setAttribute('uv', new BufferAttribute(data.uvs, 2));
+    geometry.setAttribute('texLayer', new BufferAttribute(data.layers, 2));
     geometry.setIndex(new BufferAttribute(data.indices, 1));
     // Set by hand: the default would scan the positions again the first time the mesh is culled.
     geometry.boundingSphere = boundingSphereOf(data.positions, pad);
@@ -327,22 +340,5 @@ export class ChunkRenderer {
       const mesh = entry.meshes[name];
       if (mesh) this.removeMesh(entry, name, mesh);
     }
-  }
-
-  // The wave used to read each instance's position. Chunk meshes have no instances, so it now reads the
-  // vertex's world position, which also keeps neighbouring water faces moving together.
-  private configureWater(): void {
-    const material: Material = this.waterMaterial;
-    material.onBeforeCompile = (shader) => {
-      shader.uniforms.uTime = this.timeUniform;
-      shader.vertexShader = `uniform float uTime;\n${shader.vertexShader}`.replace(
-        '#include <begin_vertex>',
-        `
-        vec3 transformed = vec3( position );
-        vec4 waveOrigin = modelMatrix * vec4( position, 1.0 );
-        transformed.y += sin( waveOrigin.x * 0.5 + uTime ) * 0.2 + cos( waveOrigin.z * 0.4 + uTime * 1.2 ) * 0.15;
-        `,
-      );
-    };
   }
 }

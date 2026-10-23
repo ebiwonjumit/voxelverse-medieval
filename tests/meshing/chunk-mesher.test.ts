@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Chunk } from '../../engine/Chunk';
 import { packCell } from '../../engine/cell';
 import { WORLD_MIN_Y } from '../../engine/coords';
+import { createTextureLayout } from '../../engine/TextureLayout';
 import { WorldGenerator } from '../../engine/WorldGenerator';
 import { AO_STRENGTH, LEGACY_BOXES, meshChunk, meshTransferables } from '../../meshing/ChunkMesher';
 import { PaddedChunkReader } from '../../meshing/PaddedChunkReader';
@@ -235,7 +236,10 @@ describe('buckets', () => {
   it('draws an id the registry does not know as a magenta cube', () => {
     const m = mesh(new MapReader([[3, 3, 3, 3000]]));
     expect(faceCount(m.cutout)).toBe(6);
-    expect(Array.from(m.cutout.colors.slice(0, 3))).toEqual([1, 0, 1]);
+    // Magenta now comes from the texture: the layout's unknown tile, a flat #ff00ff.
+    const layout = createTextureLayout([], registry);
+    expect(layout.layerNames[m.cutout.layers[0]]).toBe('flat:#ff00ff');
+    expect(layout.layerNames[layout.unknownLayer]).toBe('flat:#ff00ff');
   });
 });
 
@@ -396,8 +400,8 @@ describe('index validity', () => {
   it('lists every buffer for transfer, and the mesh survives a transfer', () => {
     const m = mesh(new MapReader([[1, 1, 1, WHITE], [4, 1, 1, BlockType.WATER], [6, 1, 1, BlockType.GLASS]]));
     const buffers = meshTransferables(m);
-    expect(buffers).toHaveLength(12);
-    expect(new Set(buffers).size).toBe(12);
+    expect(buffers).toHaveLength(21); // seven attributes in each of three buckets
+    expect(new Set(buffers).size).toBe(21);
     const bytes = m.opaque.positions.byteLength;
     const clone = structuredClone(m, { transfer: buffers });
     expect(clone.opaque.positions.byteLength).toBe(bytes);
