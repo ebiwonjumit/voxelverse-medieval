@@ -28,7 +28,7 @@ describe('the game runs on the Phase 6 generator', () => {
 
   it('keeps LegacyZoneAdapter out of the game: only tests, tools and the adapter itself use it', () => {
     const files = readdirSync(root, { recursive: true, encoding: 'utf8' })
-      .filter((f) => /\.(ts|tsx|mjs)$/.test(f) && !/^(node_modules|dist|tests|docs|tools)\//.test(f) && !f.includes('node_modules'));
+      .filter((f) => /\.(ts|tsx|mjs)$/.test(f) && !/^(node_modules|dist|tests|docs|tools|\.worktrees|\.claude)\//.test(f) && !f.includes('node_modules'));
     expect(files).toContain('gameWorld.ts');
     const users = files.filter((f) => readFileSync(join(root, f), 'utf8').includes('LegacyZoneAdapter'));
     // The adapter's own file and comments that only name it are fine; nothing else may import it.
