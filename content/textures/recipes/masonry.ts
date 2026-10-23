@@ -6,8 +6,10 @@ import { layers, ranks, voronoi, waveVeins } from '../noise';
 const N = TILE_SIZE;
 const at = (x: number, y: number) => y * N + x;
 
-const COBBLE = palette('#686a70', '#797b81', '#8a8c92', '#9b9da3');
-const COBBLE_GAP = hex('#3b3c41');
+// Lifted to sit near the old flat cobblestone colour (#9ca3af): a tile of mostly mid grey with dark gaps averages
+// close to that, instead of the dark road the first palette made.
+const COBBLE = palette('#adb1b8', '#bdc1c7', '#cdd1d6', '#dcdfe3');
+const COBBLE_GAP = hex('#6a6d74');
 
 /** Rounded stones with dark gaps, lit from the upper left. */
 const cobbleCanvas = (rng: SeededRng): Canvas => {
@@ -44,12 +46,26 @@ export class MossyCobble extends TextureRecipe {
       const m = v[at(x, y)];
       if (m < 0.6) return null;
       const [r, g, b] = c.get(x, y);
-      const lit = (r + g + b) / 3 > 125; // darker stone shows through as shadow in the moss
+      const lit = (r + g + b) / 3 > 160; // darker stone shows through as shadow in the moss
       return ramp(MossyCobble.MOSS, Math.min(0.99, (m - 0.6) / 0.4 + (lit ? 0.15 : 0)));
     });
     return c.data;
   }
 }
+
+/**
+ * Sprinkle `count` single lighter pixels where `allowed` says so. Very dark tiles get a few of these so their pattern
+ * survives in dim light; a handful of pixels barely moves the mean. Called last, so it never changes the art before it.
+ */
+export const glints = (c: Canvas, rng: SeededRng, col: RGB, count: number, allowed: (x: number, y: number) => boolean = () => true): void => {
+  for (let placed = 0, tries = 0; placed < count && tries < count * 20; tries++) {
+    const x = rng.int(N);
+    const y = rng.int(N);
+    if (!allowed(x, y)) continue;
+    c.set(x, y, col);
+    placed++;
+  }
+};
 
 interface BrickSpot {
   /** Pixel is part of a mortar joint. */
@@ -74,8 +90,8 @@ const brickAt = (x: number, y: number, w: number, h: number): BrickSpot => {
 
 export class StoneBrick extends TextureRecipe {
   readonly id = 'stone_brick';
-  private static readonly SHADES = palette('#62656c', '#6f727a', '#7c7f87', '#898c94');
-  private static readonly MORTAR = hex('#3f4147');
+  private static readonly SHADES = palette('#53565d', '#5e6169', '#6a6d75', '#767981');
+  private static readonly MORTAR = hex('#34363c');
 
   generate(rng: SeededRng): Uint8Array {
     const c = new Canvas();
@@ -111,6 +127,8 @@ export class Brick extends TextureRecipe {
     private readonly shades: readonly RGB[],
     private readonly mortar: RGB,
     private readonly soot = false,
+    /** A few lighter pixels on the bricks, so a sooty dark tile keeps its pattern in dim light. */
+    private readonly glint: RGB | null = null,
   ) {
     super();
   }
@@ -131,6 +149,7 @@ export class Brick extends TextureRecipe {
       v -= sooty * streak[at(x, 0)] * (1 - (y / N) * 0.5);
       return ramp(this.shades, Math.min(0.99, Math.max(0, v)));
     });
+    if (this.glint) glints(c, rng, this.glint, 6, (x, y) => !brickAt(x, y, 8, 4).mortar);
     return c.data;
   }
 }
@@ -140,7 +159,7 @@ export class Brick extends TextureRecipe {
  * so the lower edge is a scallop with a shadow under it.
  */
 export class RoofTile extends TextureRecipe {
-  constructor(readonly id: string, private readonly shades: readonly RGB[]) {
+  constructor(readonly id: string, private readonly shades: readonly RGB[], private readonly glint: RGB | null = null) {
     super();
   }
 
@@ -198,6 +217,13 @@ export class RoofTile extends TextureRecipe {
     // top course of the next tile, which is what makes the tile repeat vertically.
     for (let course = courses - 1; course >= 0; course--) drawCourse(course, false);
     drawCourse(courses - 1, true);
+    if (this.glint) {
+      // Lighter pixels only on tile faces (the plain mid shade), never on the edges that make the scallops.
+      glints(c, rng, this.glint, 6, (x, y) => {
+        const [r, g, b] = c.get(x, y);
+        return r === mid[0] && g === mid[1] && b === mid[2];
+      });
+    }
     return c.data;
   }
 }
@@ -232,9 +258,9 @@ export class Plaster extends TextureRecipe {
 
 export class Marble extends TextureRecipe {
   readonly id = 'marble';
-  private static readonly BASE = palette('#e4e5e7', '#ecedee', '#f4f4f3');
-  private static readonly VEIN = hex('#aeb4c0');
-  private static readonly HALO = hex('#cfd3da');
+  private static readonly BASE = palette('#e8e9ec', '#f0f1f2', '#f8f8f7');
+  private static readonly VEIN = hex('#6e7686');
+  private static readonly HALO = hex('#b4bac6');
 
   generate(rng: SeededRng): Uint8Array {
     const c = new Canvas();
@@ -244,9 +270,10 @@ export class Marble extends TextureRecipe {
     const hair = waveVeins(rng, 2, -1, 0.9);
     c.paint((x, y) => {
       const d = vein[at(x, y)];
-      if (d < 0.3) return Marble.VEIN;
-      if (d < 0.5) return Marble.HALO;
-      if (hair[at(x, y)] < 0.2) return Marble.HALO;
+      if (d < 0.22) return Marble.VEIN;
+      if (d < 0.44) return Marble.HALO;
+      if (hair[at(x, y)] < 0.09) return Marble.VEIN;
+      if (hair[at(x, y)] < 0.18) return Marble.HALO;
       return ramp(Marble.BASE, base[at(x, y)]);
     });
     return c.data;
@@ -291,6 +318,7 @@ export class Basalt extends TextureRecipe {
       c.set(x, y, Basalt.GAP);
       c.set(x + 1, y, Basalt.GAP);
     }
+    glints(c, rng, hex('#7c7f88'), 6, (x, y) => ((x - edges[colId(x)]) % N + N) % N > 1);
     return c.data;
   }
 }

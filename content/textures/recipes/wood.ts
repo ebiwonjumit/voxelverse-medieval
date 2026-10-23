@@ -2,6 +2,7 @@ import { Canvas, RGB, hex, palette, ramp } from '../Pixels';
 import { SeededRng } from '../Rng';
 import { TILE_SIZE, TextureRecipe, Tiling } from '../TextureRecipe';
 import { layers, ranks } from '../noise';
+import { glints } from './masonry';
 
 const N = TILE_SIZE;
 const at = (x: number, y: number) => y * N + x;
@@ -18,6 +19,8 @@ export class Plank extends TextureRecipe {
     private readonly vertical = false,
     private readonly knots = 0,
     readonly tiling: Tiling = 'both',
+    /** A few lighter pixels on the boards, for dark planks that would otherwise vanish in dim light. */
+    private readonly glint: RGB | null = null,
   ) {
     super();
   }
@@ -56,6 +59,16 @@ export class Plank extends TextureRecipe {
       set(u + 1, v, this.shades[0]);
       set(u, v + 1, this.shades[1]);
     }
+    if (this.glint) {
+      // Only on a board face (the fourth row of every board is its seam), and along the top lit edge of the board.
+      for (let placed = 0, tries = 0; placed < 7 && tries < 200; tries++) {
+        const u = rng.int(N);
+        const v = rng.int(N);
+        if ((v & 3) === 3) continue;
+        set(u, v, this.glint);
+        placed++;
+      }
+    }
     return c.data;
   }
 }
@@ -86,6 +99,8 @@ export class Log extends TextureRecipe {
       c.set(x, y, this.bark[0]);
       c.set(x + 1, y, this.bark[0]);
     }
+    // The bark is nearly black, so a few lit ridge pixels keep the furrows readable in dim light.
+    glints(c, rng, hex('#8c6c48'), 7);
   }
 
   protected rings(rng: SeededRng, c: Canvas): void {

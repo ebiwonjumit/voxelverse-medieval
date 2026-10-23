@@ -17,7 +17,7 @@ The folder follows the layer rules for `content/`: no Three.js, no React, no DOM
 | `Pixels.ts` | Hex colours, palettes, `ramp` (pick a shade by value) and `Canvas`, a 16x16 RGBA buffer whose coordinates wrap. |
 | `noise.ts` | Wrapping value noise (`tileNoise`, `layers`), `ranks`, wrapping Voronoi cells and diagonal vein waves. Everything wraps at the tile edge, so patterns built from it tile without extra work. |
 | `recipes/` | The recipe classes, grouped as `natural`, `masonry`, `wood`, `materials`, `plants`, `wilds` (cedar, blossom and snowy pine foliage, gravel, moss, granite, mud, podzol and the soil sides) and `undergrowth` (bamboo, fern, reeds, wildflowers, mushrooms and the litter carpets). |
-| `TextureCatalog.ts` | Names mapped to recipes. `createDefaultCatalog()` registers the 77 tiles below. |
+| `TextureCatalog.ts` | Names mapped to recipes. `createDefaultCatalog()` registers the 78 tiles below. |
 | `tint.ts` | `applyTint(pixels, mask, rgb)`, the multiply the renderer does for tinted tiles (the shader does the same). |
 | `layout.ts` | `createDefaultTextureLayout(registry)`: describes the catalog to `engine/TextureLayout` and builds the layout the game uses. |
 | `recipes/plants.ts` | `TallGrass`, `Sugarcane`, `Flower`, `LilyPad` and `Apple`, the cutout tiles of the small plants. |
@@ -37,7 +37,7 @@ catalog.tintMask('grass_side');      // Uint8Array(256), 255 where the biome col
 
 | Group | Names |
 | --- | --- |
-| Terrain | `grass_top`, `grass_side`, `dirt`, `stone`, `sand`, `snow`, `water`, `path`, `farmland`, `basalt` |
+| Terrain | `grass_top`, `grass_side`, `dirt`, `stone`, `sand`, `snow`, `water`, `path`, `farmland`, `farmland_side`, `basalt` |
 | Crops and plants | `wheat_stage_1`, `wheat_stage_2`, `wheat_ripe`, `tall_grass`, `sugarcane`, `flower_yellow`, `flower_red`, `lily_pad`, `red_apple` (cutouts, for crossed quads or small boxes) |
 | Trees | `log_side`, `log_top`, `birch_log_side`, `birch_log_top`, `leaves_oak`, `leaves_birch`, `leaves_pine` (cutouts) |
 | Masonry | `cobble`, `mossy_cobble`, `stone_brick`, `brick_red`, `brick_factory`, `plaster`, `marble`, `roof_red`, `roof_blue`, `hangar_wall` |
@@ -66,22 +66,48 @@ The 23 blocks in `content/blocksNature.ts` (ids 48 to 70, [worldgen.md](worldgen
 | snowy pine leaves | `snowy_pine_leaves` | cube, cutout | the pine needle recipe in dark green with white and pale-blue snow on the upper side of every clump |
 | bamboo | `bamboo` | `CrossModel(0.9, 1)` | three jointed canes. Their nodes sit on the same rows top and bottom, so a stack of blocks reads as one cane |
 | bamboo leaves | `bamboo_leaves` | `CrossModel(1, 1)` | drooping lance leaves in sprays, the tuft on top of a stalk |
-| fern | `fern` | `CrossModel(0.9, 0.9)` | five arching fronds, leaflets sweeping forward off both sides of each rib |
+| fern | `fern` | `CrossModel(0.9, 0.9)` | three fronds from one crown, an upright one and two that arch out and over. Each is a thin rib with leaflets in opposite pairs every second step, angled to the tip and shrinking, with gaps between them so the outline is a feather and not a tuft |
 | reeds | `reeds` | `CrossModel(0.9, 1)` | slim stalks that sway a pixel and come back, with one brown cattail head. Stacks like bamboo |
 | four wildflowers | `wildflower_blue` (drooping bells), `_white` (daisies), `_pink` (a ball of blossoms), `_purple` (upright spikes) | `CrossModel(0.8, 0.8)`, the legacy flower | four outlines, so they read apart at a glance, one `Wildflower` recipe |
-| red and brown mushroom | `mushroom_red` (white-spotted domes), `mushroom_brown` (flat plain caps) | `CrossModel(0.7, 0.9)` | a huddle of three or four, caps lit on the left and dark underneath |
+| red and brown mushroom | `mushroom_red` (white-spotted domes), `mushroom_brown` (flat plain caps) | `CrossModel(0.7, 0.9)` | a big mushroom and a small one beside it. The cap is 11 pixels wide and fills most of the plane, lit on the left and dark underneath; the red one has white spots (large ones near the crown, small ones lower down), the brown one pale flecks on its lit side |
 | fallen leaves, sakura petals | `fallen_leaves`, `sakura_petals` | `PlateModel(0, 0)`: a plate 1/16 thick over the whole cell | litter on a transparent tile, placed cell by cell (a piece or two per 4 by 4 pixels) so it tiles and the ground shows through. Its underside is culled against the soil |
 | gravel | `gravel` | cube | pebbles in cool greys with a few warm ones and dark gaps; cooler, darker and less regular than `path` |
 | moss | `moss` / `dirt` / `moss_side` | cube | rounded cushions, bright on the upper left. The side is dirt with a ragged moss cap, like the grass side but not tinted |
 | podzol | `podzol` / `dirt` / `podzol_side` | cube | dark brown with grey ash pools and orange needles; the side has a dark cap with a little ash |
 | granite | `granite` | cube | pink-grey with dark mica, white quartz and salmon feldspar flecks |
-| mud | `mud` | cube | dark and smooth with a few wet highlights and pits |
+| mud | `mud` | cube | a wide five-shade ramp from near-black pits to pale clay ridges on bumpier noise, with a few wet highlights |
 
 **No nature tile takes the biome tint.** Birch and pine leaves never did, and the same reasoning holds here: a cedar, a cherry tree and a fern have the colour of their species, and the pink of a blossom must never be multiplied by a zone's green. (`grass_top`, `grass_side` and `leaves_oak` remain the only tinted tiles; a test pins that, and another pins that no nature block has a `tint`.) The flat colours in `blocksNature.ts` are therefore only the fallback and the colour a missing tile would show.
 
 **Solid and opaque flags are unchanged and now checked against the tiles:** blocks whose faces are cutouts (leaves, plants, litter) are not opaque, cubes with opaque tiles are, plants are not solid and leaves are.
 
 **Plant model choices.** `CrossModel` maps the tile onto two planes crossing on the diagonals of the cell (each plane is `width` x 1.414 long), so tall things use `CrossModel(0.9, 1)` like sugarcane. A mushroom is a small thing whose tile fills its plane, so it uses a narrower, shorter cross. Fallen leaves and petals would look wrong standing up, so they lie on a thin plate. Registration is in `content/blocksNature.ts`; the `faces`, the `model` and the `tint` of a block live next to its colour.
+
+## Brightness against the flat colours (art review polish)
+
+Every textured block used to be a flat colour, and the world was tuned against those colours. A first palette pass made some tiles much darker or brighter than the colour they replaced, so roads and plinths looked dark and a few gems and bricks glared. `tests/textures/luminance.test.ts` now pins the mean luminance (Rec. 709 weights on the sRGB bytes) of the top and side tile of each of these blocks to 0.8 to 1.4 times the luminance of its registry colour, on four seeds:
+
+| Block (tile) | Ratio before | Ratio now | What changed |
+| --- | ---: | ---: | --- |
+| cobblestone (`cobble`) | 0.53 | 0.88 | stones lifted to light grey, gaps lifted to match, same shape |
+| small rock (also `cobble`) | 0.62 | 1.02 | follows `cobble`; its flat colour is darker than cobblestone's |
+| path | 0.70 | 0.91 | pebbles and gaps lifted, gaps kept a step darker |
+| marble | 0.90 | 0.85 | wider and darker veins (slate-grey vein, halo, a second set of hairlines), so the tile now reads as veined and not as white; the cost is a lower mean |
+| magic crystal | 2.09 | 1.29 | face shades darkened, facet edges kept light, so the glow sits in the edges and the white sparkles rather than in every face |
+| stone brick | 1.28 | 1.09 | darker shades and mortar |
+| red brick | 1.37 | 1.13 | darker bricks, mortar one step darker |
+| roof blue | 1.40 | 1.09 | darker ramp |
+| farmland, side | 1.36 (it wore `dirt`) | 1.02 | new `farmland_side` tile, below |
+
+![Twelve of the polished blocks in the sandbox](screens/p3/blocks-polish.png)
+
+(`?sandbox=blocks&focus=cobblestone,path,small_rock,marble,magic_crystal,stone_brick,red_brick,roof_blue,farmland,mud,dark_plank,obsidian&cols=6`)
+
+`farmland_side` is a new tile (the first time farmland had its own side): packed dark soil in the colour of the old flat farmland with a loose, lighter lip of clods on the top two rows and a few pebbles. `farmland` blocks use it on their sides; `dirt` stays underneath. The crystal's palette was chosen with the seam test in mind, because the facet edge colour decides how harsh a wrap seam looks to it; an edge colour that is too dark fails the vertical seam test on one seed.
+
+**Dark tiles keep their pattern in dim light.** `log_side`, `obsidian`, `basalt`, `dark_plank`, `brick_factory` and `roof_blue` are close to black, so the light multiplier at dusk or in a cave used to flatten them to one colour. Each now carries 6 or 7 single lighter pixels (a lit bark ridge, a violet glint, a pale fleck of basalt, a lit plank grain, a glinting brick face, a bright tile highlight) placed after the rest of the art, only on the faces and never on the mortar or gaps, by `glints()` in `recipes/masonry.ts`. That is about 2 to 3 percent of the pixels, so the mean barely moves; a test requires at least three pixels above 1.7 times the tile mean and a mean under 110.
+
+**Mushrooms from above.** A mushroom is two crossed vertical planes, so seen from straight above only their upper edges show and it still looks like a thin X. What the tile can do is fill the planes: the cap is now 11 pixels wide and sits in front of a smaller one, and the spots are on the crown, so even at a steep angle the planes read as a wide red or brown cap and not as a few pixels. A true top-down look would need a cap that is a box, not a plane, which is a model change and is left alone.
 
 ## Art rules
 
@@ -107,7 +133,7 @@ The 23 blocks in `content/blocksNature.ts` (ids 48 to 70, [worldgen.md](worldgen
 2. For each partly tinted tile (the grass side) a second layer holding its tint mask, named `<tile>#tint`.
 3. One flat tile per distinct registry colour that a block without textures needs, named `flat:#rrggbb`, and the magenta `flat:#ff00ff` that unregistered ids use.
 
-80 layers now (77 tiles, the grass side's tint overlay, and the flat `#000000` of air and `#ff00ff` of unknown ids), well under the 256 every WebGL2 device guarantees. Blocks added later by other branches add at most one flat layer per new colour until they get tiles of their own.
+81 layers now (78 tiles, the grass side's tint overlay, and the flat `#000000` of air and `#ff00ff` of unknown ids), well under the 256 every WebGL2 device guarantees. Blocks added later by other branches add at most one flat layer per new colour until they get tiles of their own.
 
 How the texture is set up, and why:
 
