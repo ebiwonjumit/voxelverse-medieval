@@ -178,14 +178,16 @@ export class Granite extends TextureRecipe {
 /** Wet mud: dark, smooth, with a few shiny pools and the odd pit. */
 export class Mud extends TextureRecipe {
   readonly id = 'mud';
-  private static readonly SHADES = palette('#3a2b1f', '#47362a', '#5a4636', '#6c5644');
+  // A wide ramp, near-black in the pits to a pale clay in the ridges, so the churned surface reads at a glance.
+  private static readonly SHADES = palette('#291c13', '#3d2b1d', '#573f2b', '#745839', '#92724a');
 
   generate(rng: SeededRng): Uint8Array {
     const c = new Canvas();
-    const v = ranks(layers(rng, [[3, 3, 1], [6, 6, 0.45]]));
-    c.paint((x, y) => ramp(Mud.SHADES, v[at(x, y)]));
-    const shine = hex('#85705a');
-    const gloss = hex('#cdb99c');
+    // Finer, bumpier noise than before, and a stronger pull to the ends of the ramp, so mud has ridges and wet hollows.
+    const v = ranks(layers(rng, [[3, 3, 1], [6, 6, 0.9], [12, 12, 0.35]]));
+    c.paint((x, y) => ramp(Mud.SHADES, Math.min(0.99, Math.max(0, (v[at(x, y)] - 0.5) * 1.18 + 0.5))));
+    const shine = hex('#a58a68');
+    const gloss = hex('#e0cfae');
     for (let i = 0; i < 4; i++) {
       const x = rng.int(N);
       const y = rng.int(N);

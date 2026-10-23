@@ -1,6 +1,8 @@
 import { createDefaultRegistry } from '../content/blocks';
 import { createDefaultTextureLayout } from '../content/textures/layout';
+import { BIOME_GRASS_HEX } from '../worldgen/biomes/BiomeTint';
 import { createWorkerGenerator } from '../worldgen/createWorkerGenerator';
+import { createLatticeTint } from './biomeTint';
 import { ChunkCache } from './ChunkCache';
 import { meshTransferables } from './ChunkMesher';
 import { MeshJobMessage, MeshResultMessage } from './MeshWorkerPool';
@@ -14,6 +16,9 @@ const generator = createWorkerGenerator(registry);
 const layout = createDefaultTextureLayout(registry);
 // Jobs for neighbouring chunks share the chunks this worker has generated (the light of a chunk needs its eight neighbours).
 const cache = new ChunkCache(generator);
+// The natural colour of grass and leaves away from the zones: the generator's biome, one colour each, smoothed. The
+// worker owns the generator, so this is where the mesher gets its biome without importing worldgen.
+const wildTint = createLatticeTint((x, z) => generator.biomeAt(x, z), BIOME_GRASS_HEX);
 
 const scope = self as unknown as {
   onmessage: ((event: { data: MeshJobMessage }) => void) | null;
@@ -22,7 +27,7 @@ const scope = self as unknown as {
 
 scope.onmessage = ({ data }) => {
   try {
-    const mesh = runMeshJob(data.cx, data.cz, data.lod, generator, registry, layout, cache);
+    const mesh = runMeshJob(data.cx, data.cz, data.lod, generator, registry, layout, cache, wildTint);
     scope.postMessage({ id: data.id, mesh }, meshTransferables(mesh));
   } catch (err) {
     scope.postMessage({ id: data.id, error: err instanceof Error ? err.message : String(err) }, []);

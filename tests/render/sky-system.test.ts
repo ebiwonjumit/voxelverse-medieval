@@ -3,12 +3,14 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { MILE } from '../../constants';
 import {
-  CLOCK_SPEEDS, DAY_LENGTH_SECONDS, NIGHT_DAYLIGHT, PRESET_HOURS, SKY_PRESETS, START_HOURS, SkyClock, SkySystem,
+  BIOME_SAMPLE_DISTANCE, CLOCK_SPEEDS, DAY_LENGTH_SECONDS, NIGHT_DAYLIGHT, PRESET_HOURS, SKY_PRESETS, START_HOURS, SkyClock, SkySystem,
   applySkyKey, computeSky, daylightAt, fogRange, formatClock, hoursToTime, luminance, moonDirection, parseAtmosphere,
   parseHex, parseSkyOptions, samplePalette, sunDirection,
 } from '../../render/SkySystem';
 import { CHUNK_SIZE, RENDER_DISTANCE } from '../../worldConstants';
+import { Biome, BIOME_COUNT, biomeName } from '../../worldgen/biomes/Biome';
 import { getZone } from '../../zones';
+import { wildernessAtmosphere } from '../../zones/wildernessAtmosphere';
 
 const at = (hours: number) => hoursToTime(hours);
 const zoneAt = (x: number, z: number) => parseAtmosphere(getZone(x, z).getAtmosphere());
@@ -111,12 +113,118 @@ describe('zone atmosphere', () => {
     const amestris = computeSky(at(12), AMESTRIS);
     const wild = computeSky(at(12), WILDERNESS);
     expect(amestris.horizon).not.toEqual(sao.horizon);
-    expect(wild.zenith).not.toEqual(sao.zenith);
     // Amestris is grey smog: less blue than the open SAO sky, whose skyTint is plain white.
     expect(amestris.horizon[2] - amestris.horizon[0]).toBeLessThan(sao.horizon[2] - sao.horizon[0]);
     expect(sao.zenith).toEqual(samplePalette(sunDirection(at(12))[1]).zenith);
-    // The wilderness tint is purple: the zenith leans red and blue away from green.
-    expect(wild.zenith[1]).toBeLessThan(sao.zenith[1]);
+    // The wilderness is clear blue like the Town's sky, not the old violet: blue stays well above red and the zenith is
+    // within a whisker of the Town's.
+    expect(wild.zenith[2]).toBeGreaterThan(wild.zenith[0] * 2);
+    expect(wild.zenith[1]).toBeGreaterThan(wild.zenith[0]);
+    expect(wild.horizon[2]).toBeGreaterThan(wild.horizon[0]);
+    expect(wild.horizon[1]).toBeGreaterThan(wild.horizon[0]);
+    for (let i = 0; i < 3; i++) {
+      expect(Math.abs(wild.zenith[i] - sao.zenith[i])).toBeLessThan(0.08);
+      expect(Math.abs(wild.horizon[i] - sao.horizon[i])).toBeLessThan(0.08);
+    }
+  });
+
+  it('no longer carries the old purple fog and sky tint', () => {
+    const wildZone = getZone(1e7, 1e7).getAtmosphere();
+    expect(wildZone.fogColor.toLowerCase()).not.toBe('#4a3358');
+    expect(wildZone.skyTint.toLowerCase()).not.toBe('#6b4b7a');
+    for (const biome of [Biome.MEADOW, Biome.BIRCH_WOOD, Biome.OAK_WOOD, Biome.CEDAR_FOREST, Biome.PINE_FOREST, Biome.BAMBOO_GROVE,
+      Biome.SAKURA_GROVE, Biome.WETLAND, Biome.ROCKY_HILLS, Biome.ALPINE, Biome.BEACH]) {
+      const a = parseAtmosphere(wildernessAtmosphere(biome));
+      // Every biome's fog is a light blue to blue-green to pale: blue at least as strong as red, nothing violet.
+      expect(a.fog[2], biomeName(biome)).toBeGreaterThanOrEqual(a.fog[0]);
+      expect(a.fog[1], biomeName(biome)).toBeGreaterThan(a.fog[0]);
+      expect(a.fog[0] + a.fog[1] + a.fog[2], biomeName(biome)).toBeGreaterThan(1.8);
+    }
+  });
+
+  it('leans the wilderness gently by biome: greener haze in woods, pale mist over wetland, crisp and pale up high', () => {
+    const horizonOf = (b: Biome) => computeSky(at(12), parseAtmosphere(wildernessAtmosphere(b))).horizon;
+    const meadow = horizonOf(Biome.MEADOW);
+    const forest = horizonOf(Biome.CEDAR_FOREST);
+    const wetland = horizonOf(Biome.WETLAND);
+    const alpine = horizonOf(Biome.ALPINE);
+    // Greener (green gains on blue) in the forest, paler (more luminous) over wetland and alpine, and none of it far from the meadow.
+    expect(forest[1] / forest[2]).toBeGreaterThan(meadow[1] / meadow[2]);
+    expect(luminance(wetland)).toBeGreaterThan(luminance(meadow));
+    expect(luminance(alpine)).toBeGreaterThan(luminance(meadow));
+    for (const other of [forest, wetland, alpine, horizonOf(Biome.BEACH), horizonOf(Biome.SAKURA_GROVE)]) {
+      const gap = Math.hypot(other[0] - meadow[0], other[1] - meadow[1], other[2] - meadow[2]);
+      expect(gap).toBeGreaterThan(0);
+      expect(gap).toBeLessThan(0.15); // the old violet was about 0.4 from the clear blue
+    }
+    expect(wildernessAtmosphere(null)).toEqual(wildernessAtmosphere(Biome.MEADOW));
+    expect(wildernessAtmosphere(99)).toEqual(wildernessAtmosphere(Biome.MEADOW));
+  });
+
+  it('never makes the wilderness fog denser than the reference, so the horizon stays as far as in a clear zone', () => {
+    const far = RENDER_DISTANCE * CHUNK_SIZE;
+    for (let b = 0; b < BIOME_COUNT; b++) {
+      expect(wildernessAtmosphere(b).fogDensity, biomeName(b)).toBeLessThanOrEqual(0.02);
+      expect(computeSky(at(12), parseAtmosphere(wildernessAtmosphere(b))).fogFar, biomeName(b)).toBe(far);
+    }
+  });
+
+  it('eases between biomes inside the wilderness more slowly than between zones, and never pops', () => {
+    let biome: number = Biome.MEADOW;
+    const sky = new SkySystem({ clock: new SkyClock({ preset: 'noon' }), biomeAt: () => biome });
+    sky.update(1 / 60, 400, 10, 150, 400, 150); // wilderness, meadow
+    const meadow = [...sky.state.horizon];
+    expect(sky.zoneAtmosphere).toEqual(parseAtmosphere(wildernessAtmosphere(Biome.MEADOW)));
+    biome = Biome.WETLAND;
+    const target = computeSky(sky.clock.time, parseAtmosphere(wildernessAtmosphere(Biome.WETLAND))).horizon;
+    const total = Math.hypot(target[0] - meadow[0], target[1] - meadow[1], target[2] - meadow[2]);
+    // The player has to walk a few blocks before the biome is asked for again.
+    sky.update(1 / 60, 420, 10, 150, 420, 150);
+    let prev = [...sky.state.horizon];
+    let biggest = 0;
+    expect(Math.hypot(prev[0] - meadow[0], prev[1] - meadow[1], prev[2] - meadow[2])).toBeLessThan(total * 0.05);
+    for (let i = 0; i < 60 * 12; i++) {
+      sky.update(1 / 60, 420, 10, 150, 420, 150);
+      const h = sky.state.horizon;
+      biggest = Math.max(biggest, Math.hypot(h[0] - prev[0], h[1] - prev[1], h[2] - prev[2]));
+      prev = [...h];
+    }
+    // A frame never moves more than a sliver of the way, and it gets there in the end.
+    expect(biggest).toBeLessThan(total * 0.02);
+    for (let i = 0; i < 3; i++) expect(sky.state.horizon[i]).toBeCloseTo(target[i], 2);
+    // After one second a zone change has covered a larger share of its distance than a biome change.
+    const zoneSky = new SkySystem({ clock: new SkyClock({ preset: 'noon' }), biomeAt: () => Biome.MEADOW });
+    zoneSky.update(1 / 60, 0, 10, 0, 0, 0);
+    const home = [...zoneSky.state.horizon];
+    for (let i = 0; i < 60; i++) zoneSky.update(1 / 60, -3 * MILE, 10, 0, -3 * MILE, 0);
+    const zoneTarget = computeSky(zoneSky.clock.time, AMESTRIS).horizon;
+    const zoneShare = 1 - Math.hypot(...zoneSky.state.horizon.map((v, i) => v - zoneTarget[i])) / Math.hypot(...home.map((v, i) => v - zoneTarget[i]));
+    const biomeSky = new SkySystem({ clock: new SkyClock({ preset: 'noon' }), biomeAt: () => biome });
+    biome = Biome.MEADOW;
+    biomeSky.update(1 / 60, 400, 10, 150, 400, 150);
+    const start = [...biomeSky.state.horizon];
+    biome = Biome.WETLAND;
+    for (let i = 0; i < 60; i++) biomeSky.update(1 / 60, 400 + (i + 1) * 0.5, 10, 150, 400 + (i + 1) * 0.5, 150);
+    const biomeShare = 1 - Math.hypot(...biomeSky.state.horizon.map((v, i) => v - target[i])) / Math.hypot(...start.map((v, i) => v - target[i]));
+    expect(biomeShare).toBeGreaterThan(0.2);
+    expect(biomeShare).toBeLessThan(zoneShare);
+    sky.dispose();
+    zoneSky.dispose();
+    biomeSky.dispose();
+  });
+
+  it('asks for the biome only after the player has moved a few blocks, and only in the wilderness', () => {
+    let asked = 0;
+    const sky = new SkySystem({ clock: new SkyClock({ preset: 'noon' }), biomeAt: () => { asked++; return Biome.MEADOW; } });
+    for (let i = 0; i < 100; i++) sky.update(1 / 60, 400, 10, 150, 400 + (i % 3) * 0.5, 150);
+    expect(asked).toBe(1);
+    sky.update(1 / 60, 400, 10, 150, 400 + BIOME_SAMPLE_DISTANCE + 1, 150);
+    expect(asked).toBe(2);
+    const before = asked;
+    for (let i = 0; i < 10; i++) sky.update(1 / 60, 0, 10, 0, 0, 0); // the Town: a zone with its own atmosphere
+    expect(asked).toBe(before);
+    expect(sky.zoneAtmosphere!.density).toBeGreaterThan(0);
+    sky.dispose();
   });
 
   it('lets the zone colour show less at night, where the time of day takes over', () => {
