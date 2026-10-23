@@ -1,0 +1,289 @@
+{
+  "mode": "soak",
+  "startedAt": "2026-10-23T14:39:26.408Z",
+  "env": {
+    "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
+    "devicePixelRatio": 1,
+    "viewport": "1280x713",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36"
+  },
+  "legs": [
+    {
+      "name": "load",
+      "seconds": 6,
+      "frames": 361,
+      "avgFps": 60.05,
+      "p50": 16.7,
+      "p95": 17.6,
+      "p99": 17.7,
+      "max": 26.1,
+      "hitches": 0,
+      "drawCallsMax": 142,
+      "trianglesMax": 295840,
+      "geometries": 142,
+      "textures": 3,
+      "heapMB": 107
+    },
+    {
+      "name": "soak",
+      "seconds": 90,
+      "frames": 5401,
+      "avgFps": 60,
+      "p50": 16.7,
+      "p95": 17.4,
+      "p99": 17.7,
+      "max": 23.3,
+      "hitches": 0,
+      "drawCallsMax": 159,
+      "trianglesMax": 330382,
+      "geometries": 352,
+      "textures": 3,
+      "heapMB": 148
+    }
+  ],
+  "overall": {
+    "frames": 5762,
+    "avgFps": 60.01,
+    "p50": 16.7,
+    "p95": 17.4,
+    "p99": 17.7,
+    "max": 26.1,
+    "hitches": 0
+  },
+  "soak": [
+    {
+      "t": 5,
+      "geometries": 159,
+      "triangles": 253832,
+      "drawCalls": 101,
+      "heapMB": 122,
+      "stats": {
+        "chunks": 220,
+        "meshes": 417,
+        "geometries": 417,
+        "pending": 0
+      }
+    },
+    {
+      "t": 10,
+      "geometries": 193,
+      "triangles": 272794,
+      "drawCalls": 95,
+      "heapMB": 135,
+      "stats": {
+        "chunks": 224,
+        "meshes": 411,
+        "geometries": 411,
+        "pending": 0
+      }
+    },
+    {
+      "t": 15,
+      "geometries": 240,
+      "triangles": 301240,
+      "drawCalls": 111,
+      "heapMB": 138,
+      "stats": {
+        "chunks": 224,
+        "meshes": 383,
+        "geometries": 383,
+        "pending": 0
+      }
+    },
+    {
+      "t": 20,
+      "geometries": 311,
+      "triangles": 272118,
+      "drawCalls": 120,
+      "heapMB": 139,
+      "stats": {
+        "chunks": 224,
+        "meshes": 375,
+        "geometries": 375,
+        "pending": 2
+      }
+    },
+    {
+      "t": 25,
+      "geometries": 343,
+      "triangles": 187646,
+      "drawCalls": 124,
+      "heapMB": 129,
+      "stats": {
+        "chunks": 224,
+        "meshes": 376,
+        "geometries": 376,
+        "pending": 0
+      }
+    },
+    {
+      "t": 30,
+      "geometries": 355,
+      "triangles": 315410,
+      "drawCalls": 118,
+      "heapMB": 142,
+      "stats": {
+        "chunks": 224,
+        "meshes": 385,
+        "geometries": 385,
+        "pending": 0
+      }
+    },
+    {
+      "t": 35,
+      "geometries": 346,
+      "triangles": 291190,
+      "drawCalls": 115,
+      "heapMB": 131,
+      "stats": {
+        "chunks": 224,
+        "meshes": 376,
+        "geometries": 376,
+        "pending": 0
+      }
+    },
+    {
+      "t": 40,
+      "geometries": 357,
+      "triangles": 206300,
+      "drawCalls": 115,
+      "heapMB": 130,
+      "stats": {
+        "chunks": 224,
+        "meshes": 374,
+        "geometries": 374,
+        "pending": 0
+      }
+    },
+    {
+      "t": 45,
+      "geometries": 358,
+      "triangles": 239522,
+      "drawCalls": 125,
+      "heapMB": 121,
+      "stats": {
+        "chunks": 224,
+        "meshes": 374,
+        "geometries": 374,
+        "pending": 0
+      }
+    },
+    {
+      "t": 50,
+      "geometries": 348,
+      "triangles": 194916,
+      "drawCalls": 136,
+      "heapMB": 119,
+      "stats": {
+        "chunks": 224,
+        "meshes": 376,
+        "geometries": 376,
+        "pending": 0
+      }
+    },
+    {
+      "t": 55,
+      "geometries": 356,
+      "triangles": 294808,
+      "drawCalls": 106,
+      "heapMB": 125,
+      "stats": {
+        "chunks": 224,
+        "meshes": 383,
+        "geometries": 383,
+        "pending": 0
+      }
+    },
+    {
+      "t": 60,
+      "geometries": 355,
+      "triangles": 268106,
+      "drawCalls": 107,
+      "heapMB": 119,
+      "stats": {
+        "chunks": 224,
+        "meshes": 374,
+        "geometries": 374,
+        "pending": 0
+      }
+    },
+    {
+      "t": 65,
+      "geometries": 363,
+      "triangles": 196500,
+      "drawCalls": 116,
+      "heapMB": 121,
+      "stats": {
+        "chunks": 224,
+        "meshes": 376,
+        "geometries": 376,
+        "pending": 0
+      }
+    },
+    {
+      "t": 70,
+      "geometries": 361,
+      "triangles": 220840,
+      "drawCalls": 141,
+      "heapMB": 130,
+      "stats": {
+        "chunks": 224,
+        "meshes": 374,
+        "geometries": 374,
+        "pending": 9
+      }
+    },
+    {
+      "t": 75,
+      "geometries": 374,
+      "triangles": 255014,
+      "drawCalls": 158,
+      "heapMB": 129,
+      "stats": {
+        "chunks": 224,
+        "meshes": 409,
+        "geometries": 409,
+        "pending": 0
+      }
+    },
+    {
+      "t": 80,
+      "geometries": 372,
+      "triangles": 247370,
+      "drawCalls": 148,
+      "heapMB": 133,
+      "stats": {
+        "chunks": 224,
+        "meshes": 423,
+        "geometries": 423,
+        "pending": 0
+      }
+    },
+    {
+      "t": 85,
+      "geometries": 376,
+      "triangles": 243008,
+      "drawCalls": 109,
+      "heapMB": 142,
+      "stats": {
+        "chunks": 224,
+        "meshes": 428,
+        "geometries": 428,
+        "pending": 0
+      }
+    },
+    {
+      "t": 90,
+      "geometries": 352,
+      "triangles": 283744,
+      "drawCalls": 100,
+      "heapMB": 148,
+      "stats": {
+        "chunks": 224,
+        "meshes": 406,
+        "geometries": 406,
+        "pending": 4
+      }
+    }
+  ]
+}

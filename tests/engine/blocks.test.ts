@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultRegistry } from '../../content/blocks';
+import { createDefaultCatalog } from '../../content/textures/TextureCatalog';
 import { natureBlockIds } from '../../content/blocksNature';
 import { BlockType } from '../../worldConstants';
 
@@ -58,5 +59,56 @@ describe('default block registry', () => {
 
   it('gives every block a valid flat colour', () => {
     for (const def of registry.all()) expect(def.color).toMatch(/^#[0-9a-f]{6}$/i);
+  });
+
+  it('gives every legacy block except air texture names, all of them in the texture catalog', () => {
+    const tiles = new Set(createDefaultCatalog().names());
+    for (const def of registry.all()) {
+      if (def.id === BlockType.AIR || def.id > 47) continue;
+      expect(def.faces, def.name).toBeDefined();
+      for (const key of ['top', 'bottom', 'side'] as const) {
+        expect(tiles.has(def.faces![key]), `${def.name} ${key}: ${def.faces![key]}`).toBe(true);
+      }
+    }
+  });
+
+  it('lets blocks from other ranges go without faces, and checks the faces they do have', () => {
+    // The wilderness blocks (48..79) have no textures yet and draw as flat-colour tiles. Any faces given must exist.
+    const tiles = new Set(createDefaultCatalog().names());
+    for (const def of registry.all()) {
+      if (def.id <= 47 || !def.faces) continue;
+      for (const key of ['top', 'bottom', 'side'] as const) {
+        expect(tiles.has(def.faces[key]), `${def.name} ${key}: ${def.faces[key]}`).toBe(true);
+      }
+    }
+    expect(natureBlockIds().length).toBeGreaterThan(0);
+  });
+
+  it('textures grass, logs and farmland by face', () => {
+    expect(registry.get(BlockType.GRASS).faces).toEqual({ top: 'grass_top', bottom: 'dirt', side: 'grass_side' });
+    expect(registry.get(BlockType.WOOD_LOG).faces).toEqual({ top: 'log_top', bottom: 'log_top', side: 'log_side' });
+    expect(registry.get(BlockType.BIRCH_LOG).faces).toEqual({ top: 'birch_log_top', bottom: 'birch_log_top', side: 'birch_log_side' });
+    expect(registry.get(BlockType.FARMLAND).faces!.top).toBe('farmland');
+  });
+
+  it('tints only grass and oak leaves', () => {
+    const tinted = registry.all().filter((d) => d.tint).map((d) => [d.id, d.tint]);
+    expect(tinted).toEqual([[BlockType.GRASS, 'grass'], [BlockType.LEAVES, 'foliage']]);
+  });
+
+  it('only shares a top tile between blocks that are meant to match', () => {
+    // A cheap guard against two blocks sharing a texture by accident: the pairs that do are all deliberate.
+    const byTop = new Map<string, string[]>();
+    for (const def of registry.all()) {
+      if (!def.faces) continue;
+      const list = byTop.get(def.faces.top) ?? [];
+      list.push(def.name.replace('voxelverse:', ''));
+      byTop.set(def.faces.top, list);
+    }
+    const shared = [...byTop.entries()].filter(([, names]) => names.length > 1).map(([tile, names]) => `${tile}: ${names.join(',')}`);
+    expect(shared.sort()).toEqual([
+      'cobble: cobblestone,small_rock',
+      'plank: wood_plank,wood_fence',
+    ].sort());
   });
 });

@@ -1,9 +1,7 @@
-import { BlockType } from '../worldConstants';
+import { BlockType, LodLevel } from '../worldConstants';
 
-export enum LodLevel {
-  LOW = 0,
-  HIGH = 1
-}
+// LodLevel lives in worldConstants so the engine can name it without importing the zones.
+export { LodLevel };
 
 export interface AtmosphereSettings {
   fogColor: string;

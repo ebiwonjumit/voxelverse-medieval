@@ -4,11 +4,23 @@ import { Sky, Stats } from '@react-three/drei';
 import { Vector3, Color, DirectionalLight, Fog, Mesh, Object3D } from 'three';
 import World from './World';
 import Player from './Player';
-import { INITIAL_SPAWN, MILE } from '../constants';
+import { CHUNK_SIZE, MILE, RENDER_DISTANCE } from '../constants';
 import { getZone } from '../utils/terrain';
 import { voxelWorld } from '../gameWorld';
-import Benchmark, { BenchResult } from '../bench/Benchmark';
+import { playerState } from '../playerState';
+import Benchmark, { BenchMode, BenchResult } from '../bench/Benchmark';
 import BenchResults from '../bench/BenchResults';
+import ShotCamera from '../bench/ShotCamera';
+import { getWorldProbe } from '../bench/worldProbe';
+import { parseShot } from '../bench/shot';
+
+// How often the HUD and the atmosphere look at playerState. The player moves every frame, but nothing
+// on screen needs React to hear about it that often.
+const PLAYER_POLL_MS = 100;
+
+// The fog hides the edge of the loaded world: clear for the nearer chunks, solid at the render distance.
+const FOG_NEAR = (RENDER_DISTANCE - 2) * CHUNK_SIZE;
+const FOG_FAR = RENDER_DISTANCE * CHUNK_SIZE;
 
 const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number }) => {
   const { scene } = useThree();
@@ -95,17 +107,34 @@ const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number 
 };
 
 const Game: React.FC = () => {
-  const [playerPos, setPlayerPos] = useState<Vector3>(INITIAL_SPAWN);
+  // ?shot=x,y,z,yawDeg,pitchDeg parks the camera for screenshots, hides the HUD and replaces the Player.
+  const shot = useMemo(() => parseShot(window.location.search), []);
+  const [playerPos, setPlayerPos] = useState(() => ({ x: playerState.x, y: playerState.y, z: playerState.z }));
+  const [loadedChunks, setLoadedChunks] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const [showStats, setShowStats] = useState(false);
 
-  // ?bench runs a scripted flythrough instead of the player; ?bench=quick is a short smoke run.
-  const benchMode = useMemo(() => {
+  // ?bench runs a scripted flythrough instead of the player; ?bench=quick is a short smoke run
+  // and ?bench=soak walks a closed loop for 90 s while recording geometry counts.
+  const benchMode = useMemo((): BenchMode | null => {
+    if (shot) return null;
     const value = new URLSearchParams(window.location.search).get('bench');
-    return value === null ? null : value === 'quick' ? 'quick' : 'full';
-  }, []);
+    return value === null ? null : value === 'quick' || value === 'soak' ? value : 'full';
+  }, [shot]);
   const [benchLeg, setBenchLeg] = useState<string | null>(null);
   const [benchResult, setBenchResult] = useState<BenchResult | null>(null);
+
+  // Copy playerState into React state about 10 times a second, and only when the rounded position changed.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const x = Math.round(playerState.x);
+      const y = Math.round(playerState.y);
+      const z = Math.round(playerState.z);
+      setPlayerPos((prev) => (prev.x === x && prev.y === y && prev.z === z ? prev : { x, y, z }));
+      setLoadedChunks(getWorldProbe()?.getStats?.().chunks ?? 0);
+    }, PLAYER_POLL_MS);
+    return () => clearInterval(timer);
+  }, []);
 
   // Hide controls after 10 seconds
   useEffect(() => {
@@ -163,6 +192,7 @@ const Game: React.FC = () => {
 
   return (
     <div className="relative w-full h-full">
+      {!shot && <>
       {/* Main HUD */}
       <div className="absolute top-0 left-0 z-10 p-6 text-white pointer-events-none select-none">
         <h1 className="text-4xl font-bold drop-shadow-md mb-2 font-serif">VoxelVerse</h1>
@@ -232,7 +262,7 @@ const Game: React.FC = () => {
             <div className="text-yellow-400">DEBUG INFO</div>
             <div>Position: {hud.x}, {hud.y}, {hud.z}</div>
             <div>Zone: {hud.currentZone}</div>
-            <div>Chunks Loaded: ~{Math.pow(9, 2)}</div>
+            <div>Chunks Loaded: {loadedChunks}</div>
             <div className="text-gray-400 text-xs mt-2">Press F3 to toggle</div>
           </div>
         </div>
@@ -245,27 +275,29 @@ const Game: React.FC = () => {
         <div className="w-full h-0.5 bg-white/80 absolute top-1/2 transform -translate-y-1/2"></div>
         <div className="h-full w-0.5 bg-white/80 absolute left-1/2 transform -translate-x-1/2"></div>
       </div>
+      </>}
 
       <Canvas shadows camera={{ fov: 75 }}>
         {/* Show FPS stats in corner when debug is on */}
-        {showStats && <Stats className="!left-auto !right-4 !top-32" />}
+        {showStats && !shot && <Stats className="!left-auto !right-4 !top-32" />}
         
         <DayNightCycle playerX={playerPos.x} playerZ={playerPos.z} />
-        <fog attach="fog" args={['#5a4a6a', 40, 120]} /> 
+        <fog attach="fog" args={['#5a4a6a', FOG_NEAR, FOG_FAR]} />
 
         <Suspense fallback={null}>
-          <World playerPosition={playerPos} />
+          <World />
         </Suspense>
         
-        {benchMode ? (
+        {shot ? (
+          <ShotCamera shot={shot} />
+        ) : benchMode ? (
           <Benchmark
-            quick={benchMode === 'quick'}
-            setPlayerPos={setPlayerPos}
+            mode={benchMode}
             onProgress={setBenchLeg}
             onDone={setBenchResult}
           />
         ) : (
-          <Player setPlayerPos={setPlayerPos} />
+          <Player />
         )}
       </Canvas>
     </div>

@@ -21,7 +21,7 @@ npm run bench -- --quick            # short smoke test of the harness, numbers a
 The same flythrough runs in any browser at `http://localhost:3000/?bench` and shows a results panel when it finishes.
 Keep the window visible and in front for the whole run, because browsers pause rendering for hidden pages.
 
-The route is a fixed camera path that replaces the player. Position updates go through `setPlayerPos` every frame, as `Player` does, so React cost is included.
+The route is a fixed camera path that replaces the player. It writes `playerState` every frame, as `Player` does. (The baseline numbers below were taken before Phase 2, when this went through React state every frame, which was part of the cost. The results after the rebuild are in [perf-after-p2.md](perf-after-p2.md).)
 
 | Leg | What it does |
 | --- | --- |
@@ -64,17 +64,26 @@ Renderer load, which is the same in both runs: 17 to 19 draw calls and about 2 t
 - **Walking causes hitches.** Crossing chunk borders generates chunks synchronously on the main thread. There are 14 to 15 frames over 50 ms on the short leg and 56 to 61 on the long one, with the worst frames at 140 to 265 ms.
 - **The dev server is slower than production** mainly in the jump leg. Use production numbers for performance claims and dev numbers for what you feel while working.
 
+## Soak baseline and screenshots
+
+Added in Phase 2 step 2.1, before the renderer changes, so the new renderer can be compared with the old one.
+
+- Soak: `npm run bench -- --soak` walks a closed loop (Greensom, south road, plaza, west and east roads, home) at sprint speed for 90 s and samples `gl.info` every 5 s. The old renderer on the production build, [`bench-baseline-soak-prod.json`](bench-baseline-soak-prod.json): 59.1 fps, soak leg p99 31 ms with 39 frames over 50 ms, geometries 27 to 36 (the instanced chunks share one box geometry, so this was never the leak risk), 1.7 to 2.7 million triangles per frame, 29 live chunks and 337 chunk mounts in 90 s.
+- Screenshots: `docs/screens/p2/before-*.png` come from the old renderer on the production build at 1280x800 (`node bench/shots.mjs --prefix before`). The Phase 2 end step takes `after-*.png` at the same five viewpoints in `bench/viewpoints.json`. The old world is about 100 blocks of visible terrain because of the fog, so expect the after shots to differ mainly in distance.
+
 ## Console noise found while measuring
 
 `DayNightCycle` calls `new Color('#385865ca')` inside `useRef(...)`, which runs on every render. Three.js does not accept 8-digit hex and logs a warning, so the console receives one warning per frame (more than 25,000 in a few minutes). `COLORS.WATER` (`'#5194ffff'`) has the same problem. This is not fixed in Phase 0 so the baseline matches current behaviour. `DayNightCycle` is replaced in Phase 5 and the colour constants move into the block registry in Phase 1.
 
 ## Phase 2 targets
 
-| Measure | Now (production) | Target |
-| --- | --- | --- |
-| Render distance | 3 chunks | 8 chunks |
-| jump leg p99 | 189 ms | under 20 ms |
-| Walking legs p99 | 47 to 56 ms | under 25 ms |
-| Frames over 50 ms while walking | 15 to 56 per leg | 0 |
-| Overall fps | 56 | 60 |
-| Geometry count after a 5 minute walk | not tracked | flat |
+Achieved values are from the end of Phase 2 (production build, render distance 8), in full in [perf-after-p2.md](perf-after-p2.md).
+
+| Measure | Now (production) | Target | Achieved |
+| --- | --- | --- | --- |
+| Render distance | 3 chunks | 8 chunks | 8 chunks |
+| jump leg p99 | 189 ms | under 20 ms | 17.6 ms |
+| Walking legs p99 | 47 to 56 ms | under 25 ms | 17.7 ms |
+| Frames over 50 ms while walking | 15 to 56 per leg | 0 | 0 (worst walking frame 24.9 ms) |
+| Overall fps | 56 | 60 | 60.0 (the browser caps at 60) |
+| Geometry count after a 5 minute walk | not tracked | flat | flat over the 90 s soak: 355 at 30 s, 352 at the end (a 5 minute walk was not run) |

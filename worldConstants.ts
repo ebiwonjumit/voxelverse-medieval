@@ -1,7 +1,7 @@
 // Pure data and numbers. Nothing here may import Three.js, so world generation can run in a web worker.
 
 export const CHUNK_SIZE = 32;
-export const RENDER_DISTANCE = 3; 
+export const RENDER_DISTANCE = 8; // chunks, circular
 export const BLOCK_SIZE = 1;
 export const WORLD_HEIGHT = 70; // Increased for towers
 export const WATER_LEVEL = 3;
@@ -92,6 +92,12 @@ export const COLORS = {
   LANTERN: '#ffeb3b',
   RED_APPLE: '#d32f2f'
 };
+
+// How much detail a generator puts in. The zones leave out small decorations (lanterns, crops, apples) at LOW.
+export enum LodLevel {
+  LOW = 0,
+  HIGH = 1
+}
 
 export enum BlockType {
   AIR = 0,

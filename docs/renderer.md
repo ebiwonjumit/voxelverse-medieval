@@ -1,0 +1,68 @@
+# Chunk renderer
+
+Phase 2 replaced the old renderer, which mounted a React component per chunk and drew every block as an instanced cube, with chunk meshes built in web workers. `components/World.tsx` is now a few lines: it creates a `ChunkRenderer`, calls `update` once a frame with the camera position and disposes it on unmount.
+
+## How a chunk gets on screen
+
+```
+ChunkRenderer.update(x, z)         main thread, every frame
+  -> MeshWorkerPool.request(cx, cz, lod)
+       -> mesh.worker.ts           generate the chunk, mesh it (runMeshJob)
+       <- MeshData, buffers transferred, not copied
+  -> upload queue                  at most 2 geometries added per frame, nearest chunk first
+  -> Mesh in ChunkRenderer.group
+```
+
+| File | Role |
+| --- | --- |
+| `render/ChunkRenderer.ts` | Three.js side: which chunks to hold, uploads, materials, disposal, stats. |
+| `render/AtlasBuilder.ts` | Packs the texture catalog into the block texture array (`DataArrayTexture`). |
+| `render/BlockMaterials.ts` | The three shared materials (opaque, cutout, water) and the shader patch that samples the array. |
+| `render/createMeshWorker.ts` | The one `new Worker(new URL(...))` call, in the form Vite bundles. |
+| `meshing/MeshWorkerPool.ts` | Pool, priority queue, cancel, stale results. No Three.js. |
+| `meshing/mesh.worker.ts` | Worker entry point. Builds its own registry and generator, answers jobs. |
+| `meshing/runMeshJob.ts` | The work of one job, separate from the messaging so tests can run it. |
+| `worldgen/createWorkerGenerator.ts` | Says which generator the workers use. |
+| `playerState.ts` | Mutable `{ x, y, z }` the player writes every frame. |
+
+## Which chunks are held
+
+- The player's chunk is `floor(camera / 32)`. Everything is recomputed only when that changes.
+- A chunk is requested when its distance from the player's chunk (straight line, in chunks) is at most `RENDER_DISTANCE`, which is 8. That is a circle of about 200 chunks.
+- A chunk is dropped when it is more than `RENDER_DISTANCE + 1` away. The extra chunk is hysteresis, so walking back and forth over a border does not rebuild anything. Dropping a chunk cancels its job if it has not started, drops its result if it has, and disposes its geometries.
+- Chunks within 2 chunks of the player are generated at `LodLevel.HIGH`, the rest at `LOW` (the zones leave out small decorations like lanterns, crops and apples). When the player walks up to a chunk that was built at LOW it is requested again at HIGH and its geometry is replaced in place.
+- Nothing depends on the player's height. Jumping changes no chunk and sends no job.
+
+## Jobs
+
+`MeshWorkerPool` starts `min(max(hardwareConcurrency - 1, 1), 4)` workers. Queued jobs are ranked by distance to the player when a worker frees up, not when the job was queued, so a long queue follows the player. A chunk has at most one live request: asking again replaces it. `cancel(cx, cz)` removes a job that has not started and returns true; for a running job it returns false and the result is dropped when it arrives. A worker error is reported once and the chunk is asked for again the next time the player changes chunk.
+
+Each worker holds its own registry and `LegacyZoneAdapter`, so a job is just `{ id, cx, cz, lod }`. The main thread keeps its own `VoxelWorld` for collision, exactly as before, and never generates chunks for it.
+
+## Upload budget
+
+Three.js sends a geometry to the GPU the first time it is drawn, so the number of geometries added to the scene per frame is the number of uploads per frame. `ChunkRenderer` adds at most `MAX_GEOMETRIES_PER_FRAME` (2), working through finished chunks nearest first and through the buckets of one chunk in the order opaque, cutout, water. Replacing the geometry of a mesh that already exists counts too. Removing one is free.
+
+## Meshes and materials
+
+- One mesh per non-empty bucket per chunk. Vertices are chunk-local; `mesh.position` is the chunk origin minus half a block on each axis (the mesher's cubes run from the block coordinate upward, the old renderer centred them). `matrixAutoUpdate` is off.
+- The bounding sphere is set from the buffer's own bounds, and padded for water, so frustum culling works per bucket without Three.js scanning the buffer again.
+- Three shared materials, all `MeshStandardMaterial` patched with `onBeforeCompile`: **opaque** (vertex colours, roughness 0.8, metalness 0.1, no alpha test, so early depth rejection still works), **cutout** (same, with `alphaTest` 0.5, for leaves, glass and shaped blocks; the tiles' alpha is only ever 0 or 255, so nothing needs sorting) and **water** (vertex colours, transparent, opacity 0.75, roughness 0.1, metalness 0.8, flat shading, with the wave). There is no per-chunk material and no distance fade. Because they stay `MeshStandardMaterial`, the scene's lights and fog apply unchanged.
+- The patch replaces only where the diffuse colour comes from. In the fragment shader `diffuseColor *= texel`, where the texel is sampled from the array at the vertex's layer and uv, then multiplied by the biome tint (`vTint`), then Three.js multiplies the vertex colour (ambient occlusion) as usual. For a grass side there are two layers: the base tile (dirt where the fringe is) and the fringe mask, and the result is `mix(base, mask * tint, mask.a)`, so only the fringe takes the zone colour. Layer numbers are `flat` varyings, so they are never interpolated.
+- Sampling uses `textureGrad` with derivatives taken outside the branch, so the mip level is the same on both sides of the overlay `if` and the cutout edge never picks a different level than its neighbour pixel.
+- The water wave is in the vertex shader and reads the vertex's world position, `sin(x * 0.5 + t) * 0.2 + cos(z * 0.4 + t * 1.2) * 0.15`, the same formula the instanced version applied per block. It needs no instancing, and neighbouring faces move together.
+- Lights are unchanged. Fog now scales with the render distance: near `(RENDER_DISTANCE - 2) * 32`, far `RENDER_DISTANCE * 32`, with the same per-zone colour logic.
+
+## Player position
+
+`playerState` is a plain object. `Player` writes it each frame, as do the benchmark route and the screenshot camera. `Game` copies it into React state about 10 times a second (and only when the rounded position changed) to draw the HUD and pick the zone atmosphere. The world takes no position prop: `World` reads the camera.
+
+## Stats and readiness
+
+`getStats()` returns `chunks` (tracked), `meshes` (in the scene), `geometries` (created and not yet disposed, counted independently of `gl.info`) and `pending` (jobs not finished plus meshes waiting for upload). They go into the soak output through the world probe. `isReady()` is what `?shot` mode waits for: every requested chunk built and uploaded, and nothing changing for a second.
+
+## Measured
+
+Production build, render distance 8, headless Chrome on an Apple M4. Every leg of the flythrough holds 60 fps (the browser's cap) with p99 under 18.5 ms and no frame over 25 ms, the jump leg builds nothing, and the geometry count is flat over a 90 s soak. The tables, the soak samples and the before and after screenshots are in [perf-after-p2.md](perf-after-p2.md); raw results are in [`bench-p2-prod.json`](bench-p2-prod.json), [`bench-p2-dev.json`](bench-p2-dev.json) and [`bench-soak-p2-prod.json`](bench-soak-p2-prod.json). Typical load is 100 to 160 draw calls and 190,000 to 330,000 triangles per frame, up to 560,000 on the long road leg.
+
+After Phase 3 (textures) the frame numbers are unchanged within noise (60 fps, p99 17.7 ms, no frame over 50 ms in the walking legs) and draw calls, triangles and geometry counts are identical; the JS heap is higher because vertices are 76 bytes. See [perf-after-p3.md](perf-after-p3.md). `bucketGeometry` (exported from `render/ChunkRenderer.ts`) builds the Three.js geometry of one bucket and is shared with the block sandbox ([textures.md](textures.md#block-sandbox)).

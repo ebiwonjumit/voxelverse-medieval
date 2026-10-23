@@ -28,6 +28,24 @@ const BenchResults: React.FC<Props> = ({ running, result }) => (
             ))}
           </tbody>
         </table>
+        {result.soak && result.soak.length > 0 && (
+          <table className="w-full text-left mt-3">
+            <thead>
+              <tr className="text-gray-400">
+                <th>soak t</th><th>geo</th><th>tris</th><th>calls</th><th>heap MB</th>
+                {Object.keys(result.soak[0].stats ?? {}).map((k) => <th key={k}>{k}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {result.soak.map((s) => (
+                <tr key={s.t}>
+                  <td>{s.t}</td><td>{s.geometries}</td><td>{s.triangles}</td><td>{s.drawCalls}</td><td>{s.heapMB ?? ''}</td>
+                  {Object.values(s.stats ?? {}).map((v, i) => <td key={i}>{v}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
         <div className="text-gray-400 mt-2">Frame times in ms. Full JSON: window.__BENCH_RESULT__ or the console line BENCH_RESULT.</div>
       </>
     )}

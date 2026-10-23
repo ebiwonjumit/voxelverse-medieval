@@ -1,9 +1,10 @@
-import { BlockRegistry } from '../engine/BlockRegistry';
+import { BlockFaces, BlockRegistry, BlockTint } from '../engine/BlockRegistry';
 import { BlockType, COLORS } from '../worldConstants';
 import { registerNatureBlocks } from './blocksNature';
 
 // The legacy blocks, registered under their old BlockType numbers so the existing zones keep working.
-// Flat colours come from COLORS until blocks get textures in Phase 3.
+// Flat colours come from COLORS. They are the fallback tile for blocks without faces, so blocks added later
+// by other branches still draw, and they back the texture-less look of anything the catalog lacks.
 
 type Colored = Exclude<BlockType, BlockType.AIR>;
 
@@ -72,6 +73,68 @@ const NOT_OPAQUE = new Set<BlockType>([
   BlockType.MAGIC_CRYSTAL, BlockType.FARMLAND,
 ]);
 
+const same = (name: string): BlockFaces => ({ top: name, bottom: name, side: name });
+const ends = (end: string, side: string): BlockFaces => ({ top: end, bottom: end, side });
+
+// Texture names come from the catalog in content/textures. Shaped blocks (fences, crops, flowers) are still
+// boxes and wear the same tile on every face until Phase 4 gives them real models.
+const FACES: Record<Colored, BlockFaces> = {
+  [BlockType.GRASS]: { top: 'grass_top', bottom: 'dirt', side: 'grass_side' },
+  [BlockType.DIRT]: same('dirt'),
+  [BlockType.STONE]: same('stone'),
+  [BlockType.SAND]: same('sand'),
+  [BlockType.WATER]: same('water'),
+  [BlockType.SNOW]: same('snow'),
+  [BlockType.STONE_BRICK]: same('stone_brick'),
+  [BlockType.WOOD_LOG]: ends('log_top', 'log_side'),
+  [BlockType.WOOD_PLANK]: same('plank'),
+  [BlockType.PLASTER]: same('plaster'),
+  [BlockType.ROOF_RED]: same('roof_red'),
+  [BlockType.ROOF_BLUE]: same('roof_blue'),
+  [BlockType.GLASS]: same('glass'),
+  [BlockType.COBBLESTONE]: same('cobble'),
+  [BlockType.PATH]: same('path'),
+  [BlockType.LEAVES]: same('leaves_oak'),
+  [BlockType.RED_BRICK]: same('brick_red'),
+  [BlockType.DARK_PLANK]: same('dark_plank'),
+  [BlockType.MOSSY_COBBLESTONE]: same('mossy_cobble'),
+  [BlockType.FLOWER_YELLOW]: same('flower_yellow'),
+  [BlockType.FLOWER_RED]: same('flower_red'),
+  [BlockType.SMALL_ROCK]: same('cobble'),
+  [BlockType.BIRCH_LOG]: ends('birch_log_top', 'birch_log_side'),
+  [BlockType.BIRCH_LEAVES]: same('leaves_birch'),
+  [BlockType.PINE_LEAVES]: same('leaves_pine'),
+  [BlockType.FACTORY_BRICK]: same('brick_factory'),
+  [BlockType.IRON_BLOCK]: same('iron'),
+  [BlockType.OBSIDIAN]: same('obsidian'),
+  [BlockType.BASALT]: same('basalt'),
+  [BlockType.SLIME_BLOCK]: same('slime'),
+  [BlockType.MAGIC_CRYSTAL]: same('crystal'),
+  [BlockType.MARBLE]: same('marble'),
+  [BlockType.GOLD_BLOCK]: same('gold'),
+  [BlockType.WOOD_FENCE]: same('plank'),
+  [BlockType.FARMLAND]: { top: 'farmland', bottom: 'dirt', side: 'dirt' },
+  [BlockType.WHEAT]: same('wheat_ripe'),
+  [BlockType.STEEL_BEAM]: same('steel'),
+  [BlockType.HANGAR_WALL]: same('hangar_wall'),
+  [BlockType.GUILD_WOOD]: same('guild_wood'),
+  [BlockType.MAGIC_STONE]: same('magic_stone'),
+  [BlockType.LILY_PAD]: same('lily_pad'),
+  [BlockType.SUGARCANE]: same('sugarcane'),
+  [BlockType.TALL_GRASS]: same('tall_grass'),
+  [BlockType.LANTERN]: same('lantern'),
+  [BlockType.RED_APPLE]: same('red_apple'),
+  [BlockType.WHEAT_STAGE_1]: same('wheat_stage_1'),
+  [BlockType.WHEAT_STAGE_2]: same('wheat_stage_2'),
+};
+
+// Grass takes the zone colour on its top and its fringe; oak leaves take it darkened. Birch and pine leaves
+// keep their own colours, as they did when they were flat.
+const TINT = new Map<BlockType, BlockTint>([
+  [BlockType.GRASS, 'grass'],
+  [BlockType.LEAVES, 'foliage'],
+]);
+
 const EMITS = new Map<BlockType, number>([
   [BlockType.LANTERN, 15],
   [BlockType.MAGIC_CRYSTAL, 10],
@@ -88,6 +151,8 @@ export const createDefaultRegistry = (): BlockRegistry => {
       solid: !NOT_SOLID.has(type),
       opaque: !NOT_OPAQUE.has(type),
       emits: EMITS.get(type) ?? 0,
+      faces: type === BlockType.AIR ? undefined : FACES[type as Colored],
+      tint: TINT.get(type),
     });
   }
   registerNatureBlocks(registry);
