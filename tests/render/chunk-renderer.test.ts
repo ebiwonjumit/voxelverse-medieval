@@ -360,12 +360,14 @@ describe('ChunkRenderer', () => {
     it('reads sky light through one daylight uniform that setDaylight moves for every material', () => {
       const { renderer } = upload(['opaque', 'cutout', 'water']);
       const uniforms = new Set<{ value: unknown }>();
+      const skyLights = new Set<{ value: unknown }>();
       for (const mesh of meshesIn(renderer)) {
         const shader = patchedShader();
         (mesh.material as MeshBasicMaterial).onBeforeCompile(shader as never, null as never);
         expect(shader.fragmentShader).toContain('uniform float uDaylight');
-        expect(shader.fragmentShader).toContain('max( vec3( sky ), BLOCK_LIGHT_COLOR * block )');
+        expect(shader.fragmentShader).toContain('max( vec3( sky ) * uSkyLight, BLOCK_LIGHT_COLOR * block )');
         uniforms.add(shader.uniforms.uDaylight);
+        skyLights.add(shader.uniforms.uSkyLight);
       }
       expect(uniforms.size).toBe(1);
       const daylight = [...uniforms][0];
@@ -376,6 +378,13 @@ describe('ChunkRenderer', () => {
       expect(daylight.value).toBe(0);
       renderer.setDaylight(7);
       expect(daylight.value).toBe(1);
+
+      // The colour of the sky light is shared the same way and starts neutral.
+      expect(skyLights.size).toBe(1);
+      const skyLight = [...skyLights][0].value as { x: number; y: number; z: number };
+      expect([skyLight.x, skyLight.y, skyLight.z]).toEqual([1, 1, 1]);
+      renderer.setSkyLightColor(0.5, 0.75, 1.1);
+      expect([skyLight.x, skyLight.y, skyLight.z]).toEqual([0.5, 0.75, 1.1]);
     });
 
     it('does not rebuild any geometry when the daylight changes', () => {

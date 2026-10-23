@@ -1,11 +1,11 @@
-import React, { useState, Suspense, useRef, useEffect, useMemo } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Sky, Stats } from '@react-three/drei';
-import { Vector3, Color, DirectionalLight, Fog, Mesh, Object3D } from 'three';
+import React, { useState, Suspense, useEffect, useMemo } from 'react';
+import { Canvas } from '@react-three/fiber';
+import { Stats } from '@react-three/drei';
 import World from './World';
+import SkyRig from './SkyRig';
 import Player from './Player';
-import { CHUNK_SIZE, MILE, RENDER_DISTANCE } from '../constants';
-import { getZone } from '../utils/terrain';
+import { MILE } from '../constants';
+import { SkyClock, SkySystem, parseSkyOptions } from '../render/SkySystem';
 import { voxelWorld } from '../gameWorld';
 import { playerState } from '../playerState';
 import Benchmark, { BenchMode, BenchResult } from '../bench/Benchmark';
@@ -17,94 +17,6 @@ import { parseShot } from '../bench/shot';
 // How often the HUD and the atmosphere look at playerState. The player moves every frame, but nothing
 // on screen needs React to hear about it that often.
 const PLAYER_POLL_MS = 100;
-
-// The fog hides the edge of the loaded world: clear for the nearer chunks, solid at the render distance.
-const FOG_NEAR = (RENDER_DISTANCE - 2) * CHUNK_SIZE;
-const FOG_FAR = RENDER_DISTANCE * CHUNK_SIZE;
-
-const DayNightCycle = ({ playerX, playerZ }: { playerX: number, playerZ: number }) => {
-  const { scene } = useThree();
-  const dirLight = useRef<DirectionalLight>(null);
-  const skyRef = useRef<Mesh>(null);
-  const ambientLightRef = useRef<any>(null);
-  
-  // Create a persistent target object for the directional light
-  const lightTarget = useMemo(() => {
-    const obj = new Object3D();
-    scene.add(obj); // Critical: Add target to scene for updates to work
-    return obj;
-  }, [scene]);
-
-  useEffect(() => {
-    return () => {
-      scene.remove(lightTarget);
-    };
-  }, [scene, lightTarget]);
-  
-  const [sunPosition] = useState(new Vector3(50, -20, 50)); // Low sun position for twilight purple sky
-  const currentFogColor = useRef(new Color('#385865ca'));
-
-  useFrame(({ camera }) => {
-    if (skyRef.current) {
-        skyRef.current.position.copy(camera.position);
-    }
-
-    const relativeSunPos = sunPosition.clone();
-
-    const zone = getZone(playerX, playerZ);
-    const atmosphere = zone.getAtmosphere();
-    const targetFogHex = atmosphere.fogColor;
-
-    if (dirLight.current) {
-      dirLight.current.position.copy(camera.position).add(relativeSunPos);
-      
-      // Update the target position to follow camera but stay grounded relative to light direction
-      lightTarget.position.copy(camera.position);
-      lightTarget.updateMatrixWorld();
-
-      // Proper daytime lighting
-      dirLight.current.intensity = 1.0;
-      dirLight.current.color.setHex(0xffffff); // Pure white light
-    }
-
-    if (ambientLightRef.current) {
-      ambientLightRef.current.intensity = 0.4;
-      ambientLightRef.current.color.setHex(0xffffff);
-    }
-
-    if (scene.fog) {
-      const fog = scene.fog as Fog;
-      const dayColor = new Color(targetFogHex); 
-      currentFogColor.current.lerp(dayColor, 0.02);
-      fog.color.copy(currentFogColor.current);
-    }
-  });
-
-  return (
-    <>
-      <Sky ref={skyRef as any} sunPosition={sunPosition} turbidity={10} rayleigh={2} mieCoefficient={0.005} mieDirectionalG={0.8} />
-      
-      {/* Ambient light for overall scene brightness */}
-      <ambientLight ref={ambientLightRef} intensity={0.4} />
-      
-      {/* Hemisphere Light provides natural fill light (Sky Color + Ground Color) */}
-      <hemisphereLight args={['#6b4b7a', '#4a3358', 0.4]} />
-      
-      <directionalLight 
-        ref={dirLight}
-        target={lightTarget}
-        intensity={1.0}
-        castShadow
-        shadow-mapSize={[2048, 2048]}
-        shadow-bias={-0.0005}
-        shadow-camera-left={-50}
-        shadow-camera-right={50}
-        shadow-camera-top={50}
-        shadow-camera-bottom={-50}
-      />
-    </>
-  );
-};
 
 const Game: React.FC = () => {
   // ?shot=x,y,z,yawDeg,pitchDeg parks the camera for screenshots, hides the HUD and replaces the Player.
@@ -124,6 +36,15 @@ const Game: React.FC = () => {
   const [benchLeg, setBenchLeg] = useState<string | null>(null);
   const [benchResult, setBenchResult] = useState<BenchResult | null>(null);
 
+  // The sky owns the clock, the dome, the fog and the daylight the chunks show. A screenshot gets noon unless the address
+  // says otherwise (?sky=dawn, ?time=18:30, see parseSkyOptions), so the shots of one viewpoint can be compared.
+  const sky = useMemo(
+    () => new SkySystem({ clock: new SkyClock(parseSkyOptions(window.location.search, shot !== null)) }),
+    [shot],
+  );
+  useEffect(() => () => sky.dispose(), [sky]);
+  const [skyInfo, setSkyInfo] = useState(() => sky.clock.describe());
+
   // Copy playerState into React state about 10 times a second, and only when the rounded position changed.
   useEffect(() => {
     const timer = setInterval(() => {
@@ -132,9 +53,10 @@ const Game: React.FC = () => {
       const z = Math.round(playerState.z);
       setPlayerPos((prev) => (prev.x === x && prev.y === y && prev.z === z ? prev : { x, y, z }));
       setLoadedChunks(getWorldProbe()?.getStats?.().chunks ?? 0);
+      setSkyInfo(sky.clock.describe());
     }, PLAYER_POLL_MS);
     return () => clearInterval(timer);
-  }, []);
+  }, [sky]);
 
   // Hide controls after 10 seconds
   useEffect(() => {
@@ -230,7 +152,8 @@ const Game: React.FC = () => {
           </div>
 
           <div className="pt-2 mt-2 border-t border-white/20 text-xs text-gray-400 font-mono">
-            XYZ: {hud.x}, {hud.y}, {hud.z}
+            <div>XYZ: {hud.x}, {hud.y}, {hud.z}</div>
+            <div>Time: {skyInfo}</div>
           </div>
         </div>
       </div>
@@ -247,6 +170,9 @@ const Game: React.FC = () => {
               <div><span className="text-gray-400">Shift</span> Sprint</div>
               <div><span className="text-gray-400">Click</span> Lock Cursor</div>
               <div><span className="text-gray-400">F3</span> Debug</div>
+              <div><span className="text-gray-400">F4</span> Sky preset</div>
+              <div><span className="text-gray-400">[ ]</span> Time -1h / +1h</div>
+              <div><span className="text-gray-400">- =</span> Time slower / faster</div>
             </div>
             <div className="text-xs text-gray-500 mt-2 pt-1 border-t border-white/10">
               Press H to toggle this help
@@ -263,6 +189,7 @@ const Game: React.FC = () => {
             <div>Position: {hud.x}, {hud.y}, {hud.z}</div>
             <div>Zone: {hud.currentZone}</div>
             <div>Chunks Loaded: {loadedChunks}</div>
+            <div>Time: {skyInfo}</div>
             <div className="text-gray-400 text-xs mt-2">Press F3 to toggle</div>
           </div>
         </div>
@@ -277,15 +204,14 @@ const Game: React.FC = () => {
       </div>
       </>}
 
-      <Canvas shadows camera={{ fov: 75 }}>
+      <Canvas camera={{ fov: 75 }}>
         {/* Show FPS stats in corner when debug is on */}
         {showStats && !shot && <Stats className="!left-auto !right-4 !top-32" />}
         
-        <DayNightCycle playerX={playerPos.x} playerZ={playerPos.z} />
-        <fog attach="fog" args={['#5a4a6a', FOG_NEAR, FOG_FAR]} />
+        <SkyRig sky={sky} />
 
         <Suspense fallback={null}>
-          <World />
+          <World sky={sky} />
         </Suspense>
         
         {shot ? (

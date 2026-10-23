@@ -1,4 +1,4 @@
-import { DataArrayTexture, MeshBasicMaterial, WebGLProgramParametersWithUniforms } from 'three';
+import { DataArrayTexture, MeshBasicMaterial, Vector3, WebGLProgramParametersWithUniforms } from 'three';
 
 // The three materials chunk meshes use. All of them are MeshBasicMaterial patched with onBeforeCompile: chunk geometry
 // takes nothing from the scene's lights, because the light is baked into the vertices (see meshing/ChunkMesher.ts and
@@ -11,8 +11,10 @@ import { DataArrayTexture, MeshBasicMaterial, WebGLProgramParametersWithUniforms
 // top, but only the fringe of a grass side. Faces with a tint overlay carry two layers: the base tile, drawn untinted,
 // and the mask tile, whose alpha says where the tint colour is laid over the base.
 //
-// uDaylight is a uniform shared by the three materials, 1 at noon and near 0 at night. It is the only thing the time of
-// day changes: sky light is baked as a level and scaled here every frame, so day and night never re-mesh a chunk.
+// uDaylight and uSkyLight are uniforms shared by the three materials: uDaylight is 1 at noon and near 0 at night, and
+// uSkyLight is the colour the sky light takes (white by day, warm at dusk, blue at night). They are the only things the
+// time of day changes: sky light is baked as a level and scaled here every frame by the SkySystem (render/SkySystem.ts),
+// so day and night never re-mesh a chunk.
 //
 // Vertex attributes (see meshing/ChunkMesher.ts): uv, texLayer (base layer, overlay layer or -1), tint and bakedLight
 // (sky, block, ao, glow).
@@ -52,6 +54,7 @@ vFaceShade = 0.86 + 0.14 * normal.y - 0.05 * abs( normal.x );
 const FRAGMENT_DECLARATIONS = `
 uniform sampler2DArray uBlockTextures;
 uniform float uDaylight;
+uniform vec3 uSkyLight;
 varying vec2 vTexUv;
 varying vec3 vTint;
 flat varying vec2 vTexLayer;
@@ -67,7 +70,7 @@ const vec3 BLOCK_LIGHT_COLOR = vec3( 1.0, 0.84, 0.6 );
 vec3 bakedLighting() {
   float sky = pow( vBakedLight.x, LIGHT_CURVE ) * uDaylight;
   float block = pow( max( vBakedLight.y, vBakedLight.w ), LIGHT_CURVE );
-  vec3 lit = max( vec3( sky ), BLOCK_LIGHT_COLOR * block );
+  vec3 lit = max( vec3( sky ) * uSkyLight, BLOCK_LIGHT_COLOR * block );
   lit = max( lit, vec3( AMBIENT_FLOOR ) );
   return lit * LIGHT_SCALE * ( vBakedLight.z * vFaceShade * ( 1.0 + vBakedLight.w * GLOW_BOOST ) );
 }
@@ -90,10 +93,11 @@ diffuseColor *= texel;
 
 export const patchTextureLookup = (
   shader: WebGLProgramParametersWithUniforms, textures: { value: DataArrayTexture | null },
-  daylight: { value: number },
+  daylight: { value: number }, skyLight: { value: Vector3 },
 ): void => {
   shader.uniforms.uBlockTextures = textures;
   shader.uniforms.uDaylight = daylight;
+  shader.uniforms.uSkyLight = skyLight;
   shader.vertexShader = shader.vertexShader
     .replace('void main() {', `${VERTEX_DECLARATIONS}\nvoid main() {`)
     .replace('#include <color_vertex>', `#include <color_vertex>\nvTexUv = uv;\nvTexLayer = texLayer;\nvTint = tint;${VERTEX_LIGHT}`);
@@ -117,24 +121,26 @@ const patchWaterWave = (shader: WebGLProgramParametersWithUniforms, time: { valu
 };
 
 /**
- * `textures` is the shared array, `time` the clock the water wave reads and `daylight` the sky light multiplier, 0 to 1.
- * All three are uniform objects the caller keeps: swapping `textures.value` changes the texture of every material and
- * setting `daylight.value` changes the time of day, neither recompiling anything.
+ * `textures` is the shared array, `time` the clock the water wave reads, `daylight` the sky light multiplier, 0 to 1, and
+ * `skyLight` the colour that light takes (white unless the sky system says otherwise). All four are uniform objects the
+ * caller keeps: swapping `textures.value` changes the texture of every material and setting `daylight.value` or
+ * `skyLight.value` changes the time of day, neither recompiling anything.
  */
 export const createBlockMaterials = (
   textures: { value: DataArrayTexture | null }, time: { value: number }, daylight: { value: number } = { value: 1 },
+  skyLight: { value: Vector3 } = { value: new Vector3(1, 1, 1) },
 ): BlockMaterials => {
   const opaque = new MeshBasicMaterial();
-  opaque.onBeforeCompile = (shader) => patchTextureLookup(shader, textures, daylight);
+  opaque.onBeforeCompile = (shader) => patchTextureLookup(shader, textures, daylight, skyLight);
   opaque.customProgramCacheKey = () => 'block-opaque';
 
   const cutout = new MeshBasicMaterial({ alphaTest: 0.5 });
-  cutout.onBeforeCompile = (shader) => patchTextureLookup(shader, textures, daylight);
+  cutout.onBeforeCompile = (shader) => patchTextureLookup(shader, textures, daylight, skyLight);
   cutout.customProgramCacheKey = () => 'block-cutout';
 
   const water = new MeshBasicMaterial({ transparent: true, opacity: 0.75 });
   water.onBeforeCompile = (shader) => {
-    patchTextureLookup(shader, textures, daylight);
+    patchTextureLookup(shader, textures, daylight, skyLight);
     patchWaterWave(shader, time);
   };
   water.customProgramCacheKey = () => 'block-water';

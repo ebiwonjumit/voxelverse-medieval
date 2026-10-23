@@ -127,6 +127,8 @@ export class ChunkRenderer {
   private readonly timeUniform = { value: 0 };
   // Scales the baked sky light in the shader; the day/night cycle sets it each frame with setDaylight.
   private readonly daylightUniform = { value: 1 };
+  // The colour of that light: white at noon, warm at dusk, blue at night.
+  private readonly skyLightUniform = { value: new Vector3(1, 1, 1) };
 
   private readonly timing = { jobs: 0, generate: 0, light: 0, mesh: 0, maxLight: 0, maxMesh: 0, generated: 0 };
 
@@ -145,7 +147,7 @@ export class ChunkRenderer {
     this.atlas = options.atlas
       ?? buildAtlas(createDefaultCatalog(), createDefaultTextureLayout(createDefaultRegistry()));
     this.textureUniform = { value: this.atlas.texture };
-    this.materials = createBlockMaterials(this.textureUniform, this.timeUniform, this.daylightUniform);
+    this.materials = createBlockMaterials(this.textureUniform, this.timeUniform, this.daylightUniform, this.skyLightUniform);
 
     const factory = options.workerFactory ?? createMeshWorker;
     const size = options.poolSize ?? defaultPoolSize(typeof navigator === 'undefined' ? undefined : navigator.hardwareConcurrency);
@@ -185,6 +187,11 @@ export class ChunkRenderer {
   // screen and every chunk still to come, because it is a uniform: nothing is re-meshed.
   setDaylight(daylight: number): void {
     this.daylightUniform.value = Math.min(Math.max(daylight, 0), 1);
+  }
+
+  // The colour sky light takes, as multipliers (1, 1, 1 is neutral). Same rules as setDaylight.
+  setSkyLightColor(r: number, g: number, b: number): void {
+    this.skyLightUniform.value.set(r, g, b);
   }
 
   // True once the world around the player has been requested, built and uploaded and nothing has changed for a moment.
