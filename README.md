@@ -45,6 +45,8 @@ The world is generated procedurally using noise functions and a custom "Zone Sys
 npm run dev         # start the game at http://localhost:3000
 npm run typecheck   # TypeScript, no emit
 npm test            # Vitest unit tests (tests/)
+PERF_TOLERANCE=4 npm test   # same, with the wall-clock limits multiplied (what CI uses on slow runners)
+npm audit --omit=dev   # dependency check for what ships, see docs/dependencies.md
 npm run bench       # scripted flythrough in headless Chrome, needs the dev server running
 npm run textures:sheet   # dump the texture catalog to docs/screens/p3/catalog.png
 npm run bench -- --smoke   # loads the real game, lands the player, walks forward, reports page errors
@@ -58,6 +60,8 @@ npm run bench -- --shot docs/screens/p3/blocks.png --url "http://localhost:3000/
 Screenshot mode: `/?shot=x,y,z,yawDeg,pitchDeg` parks the camera, hides the HUD and sets `window.__SHOT_READY__` when the world has loaded. Yaw 0 looks toward -z and positive yaw turns left; positive pitch looks up. `--shot <file.png>` waits for that flag and saves a 1280x800 PNG. Soak mode: `/?bench=soak` (or `npm run bench -- --soak`) records `gl.info` memory and render counters, plus the world renderer's own stats, into `result.soak`.
 
 Block sandbox: `/?sandbox=blocks` replaces the game with every registered block as a labelled cube on a grid under fixed neutral light, plus the grass and leaves under each zone's biome tint; drag to orbit. `&view=close` shows a few materials up close, `&focus=wood_plank,marble` any blocks by short name, `&cam=px,py,pz,tx,ty,tz` sets the camera. It raises `window.__SHOT_READY__` like `?shot`, so `--shot` works on it (see [docs/textures.md](docs/textures.md#block-sandbox)).
+
+CI (`.github/workflows/ci.yml`) runs typecheck, tests and the build on every pull request and push to main. Dependency audit results and what remains are in [docs/dependencies.md](docs/dependencies.md).
 
 Open `/?bench` in a browser to run the same flythrough by hand. Baseline numbers and how to read them are in [docs/perf-baseline.md](docs/perf-baseline.md); the results after the Phase 2 rebuild are in [docs/perf-after-p2.md](docs/perf-after-p2.md) and after the textures in [docs/perf-after-p3.md](docs/perf-after-p3.md). The block and chunk layer is described in [docs/engine.md](docs/engine.md), the mesher in [docs/meshing.md](docs/meshing.md), the renderer and workers in [docs/renderer.md](docs/renderer.md), and the block textures, the texture array and the material in [docs/textures.md](docs/textures.md).
 
