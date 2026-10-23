@@ -7,7 +7,7 @@ Phase 1 of the rebuild plan added a block and chunk layer under the game. The ol
 | Folder | What is in it |
 | --- | --- |
 | `engine/` | Voxel core: `coords`, `cell`, `BlockRegistry`, `Chunk`, `ChunkStore`, `VoxelWorld` and the `WorldGenerator` interface. No Three.js, no React. |
-| `content/` | Block definitions. `blocks.ts` registers the legacy blocks. |
+| `content/` | Block definitions. `blocks.ts` registers the legacy blocks, then calls `registerNatureBlocks` (`blocksNature.ts`, ids 48 to 79) for the wilderness. |
 | `worldgen/` | Things that implement `WorldGenerator`. `LegacyZoneAdapter` wraps the old zones. |
 | `worldConstants.ts` | Numbers and enums with no Three.js import, so generation can run in a worker. `constants.ts` re-exports them and adds the Three.js vectors. |
 | `gameWorld.ts` | The `voxelWorld` and `blockRegistry` the game uses on the main thread. |

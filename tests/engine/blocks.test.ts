@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultRegistry } from '../../content/blocks';
+import { natureBlockIds } from '../../content/blocksNature';
 import { BlockType } from '../../worldConstants';
 
 const registry = createDefaultRegistry();
@@ -7,7 +8,8 @@ const legacyTypes = Object.values(BlockType).filter((v): v is BlockType => typeo
 
 describe('default block registry', () => {
   it('registers every legacy BlockType under its own numeric id', () => {
-    expect(registry.size).toBe(legacyTypes.length);
+    // The wilderness blocks (ids 48..79) are registered after the legacy ones.
+    expect(registry.size).toBe(legacyTypes.length + natureBlockIds().length);
     for (const type of legacyTypes) {
       expect(registry.get(type).id).toBe(type);
     }
