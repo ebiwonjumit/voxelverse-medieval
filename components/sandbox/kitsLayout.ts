@@ -172,8 +172,9 @@ export const buildKitStage = (
     });
     const blueprint = buildWithKit(pick.kit, lot, style, pick.variant);
     entries.push({ pick, lot, blueprint, x: cursor });
-    cursor += (horizontal ? lot.w : lot.d) + GAP;
-    maxDepth = Math.max(maxDepth, horizontal ? lot.d : lot.w);
+    // The row runs along world x and the street along it: a lot's world width and depth, whichever way it faces.
+    cursor += lot.w + GAP;
+    maxDepth = Math.max(maxDepth, lot.d);
     maxHeight = Math.max(maxHeight, (blueprint.bounds()?.maxY ?? 0) + 2);
   }
   const lotsEnd = cursor - GAP;
