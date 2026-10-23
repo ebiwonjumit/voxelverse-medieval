@@ -86,6 +86,29 @@ export class LightData {
     return this.get(lx, y, lz) & 15;
   }
 
+  // Bulk read for the mesher: writes the packed light of layer y, for the chunk and its ring, to
+  // out[(y - minY) * SPAN * SPAN + (lz + 1) * SPAN + (lx + 1)] for every y in minY..maxY. That is the layout of the
+  // mesher's padded cell grid, so a light value sits at the same index as its cell.
+  copyLayers(out: Uint8Array, minY: number, maxY: number): void {
+    for (let y = minY; y <= maxY; y++) {
+      const dst = (y - minY) * SECTION_AREA;
+      if (y > WORLD_MAX_Y) {
+        out.fill(SKY_FULL, dst, dst + SECTION_AREA);
+      } else if (y < WORLD_MIN_Y) {
+        out.fill(0, dst, dst + SECTION_AREA);
+      } else {
+        const s = (y - WORLD_MIN_Y) >> 4;
+        const section = this.sections[s];
+        if (section) {
+          const src = ((y - WORLD_MIN_Y) & 15) * SECTION_AREA;
+          out.set(section.subarray(src, src + SECTION_AREA), dst);
+        } else {
+          out.fill(this.uniform[s], dst, dst + SECTION_AREA);
+        }
+      }
+    }
+  }
+
   // Sections that had to be stored cell by cell, for memory and tests.
   storedSections(): number {
     let n = 0;

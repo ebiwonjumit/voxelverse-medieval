@@ -253,7 +253,7 @@ describe('ambient occlusion with partial blocks', () => {
     const m = ao(new MapReader([[0, 0, 0, WHITE], [1, 1, 0, SLAB, 0], [0, 1, 1, STAIRS, 0]]));
     const top = quadsOf(m.opaque).filter((q) => q.layer === quadsOf(m.opaque)[0].layer && q.normal[1] === 1 && q.corners[0].pos[1] === 1);
     expect(top.length).toBeGreaterThan(0);
-    for (const q of top) for (const c of q.corners) expect(c.rgb).toEqual([1, 1, 1]);
+    for (const q of top) for (const c of q.corners) expect(c.ao).toBe(1);
   });
 
   it('leaves the base of a stair lit: it is two half quads, not a whole cell face', () => {
@@ -261,7 +261,7 @@ describe('ambient occlusion with partial blocks', () => {
     const stairLayer = createTextureLayout([], registry).faceLayer(STAIRS, FACE_SIDE);
     const baseQuads = quadsOf(m.opaque).filter((q) => q.layer === stairLayer && q.normal[1] === -1);
     expect(baseQuads).toHaveLength(2);
-    for (const q of baseQuads) for (const c of q.corners) expect(c.rgb).toEqual([1, 1, 1]);
+    for (const q of baseQuads) for (const c of q.corners) expect(c.ao).toBe(1);
   });
 
   it('shades the base of a slab, which is a whole cell face', () => {
@@ -269,7 +269,7 @@ describe('ambient occlusion with partial blocks', () => {
     const slabLayer = createTextureLayout([], registry).faceLayer(SLAB, FACE_SIDE);
     const base = quadsOf(m.opaque).filter((q) => q.layer === slabLayer && q.normal[1] === -1);
     expect(base).toHaveLength(1);
-    const shades = base[0].corners.map((c) => c.rgb[0]);
+    const shades = base[0].corners.map((c) => c.ao);
     expect(Math.min(...shades)).toBeLessThan(1);
     expect(Math.max(...shades)).toBe(1);
   });

@@ -15,7 +15,7 @@ import {
 } from './sandboxLayout';
 
 // The page shared by ?sandbox=blocks and ?sandbox=models: stages of blocks meshed by the game's own mesher, shown
-// under fixed neutral light with the game's texture array and materials. Orbit with the mouse (drag, wheel,
+// at noon with the game's texture array and materials. Orbit with the mouse (drag, wheel,
 // right-drag to pan). What is shown comes from `build`, which BlockSandbox and ModelSandbox supply.
 //
 // window.__SHOT_READY__ turns true once the meshes have been drawn, like the ?shot mode of the world.
@@ -126,10 +126,8 @@ const Scene: React.FC<SceneProps> = ({ build, cam, onCount }) => {
   return (
     <>
       <color attach="background" args={[BACKGROUND]} />
-      {/* Fixed and neutral: white fill from everywhere, a key light from the front left above, and a weak one
-          from the right so no side of a cube goes black. three's lights are physical (the Lambert term divides
-          by pi), so a lit top face comes out near its own colour at ambient 1.5 plus key 1.9, and there is no
-          tone mapping to wash the colours out. */}
+      {/* The blocks take no light from the scene: their materials shade from the baked light in the vertices (here open sky,
+          daylight 1), so every block shows the way it does at noon. These lights are for the floor plane only. */}
       <ambientLight intensity={1.5} />
       <directionalLight position={[-8, 14, depth + 10]} intensity={1.9} />
       <directionalLight position={[width + 10, 6, depth + 4]} intensity={0.8} />

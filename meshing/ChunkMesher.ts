@@ -7,6 +7,7 @@ import { FACE_BOTTOM, FACE_SIDE, FACE_TOP, TINT_FOLIAGE, TextureLayout, createTe
 import { BlockType } from '../worldConstants';
 import { CellReader } from './CellReader';
 import { grassTint, LEAVES_TINT_SCALE } from './biomeTint';
+import { LightData } from './LightEngine';
 
 // Turns one chunk of cells into triangle lists. Pure data in, typed arrays out, so it runs in a worker.
 //
@@ -21,6 +22,13 @@ import { grassTint, LEAVES_TINT_SCALE } from './biomeTint';
 // model (engine/models), which are built once per model and variant and shared, so a stair costs a table lookup.
 // A face is hidden when the block beside it covers the side it looks at.
 //
+// Light: the mesher is handed the baked light of the chunk (LightEngine) and writes it into every vertex, so day and
+// night never need a re-mesh: the shader multiplies sky light by a daylight uniform and leaves block light alone.
+// Each corner of a face averages the light of the four cells around it in the layer in front of the face (the cell
+// itself, the two beside the corner and the diagonal one, skipping cells that block light and the diagonal one when
+// both sides block it, which would leak light round a corner), and gets an ambient occlusion factor from the same
+// cells. A quad that is only part of a cell face takes the light of the cell in front of it, flat.
+//
 // Textures: every vertex carries the texture array layer of its face and a uv inside the tile (u runs left to
 // right and v from the top row of the tile down, as the tile's pixels are stored). Which layer a face uses comes
 // from the TextureLayout. Faces with a partly tinted tile (a grass side) also carry the layer of the tint mask,
@@ -29,11 +37,19 @@ import { grassTint, LEAVES_TINT_SCALE } from './biomeTint';
 export interface BucketData {
   positions: Float32Array;
   normals: Float32Array;
-  colors: Float32Array; // linear rgb multiplier per vertex: ambient occlusion (white when it is off)
+  light: Float32Array;  // four per vertex: sky light, block light, ambient occlusion (all 0..1) and glow (0..1)
   tints: Float32Array;  // linear rgb biome tint, white for faces that take none
   uvs: Float32Array;    // two per vertex, 0..1 inside the tile
   layers: Float32Array; // two per vertex: base layer, and the tint overlay layer or -1
   indices: Uint32Array;
+}
+
+// Where a mesh job spent its time, in ms, measured in the worker. Only jobs that run through runMeshJob have it.
+export interface MeshTiming {
+  generate: number;  // generating the chunks the job needed that the worker had not cached
+  light: number;     // computing the baked light
+  mesh: number;      // meshing
+  generated: number; // how many chunks it generated (0 to 9)
 }
 
 export interface MeshData {
@@ -42,6 +58,7 @@ export interface MeshData {
   opaque: BucketData;
   cutout: BucketData;
   water: BucketData;
+  timing?: MeshTiming;
 }
 
 export const BUCKET_NAMES = ['opaque', 'cutout', 'water'] as const;
@@ -52,7 +69,7 @@ export const meshTransferables = (mesh: MeshData): ArrayBuffer[] => {
   for (const name of BUCKET_NAMES) {
     const b = mesh[name];
     buffers.push(b.positions.buffer as ArrayBuffer, b.normals.buffer as ArrayBuffer,
-      b.colors.buffer as ArrayBuffer, b.tints.buffer as ArrayBuffer, b.uvs.buffer as ArrayBuffer,
+      b.light.buffer as ArrayBuffer, b.tints.buffer as ArrayBuffer, b.uvs.buffer as ArrayBuffer,
       b.layers.buffer as ArrayBuffer, b.indices.buffer as ArrayBuffer);
   }
   return buffers;
@@ -66,14 +83,19 @@ export const meshTriangleCount = (mesh: MeshData): number =>
 const AO_FULL = [0.55, 0.7, 0.85, 1.0];
 
 /**
- * How much vertex ambient occlusion is baked into colours: 0 is off (flat colours, the Phase 2 look), 1 is
- * the full 0.55..1.0 range. It is off by default because Phase 2 promises the same look as the old renderer;
- * Phase 6 (baked light) is where it can be switched back on. Tests pass an explicit strength to cover the AO code.
+ * How much vertex ambient occlusion is baked: 0 is off, 1 is the full 0.55..1.0 range. It was off in Phase 2, which
+ * promised the look of the old renderer, and is on now that light is baked: the shader multiplies it into the
+ * lighting, so corners and creases read as corners and creases. Tests pass an explicit strength to cover other values.
  */
-export const AO_STRENGTH = 0;
+export const AO_STRENGTH = 1;
 
 export interface MeshOptions {
   aoStrength?: number;
+  /**
+   * The baked light of this chunk and a one block ring, from `computeChunkLight`. Without it every vertex is lit as
+   * open sky (sky 1, block 0), which is what tests and the sandbox pages want.
+   */
+  light?: LightData;
   /** Which texture layer each face uses. Without one every block draws as a flat tile of its registry colour. */
   layout?: TextureLayout;
 }
@@ -116,6 +138,8 @@ interface BlockTables {
   occ: Uint8Array;     // bit s: the block fully covers its face on side s, so a face looking at it is hidden
   full: Uint8Array;    // covers all six sides: a plain opaque cube
   opaque: Uint8Array;  // an opaque material: drawn in the opaque bucket
+  blocksLight: Uint8Array; // stops light, as the light engine sees it (opaque blocks, and the void below the world)
+  glow: Float32Array;  // by block id: what it emits, 0..1, so the shader can make it shine
   wet: Uint8Array;     // contains water, so water faces next to it are not drawn
   models: BlockModel[]; // by block id
 }
@@ -130,6 +154,8 @@ const getTables = (registry: BlockRegistry): BlockTables => {
   const occ = new Uint8Array(TABLE_SIZE);
   const full = new Uint8Array(TABLE_SIZE);
   const opaque = new Uint8Array(TABLE_SIZE);
+  const blocksLight = new Uint8Array(TABLE_SIZE);
+  const glow = new Float32Array(MAX_BLOCK_ID + 1);
   const wet = new Uint8Array(TABLE_SIZE);
   const models: BlockModel[] = new Array(MAX_BLOCK_ID + 1);
   for (let id = 1; id <= MAX_BLOCK_ID; id++) {
@@ -141,6 +167,7 @@ const getTables = (registry: BlockRegistry): BlockTables => {
     }
     const def = registry.get(id);
     const model = models[id];
+    glow[id] = registry.emission(id) / 15;
     for (let state = 0; state < STATES; state++) {
       const cell = (state << STATE_SHIFT) | id;
       if (id === BlockType.WATER) {
@@ -150,6 +177,7 @@ const getTables = (registry: BlockRegistry): BlockTables => {
       }
       kind[cell] = model.isFullCube ? KIND_CUBE : KIND_MODEL;
       opaque[cell] = def.opaque ? 1 : 0;
+      blocksLight[cell] = def.opaque ? 1 : 0;
       wet[cell] = def.holdsWater ? 1 : 0;
       if (def.opaque) {
         let mask = 0;
@@ -161,7 +189,8 @@ const getTables = (registry: BlockRegistry): BlockTables => {
   }
   occ[VOID] = 63;
   full[VOID] = 1;
-  const tables = { size: registry.size, kind, occ, full, opaque, wet, models };
+  blocksLight[VOID] = 1;
+  const tables = { size: registry.size, kind, occ, full, opaque, blocksLight, glow, wet, models };
   tableCache.set(registry, tables);
   return tables;
 };
@@ -170,7 +199,7 @@ const getTables = (registry: BlockRegistry): BlockTables => {
 class Bucket {
   private positions = new Float32Array(3 * 1024);
   private normals = new Float32Array(3 * 1024);
-  private colors = new Float32Array(3 * 1024);
+  private light = new Float32Array(4 * 1024);
   private tints = new Float32Array(3 * 1024);
   private uvs = new Float32Array(2 * 1024);
   private layers = new Float32Array(2 * 1024);
@@ -183,11 +212,11 @@ class Bucket {
       const length = Math.max(this.positions.length * 2, (this.vertexCount + vertices) * 3);
       this.positions = grow(this.positions, length);
       this.normals = grow(this.normals, length);
-      this.colors = grow(this.colors, length);
       this.tints = grow(this.tints, length);
       const length2 = (length / 3) * 2;
       this.uvs = grow(this.uvs, length2);
       this.layers = grow(this.layers, length2);
+      this.light = grow(this.light, (length / 3) * 4);
     }
     if (this.indexCount + indices > this.indices.length) {
       const next = new Uint32Array(Math.max(this.indices.length * 2, this.indexCount + indices));
@@ -200,7 +229,7 @@ class Bucket {
   // the 0-2 diagonal or, when flip is set, the 1-3 diagonal. uvs holds the four uv pairs from uvAt on.
   quad(
     corners: Float32Array, ox: number, oy: number, oz: number, uvs: Float32Array, uvAt: number,
-    nx: number, ny: number, nz: number, colors: Float32Array, flip: boolean,
+    nx: number, ny: number, nz: number, lights: Float32Array, flip: boolean,
     layer: number, overlay: number, tr: number, tg: number, tb: number,
   ): void {
     this.reserve(4, 6);
@@ -213,9 +242,6 @@ class Bucket {
       this.normals[o] = nx;
       this.normals[o + 1] = ny;
       this.normals[o + 2] = nz;
-      this.colors[o] = colors[i * 3];
-      this.colors[o + 1] = colors[i * 3 + 1];
-      this.colors[o + 2] = colors[i * 3 + 2];
       this.tints[o] = tr;
       this.tints[o + 1] = tg;
       this.tints[o + 2] = tb;
@@ -224,6 +250,11 @@ class Bucket {
       this.uvs[o2 + 1] = uvs[uvAt + i * 2 + 1];
       this.layers[o2] = layer;
       this.layers[o2 + 1] = overlay;
+      const o4 = (base + i) * 4;
+      this.light[o4] = lights[i * 4];
+      this.light[o4 + 1] = lights[i * 4 + 1];
+      this.light[o4 + 2] = lights[i * 4 + 2];
+      this.light[o4 + 3] = lights[i * 4 + 3];
     }
     const ix = this.indices;
     let k = this.indexCount;
@@ -244,7 +275,7 @@ class Bucket {
     return {
       positions: this.positions.slice(0, v),
       normals: this.normals.slice(0, v),
-      colors: this.colors.slice(0, v),
+      light: this.light.slice(0, this.vertexCount * 4),
       tints: this.tints.slice(0, v),
       uvs: this.uvs.slice(0, v2),
       layers: this.layers.slice(0, v2),
@@ -310,8 +341,8 @@ const FACING_BIT = FACES.map((_, side) => 1 << (side ^ 1));
 
 // Scratch space, reused so meshing allocates nothing per face.
 const cornerBuf = new Float32Array(12);
-const colorBuf = new Float32Array(12);
-const aoBuf = new Int8Array(4);
+const lightBuf = new Float32Array(16);
+const brightBuf = new Float32Array(4);
 const tintCache = new Float32Array(CHUNK_SIZE * CHUNK_SIZE * 3);
 const tintKnown = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE);
 const tmpRgb = new Float32Array(3);
@@ -323,7 +354,7 @@ const hi = new Float64Array(3);
 const emitBoxFace = (
   bucket: Bucket, f: number,
   x0: number, y0: number, z0: number, x1: number, y1: number, z1: number,
-  colors: Float32Array, flip: boolean, layer: number, overlay: number, tr: number, tg: number, tb: number,
+  lights: Float32Array, flip: boolean, layer: number, overlay: number, tr: number, tg: number, tb: number,
 ): void => {
   const face = FACES[f];
   lo[0] = x0; lo[1] = y0; lo[2] = z0;
@@ -336,11 +367,8 @@ const emitBoxFace = (
     cornerBuf[o + face.v] = CORNER_V[i] > 0 ? hi[face.v] : lo[face.v];
   }
   bucket.quad(cornerBuf, 0, 0, 0, FACE_UV, f * 8, face.axis === 0 ? face.sign : 0, face.axis === 1 ? face.sign : 0,
-    face.axis === 2 ? face.sign : 0, colors, flip, layer, overlay, tr, tg, tb);
+    face.axis === 2 ? face.sign : 0, lights, flip, layer, overlay, tr, tg, tb);
 };
-
-// No ambient occlusion: every corner is fully lit.
-const LIT = new Float32Array(12).fill(1);
 
 // The blocks around the cell being meshed, as models ask for them. One instance is moved along the grid.
 class GridNeighbourhood implements Neighbourhood {
@@ -357,6 +385,7 @@ export const meshChunk = (
 ): MeshData => {
   const aoStrength = options.aoStrength ?? AO_STRENGTH;
   const aoMul = aoStrength > 0 ? aoTable(aoStrength) : null;
+  const lightData = options.light ?? null;
   const tables = getTables(registry);
   const layout = options.layout ?? flatLayoutFor(registry);
   const { kind, opaque, wet } = tables;
@@ -402,6 +431,13 @@ export const meshChunk = (
     }
   }
 
+  // The baked light in the same layout as the cells, so a cell and its light share an index.
+  let lights: Uint8Array | null = null;
+  if (lightData) {
+    lights = new Uint8Array(PAD * PAD * rows);
+    lightData.copyLayers(lights, rowMin, rowMax);
+  }
+
   tintKnown.fill(0);
   const nbhd = new GridNeighbourhood(registry, grid);
 
@@ -415,13 +451,13 @@ export const meshChunk = (
         if (k === KIND_AIR) continue;
 
         if (k === KIND_CUBE) {
-          emitCube(opaque[cell] ? opaqueB : cutoutB, grid, i, cell, lx, y, lz, x0, z0, tables, layout, aoMul);
+          emitCube(opaque[cell] ? opaqueB : cutoutB, grid, lights, i, cell, lx, y, lz, x0, z0, tables, layout, aoMul);
         } else if (k === KIND_WATER) {
-          emitWaterCube(waterB, grid, i, lx, y, lz, tables, layout);
+          emitWaterCube(waterB, grid, lights, i, lx, y, lz, tables, layout);
         } else {
-          if (wet[cell]) emitWaterCube(waterB, grid, i, lx, y, lz, tables, layout);
+          if (wet[cell]) emitWaterCube(waterB, grid, lights, i, lx, y, lz, tables, layout);
           nbhd.i = i;
-          emitModel(opaque[cell] ? opaqueB : cutoutB, grid, i, cell, lx, y, lz, x0, z0, tables, layout, aoMul, nbhd);
+          emitModel(opaque[cell] ? opaqueB : cutoutB, grid, lights, i, cell, lx, y, lz, x0, z0, tables, layout, aoMul, nbhd);
         }
       }
     }
@@ -431,8 +467,8 @@ export const meshChunk = (
 };
 
 const emitWaterCube = (
-  bucket: Bucket, grid: Uint16Array, i: number, lx: number, y: number, lz: number, tables: BlockTables,
-  layout: TextureLayout,
+  bucket: Bucket, grid: Uint16Array, lights: Uint8Array | null, i: number, lx: number, y: number, lz: number,
+  tables: BlockTables, layout: TextureLayout,
 ): void => {
   const { occ, wet } = tables;
   const layers = layout.faceLayers;
@@ -440,7 +476,9 @@ const emitWaterCube = (
     const nb = grid[i + SIDE_OFFSET[f]];
     if (occ[nb] & FACING_BIT[f] || wet[nb]) continue;
     const layer = layers[BlockType.WATER * 3 + FACE_KIND[f]];
-    emitBoxFace(bucket, f, lx, y, lz, lx + 1, y + 1, lz + 1, LIT, false, layer, layout.overlayOf[layer], 1, 1, 1);
+    // Water is lit like everything else, but a shore does not darken it: no ambient occlusion.
+    const flip = faceLight(grid, lights, i + SIDE_OFFSET[f], f, tables, null, 0);
+    emitBoxFace(bucket, f, lx, y, lz, lx + 1, y + 1, lz + 1, lightBuf, flip, layer, layout.overlayOf[layer], 1, 1, 1);
   }
 };
 
@@ -465,39 +503,111 @@ const faceTint = (layout: TextureLayout, slot: number, lx: number, lz: number, x
   tintOut[2] = tintCache[col * 3 + 2] * scale;
 };
 
-// Ambient occlusion per corner of the face on side `f`, where `front` is the grid index of the block in front of the
-// face: the two blocks beside the corner and the one diagonal to it, all in the layer in front of the face. Two sides
-// touching hides the corner entirely. Only blocks that cover all six sides count, so partial blocks (slabs, stairs)
-// light their neighbours as if they were not there. Fills colorBuf and returns whether to split the quad along its
-// other diagonal.
-const faceAo = (grid: Uint16Array, front: number, f: number, full: Uint8Array, aoMul: Float32Array): boolean => {
+// Smooth light and ambient occlusion for the four corners of the face on side `f`, where `front` is the grid index of
+// the cell in front of the face. A corner takes the average light of the four cells around it in that layer: the front
+// cell, the two beside the corner and the diagonal one. Cells that block light are left out (their stored light is 0 and
+// would only darken the average), and so is the diagonal cell when both beside it block, because light cannot reach a
+// vertex through two touching walls. Ambient occlusion is the usual three-neighbour level from the same cells, counting
+// only blocks that cover all six sides, so partial blocks (slabs, stairs) do not darken their neighbours. Fills lightBuf
+// with sky, block, occlusion and `glow` per corner and returns whether to split the quad along its other diagonal.
+// With no light data a corner is open sky.
+const faceLight = (
+  grid: Uint16Array, lights: Uint8Array | null, front: number, f: number, tables: BlockTables,
+  aoMul: Float32Array | null, glow: number,
+): boolean => {
+  const { full, blocksLight } = tables;
   const face = FACES[f];
   const su = STRIDE[face.u];
   const sv = STRIDE[face.v];
+  const cf = grid[front];
+  const frontOpen = blocksLight[cf] === 0;
   for (let c = 0; c < 4; c++) {
-    const du = CORNER_U[c] * su;
-    const dv = CORNER_V[c] * sv;
-    const s1 = full[grid[front + du]];
-    const s2 = full[grid[front + dv]];
-    const corner = full[grid[front + du + dv]];
-    const level = s1 && s2 ? 0 : 3 - (s1 + s2 + corner);
-    aoBuf[c] = level;
-    const m = aoMul[level];
-    colorBuf[c * 3] = m;
-    colorBuf[c * 3 + 1] = m;
-    colorBuf[c * 3 + 2] = m;
+    const i1 = front + CORNER_U[c] * su;
+    const i2 = front + CORNER_V[c] * sv;
+    const ic = i1 + CORNER_V[c] * sv;
+    const c1 = grid[i1];
+    const c2 = grid[i2];
+    const cc = grid[ic];
+
+    let sky = 1;
+    let block = 0;
+    if (lights) {
+      let skySum = 0;
+      let blockSum = 0;
+      let n = 0;
+      if (frontOpen) { const p = lights[front]; skySum += p >> 4; blockSum += p & 15; n++; }
+      const o1 = blocksLight[c1];
+      const o2 = blocksLight[c2];
+      if (!o1) { const p = lights[i1]; skySum += p >> 4; blockSum += p & 15; n++; }
+      if (!o2) { const p = lights[i2]; skySum += p >> 4; blockSum += p & 15; n++; }
+      if (!blocksLight[cc] && !(o1 && o2)) { const p = lights[ic]; skySum += p >> 4; blockSum += p & 15; n++; }
+      if (n > 0) {
+        sky = skySum / (n * 15);
+        block = blockSum / (n * 15);
+      } else {
+        sky = 0;
+      }
+    }
+
+    let ao = 1;
+    if (aoMul) {
+      const s1 = full[c1];
+      const s2 = full[c2];
+      ao = aoMul[s1 && s2 ? 0 : 3 - (s1 + s2 + full[cc])];
+    }
+    const o = c * 4;
+    lightBuf[o] = sky;
+    lightBuf[o + 1] = block;
+    lightBuf[o + 2] = ao;
+    lightBuf[o + 3] = glow;
+    brightBuf[c] = (sky + block) * ao;
   }
   // Split along the diagonal joining the two brighter corners, otherwise the shading shows a crease.
-  return aoBuf[0] + aoBuf[2] < aoBuf[1] + aoBuf[3];
+  return brightBuf[0] + brightBuf[2] < brightBuf[1] + brightBuf[3];
+};
+
+// Light for a quad that is only part of a cell face, or lies inside the cell: one value for all four corners, taken from
+// `toward` (the cell the quad faces, or -1), else the block's own cell, else the brightest open cell around it (a stair's
+// own cell blocks light, so a riser inside it looks at what is in front of it).
+const flatLight = (
+  grid: Uint16Array, lights: Uint8Array | null, i: number, toward: number, blocksLight: Uint8Array, glow: number,
+): void => {
+  let sky = 15;
+  let block = 0;
+  if (lights) {
+    if (toward >= 0 && !blocksLight[grid[toward]]) {
+      sky = lights[toward] >> 4;
+      block = lights[toward] & 15;
+    } else if (!blocksLight[grid[i]]) {
+      sky = lights[i] >> 4;
+      block = lights[i] & 15;
+    } else {
+      sky = 0;
+      for (let s = 0; s < 6; s++) {
+        const n = i + SIDE_OFFSET[s];
+        if (blocksLight[grid[n]]) continue;
+        const p = lights[n];
+        if (p >> 4 > sky) sky = p >> 4;
+        if ((p & 15) > block) block = p & 15;
+      }
+    }
+  }
+  for (let c = 0; c < 4; c++) {
+    lightBuf[c * 4] = sky / 15;
+    lightBuf[c * 4 + 1] = block / 15;
+    lightBuf[c * 4 + 2] = 1;
+    lightBuf[c * 4 + 3] = glow;
+  }
 };
 
 const emitCube = (
-  bucket: Bucket, grid: Uint16Array, i: number, cell: number, lx: number, y: number, lz: number,
+  bucket: Bucket, grid: Uint16Array, lights: Uint8Array | null, i: number, cell: number, lx: number, y: number, lz: number,
   x0: number, z0: number, tables: BlockTables, layout: TextureLayout, aoMul: Float32Array | null,
 ): void => {
   const { occ, full, opaque } = tables;
   const id = cell & ID_MASK;
   const selfOpaque = opaque[cell] === 1;
+  const glow = tables.glow[id];
 
   // Most blocks are buried stone, so test for that before doing any work.
   if (selfOpaque && full[grid[i + 1]] && full[grid[i - 1]] && full[grid[i + PAD]] && full[grid[i - PAD]]
@@ -515,12 +625,8 @@ const emitCube = (
     const overlay = layout.overlayOf[layer];
     faceTint(layout, slot, lx, lz, x0, z0);
 
-    if (!aoMul) {
-      emitBoxFace(bucket, f, lx, y, lz, lx + 1, y + 1, lz + 1, LIT, false, layer, overlay, tintOut[0], tintOut[1], tintOut[2]);
-      continue;
-    }
-    const flip = faceAo(grid, front, f, full, aoMul);
-    emitBoxFace(bucket, f, lx, y, lz, lx + 1, y + 1, lz + 1, colorBuf, flip, layer, overlay, tintOut[0], tintOut[1], tintOut[2]);
+    const flip = faceLight(grid, lights, front, f, tables, aoMul, glow);
+    emitBoxFace(bucket, f, lx, y, lz, lx + 1, y + 1, lz + 1, lightBuf, flip, layer, overlay, tintOut[0], tintOut[1], tintOut[2]);
   }
 };
 
@@ -535,28 +641,34 @@ const hidden = (q: ModelQuad, nb: number, tables: BlockTables): boolean => {
 };
 
 const emitModel = (
-  bucket: Bucket, grid: Uint16Array, i: number, cell: number, lx: number, y: number, lz: number,
+  bucket: Bucket, grid: Uint16Array, lights: Uint8Array | null, i: number, cell: number, lx: number, y: number, lz: number,
   x0: number, z0: number, tables: BlockTables, layout: TextureLayout, aoMul: Float32Array | null, nbhd: Neighbourhood,
 ): void => {
   const id = cell & ID_MASK;
   const quads = tables.models[id].quads(cell >> STATE_SHIFT, nbhd);
+  const glow = tables.glow[id];
   for (let n = 0; n < quads.length; n++) {
     const q = quads[n];
-    let colors = LIT;
     let flip = false;
     if (q.cullSide >= 0) {
       const front = i + SIDE_OFFSET[q.cullSide];
       if (hidden(q, grid[front], tables)) continue;
-      // A quad that is a whole cell face shades like the face of a cube.
-      if (aoMul && q.fullFace) {
-        flip = faceAo(grid, front, q.cullSide, tables.full, aoMul);
-        colors = colorBuf;
+      if (q.fullFace) {
+        // A quad that is a whole cell face is lit and shaded like the face of a cube.
+        flip = faceLight(grid, lights, front, q.cullSide, tables, aoMul, glow);
+      } else {
+        flatLight(grid, lights, i, front, tables.blocksLight, glow);
       }
+    } else {
+      // Inside the cell: look the way the quad faces when that is along an axis.
+      const toward = q.nx * STRIDE[0] + q.ny * STRIDE[1] + q.nz * STRIDE[2];
+      const axisAligned = Math.abs(q.nx) + Math.abs(q.ny) + Math.abs(q.nz) === 1;
+      flatLight(grid, lights, i, axisAligned ? i + toward : -1, tables.blocksLight, glow);
     }
     const slot = id * 3 + q.face;
     const layer = layout.faceLayers[slot];
     faceTint(layout, slot, lx, lz, x0, z0);
-    bucket.quad(q.corners, lx, y, lz, q.uvs, 0, q.nx, q.ny, q.nz, colors, flip, layer, layout.overlayOf[layer],
+    bucket.quad(q.corners, lx, y, lz, q.uvs, 0, q.nx, q.ny, q.nz, lightBuf, flip, layer, layout.overlayOf[layer],
       tintOut[0], tintOut[1], tintOut[2]);
   }
 };

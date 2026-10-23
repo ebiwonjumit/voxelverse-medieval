@@ -1,4 +1,4 @@
-import { DataArrayTexture, Mesh, MeshStandardMaterial } from 'three';
+import { DataArrayTexture, Mesh, MeshBasicMaterial } from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getWorldProbe } from '../../bench/worldProbe';
 import { MeshData } from '../../meshing/ChunkMesher';
@@ -337,32 +337,66 @@ describe('ChunkRenderer', () => {
       expect(meshes.length).toBeGreaterThan(3);
       expect(new Set(meshes.map((m) => m.material)).size).toBe(3);
 
-      const solid = meshes.filter((m) => !(m.material as MeshStandardMaterial).transparent);
-      const water = meshes.filter((m) => (m.material as MeshStandardMaterial).transparent);
-      const opaque = solid.filter((m) => (m.material as MeshStandardMaterial).alphaTest === 0);
-      const cutout = solid.filter((m) => (m.material as MeshStandardMaterial).alphaTest > 0);
+      const solid = meshes.filter((m) => !(m.material as MeshBasicMaterial).transparent);
+      const water = meshes.filter((m) => (m.material as MeshBasicMaterial).transparent);
+      const opaque = solid.filter((m) => (m.material as MeshBasicMaterial).alphaTest === 0);
+      const cutout = solid.filter((m) => (m.material as MeshBasicMaterial).alphaTest > 0);
       for (const group of [opaque, cutout, water]) {
         expect(group.length).toBeGreaterThan(0);
         expect(new Set(group.map((m) => m.material)).size).toBe(1);
       }
 
-      const o = opaque[0].material as MeshStandardMaterial;
-      expect(o.vertexColors).toBe(true);
+      // Unlit materials: the light is baked into the vertices, so chunks read nothing from the scene's lights.
+      for (const m of meshes) expect((m.material as MeshBasicMaterial).isMeshBasicMaterial).toBe(true);
+      const o = opaque[0].material as MeshBasicMaterial;
+      expect(o.vertexColors).toBe(false);
       expect(o.transparent).toBe(false);
-      const c = cutout[0].material as MeshStandardMaterial;
-      expect(c.vertexColors).toBe(true);
+      const c = cutout[0].material as MeshBasicMaterial;
       expect(c.alphaTest).toBe(0.5);
-      const w = water[0].material as MeshStandardMaterial;
-      expect(w.vertexColors).toBe(true);
+      const w = water[0].material as MeshBasicMaterial;
       expect(w.opacity).toBe(0.75);
-      expect(w.roughness).toBe(0.1);
-      expect(w.metalness).toBe(0.8);
+    });
+
+    it('reads sky light through one daylight uniform that setDaylight moves for every material', () => {
+      const { renderer } = upload(['opaque', 'cutout', 'water']);
+      const uniforms = new Set<{ value: unknown }>();
+      for (const mesh of meshesIn(renderer)) {
+        const shader = patchedShader();
+        (mesh.material as MeshBasicMaterial).onBeforeCompile(shader as never, null as never);
+        expect(shader.fragmentShader).toContain('uniform float uDaylight');
+        expect(shader.fragmentShader).toContain('max( vec3( sky ), BLOCK_LIGHT_COLOR * block )');
+        uniforms.add(shader.uniforms.uDaylight);
+      }
+      expect(uniforms.size).toBe(1);
+      const daylight = [...uniforms][0];
+      expect(daylight.value).toBe(1);
+      renderer.setDaylight(0.25);
+      expect(daylight.value).toBe(0.25);
+      renderer.setDaylight(-3);
+      expect(daylight.value).toBe(0);
+      renderer.setDaylight(7);
+      expect(daylight.value).toBe(1);
+    });
+
+    it('does not rebuild any geometry when the daylight changes', () => {
+      const { renderer } = upload(['opaque']);
+      const before = renderer.getStats().geometries;
+      const geometries = meshesIn(renderer).map((m) => m.geometry);
+      renderer.setDaylight(0);
+      frames(renderer, ...inChunk(3, -2), 5);
+      renderer.setDaylight(1);
+      frames(renderer, ...inChunk(3, -2), 5);
+      expect(renderer.getStats().geometries).toBe(before);
+      expect(meshesIn(renderer).map((m) => m.geometry)).toEqual(geometries);
     });
 
     it('gives each geometry the texture attributes the mesher wrote', () => {
       const { renderer } = upload(['opaque']);
       for (const mesh of meshesIn(renderer)) {
         const g = mesh.geometry;
+        expect(g.getAttribute('bakedLight').itemSize).toBe(4);
+        expect(g.getAttribute('bakedLight').count).toBe(g.getAttribute('position').count);
+        expect(g.getAttribute('color')).toBeUndefined();
         expect(g.getAttribute('tint').itemSize).toBe(3);
         expect(g.getAttribute('uv').itemSize).toBe(2);
         expect(g.getAttribute('texLayer').itemSize).toBe(2);
@@ -377,7 +411,7 @@ describe('ChunkRenderer', () => {
       const textures = new Set<unknown>();
       for (const mesh of meshesIn(renderer)) {
         const shader = patchedShader();
-        (mesh.material as MeshStandardMaterial).onBeforeCompile(shader as never, null as never);
+        (mesh.material as MeshBasicMaterial).onBeforeCompile(shader as never, null as never);
         expect(shader.fragmentShader).toContain('textureGrad');
         expect(shader.vertexShader).toContain('attribute vec2 texLayer');
         textures.add(shader.uniforms.uBlockTextures.value);
@@ -405,7 +439,7 @@ describe('ChunkRenderer', () => {
 
     it('moves the water wave into a vertex shader that reads the vertex world position', () => {
       const { renderer } = upload(['water']);
-      const water = meshesIn(renderer)[0].material as MeshStandardMaterial;
+      const water = meshesIn(renderer)[0].material as MeshBasicMaterial;
       const shader = patchedShader();
       water.onBeforeCompile(shader as never, null as never);
       expect(shader.vertexShader).toContain('uniform float uTime');
@@ -468,7 +502,7 @@ describe('ChunkRenderer', () => {
       renderer.update(...inChunk(0, 0), 0);
       drain(workers);
       frames(renderer, ...inChunk(0, 0), 100);
-      const solid = meshesIn(renderer)[0].material as MeshStandardMaterial;
+      const solid = meshesIn(renderer)[0].material as MeshBasicMaterial;
       const onSolid = vi.fn();
       solid.addEventListener('dispose', onSolid);
       expect(renderer.getStats().geometries).toBe(13);

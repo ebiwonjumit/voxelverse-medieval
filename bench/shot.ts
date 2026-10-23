@@ -16,3 +16,12 @@ export const parseShot = (search: string): Shot | null => {
   const [x, y, z, yawDeg, pitchDeg] = parts;
   return { x, y, z, yawDeg, pitchDeg };
 };
+
+// Reads ?daylight=0..1, how much of the baked sky light shows (1 is noon, 0 is the darkest night). It lets a screenshot or a
+// test of the lighting pick the time of day until the day/night cycle drives it. Returns null when absent or not a number.
+export const parseDaylight = (search: string): number | null => {
+  const value = new URLSearchParams(search).get('daylight');
+  if (value === null || value.trim() === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.min(Math.max(n, 0), 1) : null;
+};

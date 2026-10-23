@@ -38,7 +38,10 @@ export interface Quad {
   normal: [number, number, number];
   corners: Array<{
     pos: [number, number, number];
-    rgb: [number, number, number];  // ambient occlusion multiplier
+    sky: number;    // baked sky light, 0..1
+    block: number;  // baked block light, 0..1
+    ao: number;     // ambient occlusion multiplier, 0.55..1
+    glow: number;   // the block's own emission, 0..1
     tint: [number, number, number]; // biome tint, white when the face takes none
     uv: [number, number];
   }>;
@@ -57,7 +60,10 @@ export const quadsOf = (bucket: BucketData): Quad[] => {
       const o = (v0 + i) * 3;
       corners.push({
         pos: [bucket.positions[o], bucket.positions[o + 1], bucket.positions[o + 2]] as [number, number, number],
-        rgb: [bucket.colors[o], bucket.colors[o + 1], bucket.colors[o + 2]] as [number, number, number],
+        sky: bucket.light[(v0 + i) * 4],
+        block: bucket.light[(v0 + i) * 4 + 1],
+        ao: bucket.light[(v0 + i) * 4 + 2],
+        glow: bucket.light[(v0 + i) * 4 + 3],
         tint: [bucket.tints[o], bucket.tints[o + 1], bucket.tints[o + 2]] as [number, number, number],
         uv: [bucket.uvs[(v0 + i) * 2], bucket.uvs[(v0 + i) * 2 + 1]] as [number, number],
       });

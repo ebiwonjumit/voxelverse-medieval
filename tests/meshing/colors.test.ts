@@ -110,9 +110,9 @@ describe('mesher colours', () => {
     expect(got[2]).toBeCloseTo(want.b, 5);
   };
 
-  it('leaves the vertex colour white now that colour comes from the texture', () => {
+  it('leaves an open face fully lit, with no colour in the light now that colour comes from the texture', () => {
     for (const id of [BlockType.STONE, BlockType.GRASS, BlockType.LEAVES]) {
-      for (const c of face(id, 3, 3, 0, 0, 1).corners) expect(c.rgb).toEqual([1, 1, 1]);
+      for (const c of face(id, 3, 3, 0, 0, 1).corners) expect([c.sky, c.block, c.ao]).toEqual([1, 0, 1]);
     }
   });
 
