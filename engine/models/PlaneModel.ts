@@ -1,4 +1,4 @@
-import { Box, BlockModel, ModelQuad } from './BlockModel';
+import { Box, BlockModel, ModelQuad, Neighbourhood } from './BlockModel';
 
 /**
  * Models drawn with upright planes instead of boxes. Nothing about them can be bumped into or hide a neighbour. The
@@ -8,19 +8,19 @@ export abstract class PlaneModel implements BlockModel {
   readonly isFullCube = false;
   protected abstract readonly planes: readonly ModelQuad[];
 
-  quads(): readonly ModelQuad[] {
+  quads(_state?: number, _nb?: Neighbourhood): readonly ModelQuad[] {
     return this.planes;
   }
 
-  collisionBoxes(): readonly Box[] {
+  collisionBoxes(_state?: number, _nb?: Neighbourhood): readonly Box[] {
     return [];
   }
 
-  occludesFace(): boolean {
+  occludesFace(_state?: number, _side?: number): boolean {
     return false;
   }
 
-  faceCoverage(): number {
+  faceCoverage(_state?: number, _side?: number): number {
     return 0;
   }
 }

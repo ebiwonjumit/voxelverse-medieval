@@ -465,10 +465,11 @@ const faceTint = (layout: TextureLayout, slot: number, lx: number, lz: number, x
   tintOut[2] = tintCache[col * 3 + 2] * scale;
 };
 
-// Ambient occlusion per corner of the face on `f`, whose block is at grid index `front - offset`: the two blocks
-// beside the corner and the one diagonal to it, all in the layer in front of the face. Two sides touching hides
-// the corner entirely. Only blocks that hide everything count, so partial blocks (slabs, stairs) light their
-// neighbours as if they were not there. Fills colorBuf and returns whether to split the quad along its other diagonal.
+// Ambient occlusion per corner of the face on side `f`, where `front` is the grid index of the block in front of the
+// face: the two blocks beside the corner and the one diagonal to it, all in the layer in front of the face. Two sides
+// touching hides the corner entirely. Only blocks that cover all six sides count, so partial blocks (slabs, stairs)
+// light their neighbours as if they were not there. Fills colorBuf and returns whether to split the quad along its
+// other diagonal.
 const faceAo = (grid: Uint16Array, front: number, f: number, full: Uint8Array, aoMul: Float32Array): boolean => {
   const face = FACES[f];
   const su = STRIDE[face.u];
