@@ -1,5 +1,7 @@
 import { Box, BlockModel, ModelQuad, Neighbourhood } from './BlockModel';
-import { BoxPart, CompiledShape, UvMode, compileBoxes } from './shape';
+import { BoxPart, CompiledShape, UvMode, compileBoxes, rotateBox } from './shape';
+
+export { rotateBox };
 
 /** What a model with boxes for geometry hands over for one variant of itself. */
 export interface ShapeSpec {
@@ -7,6 +9,8 @@ export interface ShapeSpec {
   uv?: UvMode;
   /** Boxes that stop the player, when they differ from the drawn ones (a fence is taller than it looks). */
   collision?: Box[];
+  /** The parts are an authored shape turned this many quarter turns, and the texture turns with them (see compileBoxes). */
+  uvTurns?: number;
 }
 
 /**
@@ -29,7 +33,7 @@ export abstract class ShapeModel implements BlockModel {
     let shape = this.shapes.get(variant);
     if (!shape) {
       const spec = this.build(variant);
-      shape = compileBoxes(spec.parts, spec.uv ?? 'cell', spec.collision);
+      shape = compileBoxes(spec.parts, spec.uv ?? 'cell', spec.collision, spec.uvTurns);
       this.shapes.set(variant, shape);
     }
     return shape;
@@ -53,20 +57,6 @@ export abstract class ShapeModel implements BlockModel {
 }
 
 // --- Box helpers -------------------------------------------------------------------------------------------
-
-/** Turns a box a quarter turn clockwise (seen from above) around the middle of the cell, `turns` times. North becomes east. */
-export const rotateBox = (box: Box, turns: number): Box => {
-  let [x0, y0, z0, x1, y1, z1] = box;
-  for (let t = 0; t < ((turns % 4) + 4) % 4; t++) {
-    // (x, z) -> (1 - z, x) about the centre of the cell.
-    const nx0 = 1 - z1;
-    const nx1 = 1 - z0;
-    const nz0 = x0;
-    const nz1 = x1;
-    x0 = nx0; x1 = nx1; z0 = nz0; z1 = nz1;
-  }
-  return [x0, y0, z0, x1, y1, z1];
-};
 
 /** Mirrors a box top to bottom. */
 export const flipBoxY = (box: Box): Box => [box[0], 1 - box[4], box[2], box[3], 1 - box[1], box[5]];
