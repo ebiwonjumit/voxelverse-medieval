@@ -1,5 +1,6 @@
 import { BlockFaces, BlockRegistry, BlockTint } from '../engine/BlockRegistry';
 import { BlockType, COLORS } from '../worldConstants';
+import { registerNatureBlocks } from './blocksNature';
 
 // The legacy blocks, registered under their old BlockType numbers so the existing zones keep working.
 // Flat colours come from COLORS. They are the fallback tile for blocks without faces, so blocks added later
@@ -154,5 +155,6 @@ export const createDefaultRegistry = (): BlockRegistry => {
       tint: TINT.get(type),
     });
   }
+  registerNatureBlocks(registry);
   return registry;
 };

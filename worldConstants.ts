@@ -6,6 +6,8 @@ export const BLOCK_SIZE = 1;
 export const WORLD_HEIGHT = 70; // Increased for towers
 export const WATER_LEVEL = 3;
 export const MILE = 500; 
+// Seeds every noise field in worldgen/. Change it and the whole wilderness changes; zone interiors do not.
+export const WORLD_SEED = 20251122;
 export const MAX_BUILD_HEIGHT = 60;  // Use this to limit vertical scanning
 export const MIN_BUILD_HEIGHT = -30; // Use this too
 

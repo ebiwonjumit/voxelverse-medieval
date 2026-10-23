@@ -7,7 +7,7 @@ Phase 1 of the rebuild plan added a block and chunk layer under the game. The pl
 | Folder | What is in it |
 | --- | --- |
 | `engine/` | Voxel core: `coords`, `cell`, `BlockRegistry`, `Chunk`, `ChunkStore`, `VoxelWorld` and the `WorldGenerator` interface. No Three.js, no React. |
-| `content/` | Block definitions. `blocks.ts` registers the legacy blocks. `content/textures/` holds the generated pixel-art tiles, see [textures.md](textures.md). |
+| `content/` | Block definitions. `blocks.ts` registers the legacy blocks, then calls `registerNatureBlocks` (`blocksNature.ts`, ids 48 to 79) for the wilderness. `content/textures/` holds the generated pixel-art tiles, see [textures.md](textures.md). |
 | `meshing/` | Pure chunk mesher and the mesh worker pool, worker-safe. See [meshing.md](meshing.md). |
 | `render/` | The Three.js chunk renderer. See [renderer.md](renderer.md). |
 | `worldgen/` | Things that implement `WorldGenerator`. `LegacyZoneAdapter` wraps the old zones. |
