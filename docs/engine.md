@@ -96,7 +96,7 @@ Loaded chunks answer from their stored cells. Anything else, which means a chunk
 
 ## Meshing and rendering architecture
 
-The whole path from block data to pixels, as of Phase 3 step 2 (textured blocks):
+The whole path from block data to pixels, as of Phase 5 step 2 (baked light):
 
 ```
 main thread                                   worker (1 to 4)
@@ -107,10 +107,12 @@ World (React) -> ChunkRenderer.update(x, z)
   chunk of the player changed?
   yes: wanted ring = 8 chunks, LOD by ring
        MeshWorkerPool.request(cx, cz, lod) -->  mesh.worker.ts
-                                                 LegacyZoneAdapter.generateChunk (lod)
-                                                 PaddedChunkReader (chunk + 1 block ring)
+                                                 ChunkCache: the chunk and its 8 neighbours
+                                                   (LegacyZoneAdapter.generateChunk (lod), kept in a small LRU)
+                                                 computeChunkLight (sky and block light, 3x3 chunks)
+                                                 NeighbourReader (chunk + 1 block ring from the neighbours)
                                                  meshChunk -> opaque / cutout / water
-                                                   (texture layer, uv and tint per vertex)
+                                                   (texture layer, uv, tint and baked light per vertex)
   <-- MeshData, 21 buffers transferred      <--
   upload queue, 2 geometries per frame
   Mesh per bucket in ChunkRenderer.group, three shared materials sampling one texture array
@@ -118,10 +120,10 @@ World (React) -> ChunkRenderer.update(x, z)
     Player: moveAABB(voxelWorld, player box, velocity * dt) against the block models, see collision.md
 ```
 
-- **Two copies of the world, on purpose.** Workers generate the chunk they mesh. The main thread keeps its own `VoxelWorld` for collision and the HUD, answered by the generator block by block, so physics never waits on rendering. Both use the same `LegacyZoneAdapter`, and the parity tests keep the generator's `sampleBlock` and `generateChunk` identical, which is why chunk borders meet without a seam.
+- **Two copies of the world, on purpose.** Workers generate the chunk they mesh and, for its light, the eight around it (cached per worker, see [light.md](light.md#the-worker)). The main thread keeps its own `VoxelWorld` for collision and the HUD, answered by the generator block by block, so physics never waits on rendering. Both use the same `LegacyZoneAdapter`, and the parity tests keep the generator's `sampleBlock` and `generateChunk` identical, which is why chunk borders meet without a seam.
 - **Nothing on the main thread depends on height.** The renderer recomputes only when the player's chunk changes, so a jump sends no job and rebuilds nothing. The old renderer rebuilt every visible chunk because `playerY` was a React dependency.
 - **Meshes are plain Three.js objects, not React.** `components/World.tsx` creates one `ChunkRenderer` and calls `update` from a frame hook. There is no per-chunk component, no instancing and no per-chunk material.
-- **Faces are culled in the mesher** (a face is drawn unless the block beside it covers the side it looks at, which a model decides, see [models.md](models.md)), each vertex carries a layer of the block texture array, a uv and a biome tint (vertex ambient occlusion exists in the mesher but is off by default, see [meshing.md](meshing.md)), and the lights, fog colours and water wave are unchanged apart from fog distances, which scale with the render distance.
+- **Faces are culled in the mesher** (a face is drawn unless the block beside it covers the side it looks at, which a model decides, see [models.md](models.md)), each vertex carries a layer of the block texture array, a uv, a biome tint and its baked light (sky, block light, ambient occlusion and glow, see [light.md](light.md)). Chunk materials are unlit and shade from that light with a `uDaylight` uniform, so the Three.js scene lights no longer touch chunk geometry; fog colours and the water wave are unchanged, and fog distances scale with the render distance.
 - **Budgets keep frames even.** At most 2 geometries are uploaded per frame, nearest chunk first. The job queue is ranked by distance to the player when a worker frees up. Chunks are dropped one chunk beyond the render distance (hysteresis) and their geometries disposed.
 - **One layout, two builders.** The mesher writes texture layer numbers into vertices in a worker; the atlas builder fills the texture array on the main thread. Both build an `engine/TextureLayout` from the same catalog and registry (`content/textures/layout.ts`), which is deterministic, so layer numbers agree without passing any texture data to the worker. A test checks the layout is identical when built twice.
 - **Layers.** `meshing/` and `engine/` import neither Three.js nor React (a test checks both), so a worker can load them. `render/` and `components/` are the only places that touch Three.js; `mesh.worker.ts` is the only file in `meshing/` that imports `content/` and `worldgen/`.

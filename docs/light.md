@@ -1,6 +1,6 @@
 # Light engine
 
-Phase 5 bakes light into the world instead of leaving it to Three.js lights. This is step 5.1, the pure engine: `meshing/LightEngine.ts`. It computes the light of one chunk; the mesher, the shader and the day/night cycle that use it come in the later steps of the phase. Like the mesher it is plain data code (no three, no React, no DOM), so it runs in the mesh worker.
+Phase 5 bakes light into the world instead of leaving it to Three.js lights. Step 5.1 is the pure engine, `meshing/LightEngine.ts`, which computes the light of one chunk. Step 5.2 puts that light into the mesh and the shader: see [Smooth light in the mesher](#smooth-light-in-the-mesher), [The worker](#the-worker) and [The shader](#the-shader) below. The day/night cycle that drives the daylight uniform comes in a later step. Like the mesher the engine is plain data code (no three, no React, no DOM), so it runs in the mesh worker.
 
 ## What it computes
 
@@ -31,6 +31,7 @@ light.sky(lx, y, lz);    // 0..15
 light.block(lx, y, lz);  // 0..15
 ```
 
+- `light.copyLayers(out, minY, maxY)` copies the packed light of whole layers into a byte array laid out like the mesher's padded cell grid (the chunk plus its ring, x fastest, then z, then y). The mesher uses it to read a cell's light at the same index as the cell.
 - `reader` is a `LightReader`, `getChunk(cx, cz)`. `ChunkGrid` is one over chunks you already hold. It has to supply the chunk and its eight neighbours; a missing one reads as air.
 - `LightData` answers for local `lx` and `lz` from -1 to `CHUNK_SIZE` (a one block ring around the chunk, so the mesher can read the cell in front of every face and the four cells around a vertex without asking a neighbour). Anything further out throws. Above `WORLD_MAX_Y` it reads as open sky (15, 0) and below `WORLD_MIN_Y` as dark.
 - It is stored per section of 16 layers like the cells. A section whose 34 x 34 x 16 cells all have the same light (open sky above the ground, solid rock below it) is a single byte; `storedSections()` counts the ones that needed an array. A real chunk keeps 2 to 5.
@@ -69,6 +70,81 @@ The real cost of the neighbourhood is **generating the neighbours**: a worker th
 
 Under vite-node an imported binding (`CHUNK_SIZE`, say) is a property lookup on a module object, and in a loop that runs millions of times it is about 10 times slower than a local. `LightEngine` and `Chunk.copyCells` copy the constants they use in hot loops into locals for that reason, which took a chunk's copy from 14 ms to 2 ms in the tests. The production build is not affected (the bundler inlines them), so the same trick changes only the numbers you see in `npm test`.
 
+## Smooth light in the mesher
+
+`meshChunk(reader, cx, cz, registry, { layout, light })` takes the `LightData` of the chunk and writes it into every vertex, in one attribute (`light` in `MeshData`, `bakedLight` in the Three.js geometry) of four floats, all 0 to 1:
+
+| Component | What it is |
+| --- | --- |
+| x | sky light, level / 15 |
+| y | block light, level / 15 |
+| z | ambient occlusion multiplier, 0.55 to 1 (1 is open) |
+| w | glow: what the block itself emits, `emits / 15` (0 for everything that does not shine) |
+
+This replaces the old `colors` attribute (a white or occlusion-only rgb multiplier); the biome tint stays in its own `tints` attribute, so tint, light and occlusion are three separate inputs to the shader. A vertex is 4 bytes bigger than before (a vec4 where there was a vec3).
+
+**A corner of a cube face.** The face looks at one cell, the cell in front of it. Each of its four corners takes the average of the light of four cells in that layer: the front cell, the two beside the corner and the one diagonal to it, for sky and block light separately. Two rules keep it honest, and a test breaks if either is removed:
+
+- A cell that blocks light (an opaque block, so its stored light is 0) is left out of the average instead of counting as dark. Otherwise every corner next to a wall would be a step darker than the air it touches, on top of the occlusion.
+- The diagonal cell is also left out when both cells beside the corner block light, because light cannot reach the vertex through two walls that touch. Without this a lantern in a closed-off cell would light the corner of the floor next to it.
+
+Ambient occlusion comes from the same cells, the usual three-neighbour level over blocks that cover all six sides (a slab or a stair does not darken the cube beside it). It is switched on now (`AO_STRENGTH = 1`, see [meshing.md](meshing.md#ambient-occlusion)). The quad is split along the diagonal that joins its two brighter corners, judged on sky plus block light times occlusion, so a lit corner next to a dark one does not show a crease.
+
+**Quads that are not a whole cube face** (a stair's riser, a fence, a plant, a lantern, the two halves of a stair's base) take one light value for all four corners: the cell they look at if it lets light through, else the block's own cell, else the brightest open cell around (an opaque stair's own cell is dark, so a stair face inside it reads the air in front of it). A slab's base, which is a whole cell face, is smoothed like a cube.
+
+**Water** is lit the same way and smoothed, with no occlusion: a shore does not darken it.
+
+**Without light data** (the sandbox pages and most mesher tests) every vertex is open sky: sky 1, block 0.
+
+**Glow** is the block's own `emits` level, written on every quad of an emitting block (the lantern is 15 and the magic crystal 10, which are the only legacy blocks that emit). A block another branch registers with `emits` above 0 glows by itself.
+
+## The worker
+
+A job for one chunk needs the 3x3 chunks around it for the light, so a worker would generate nine chunks per job. `meshing/ChunkCache.ts` is a small LRU of generated chunks (64 per worker, about 8 MB, kept per detail level: a job at HIGH reads its nine chunks at HIGH, so the light matches the cells it meshes). `runMeshJob` gets the neighbourhood from the cache, lights the chunk, and meshes it reading the cells and the one block ring from those same nine chunks (`NeighbourReader`, instead of asking the generator block by block; a test checks the mesh is identical to the one built the old way). It is still one job per chunk and the pool is unchanged.
+
+```
+cache.neighbourhood(cx, cz, lod)   9 chunks, generating the ones the worker has not seen
+computeChunkLight(...)             sky and block light of the chunk and a one block ring
+meshChunk(new NeighbourReader(...), ..., { layout, light })
+```
+
+Every `MeshData` carries `timing`: milliseconds spent generating (what the cache did not have), lighting and meshing, and how many chunks the job generated. The renderer sums them into `getStats()` (`jobs`, `generateMs`, `lightMs`, `meshMs`, `maxLightMs`, `maxMeshMs`, `chunksGenerated`), which the soak run records.
+
+Measured in the browser (production build, render distance 8, four workers, the 90 s soak, [`bench-soak-p5-prod.json`](bench-soak-p5-prod.json)), averaged over 881 jobs: **light 2.4 ms, mesh 2.2 ms, generating 26.9 ms** per job, worst single light 22.6 ms and mesh 22.3 ms (the first jobs, with a cold JIT; both are under 3 ms on average). In node with the neighbours already cached, light plus mesh is 6 to 11 ms for the four test chunks (`tests/meshing/mesh-job-timing.test.ts`, target 25 ms).
+
+Generation is the real cost, and the cache only helps partly: four workers each see about a quarter of the chunks, so a chunk is generated by several of them. In the soak 4,620 chunks were generated for 881 jobs, 5.2 per job where one job on its own needs 9 (and the old path needed 1). A cache of 160 chunks per worker brought it to 4.5 per job, so size is not what limits it. Sending jobs for neighbouring chunks to the same worker should cut it a lot (I did not try it): the pool ranks jobs by distance to the player and has tests that pin that order, so it was left alone, and it is the first thing to try if load time matters. Frame time does not see any of this, because it all happens in workers (table below).
+
+| Run (production, render distance 8) | fps | p99 | worst frame | frames over 50 ms |
+| --- | ---: | ---: | ---: | ---: |
+| flythrough, overall ([`bench-p5-prod.json`](bench-p5-prod.json)) | 60.0 | 17.7 ms | 32.7 ms | 0 |
+| 90 s soak | 60.0 | 17.7 ms | 24.6 ms | 0 |
+
+Against the Phase 2 targets (jump p99 under 20 ms, walking p99 under 25 ms, nothing over 50 ms while walking, 58 fps or better): the jump leg p99 was 17.2 ms, the walking legs 17.7 ms and 17.7 ms, with no frame over 50 ms, and the geometry count in the soak stays flat (355 at 30 s, 352 at the end). The worst single frame, 32.7 ms on the long leg, is in the range the earlier phases saw on this busy machine (22 to 29 ms, [perf-after-p3.md](perf-after-p3.md)); the load leg had one frame of 31.5 ms, while the first chunks upload.
+
+## The shader
+
+`render/BlockMaterials.ts`. The three chunk materials are now `MeshBasicMaterial`, patched like before: a chunk takes nothing from the scene's lights. A fragment is
+
+```
+texture(layer, uv) x biome tint x ao x max(sky * uDaylight, block light) x face factor
+```
+
+computed as follows (constants at the top of the fragment declarations):
+
+- Light levels go through a curve, `pow(level, 1.8)`, so the dark end is darker than a straight line: a room a few blocks from a window reads as dim and not nearly as bright as day. Sky light is multiplied by `uDaylight`; block light is not, and is warm (`vec3(1.0, 0.84, 0.6)`). The two are combined per colour channel with `max`, so a lantern in a dark room gives orange light and a lantern at noon changes nothing.
+- A floor of 0.04 under the light keeps a sealed room from going black, and a final scale of 0.5 keeps full daylight from clipping once the renderer's ACES tone mapping has brightened it (ACES multiplies by 1/0.6 first, so an unscaled noon came out washed out).
+- The face factor is mild: `0.86 + 0.14 * normal.y - 0.05 * abs(normal.x)`, which is 1 on tops, 0.86 on north and south walls, 0.81 on east and west walls and 0.72 on undersides. Occlusion and baked light do the real shading.
+- **Glow.** The block light an emitter's own faces show is at least its emission, and the result is multiplied by `1 + glow * 0.45`, so a lantern is a little brighter than the light around it and stays lit when the area is dark. Block light by itself would make a magic crystal (10) only two thirds lit.
+- Fog is the scene's, as before. Water uses the same lighting, then its wave and blending.
+
+`uDaylight` is one uniform shared by the three materials, 0 to 1. `ChunkRenderer.setDaylight(value)` sets it (clamped), and `World` calls it every frame. Nothing is re-meshed when it changes: sky light is baked as a level and scaled here. Until the day/night cycle of the next step drives it, `World` reads `?daylight=0..1` from the page address (default 1, noon), which is how the night screenshots below were taken.
+
+## Screenshots
+
+In [screens/p5/](screens/p5/): the six standard world shots at noon (`world-*.png`, compare [p4](screens/p4/)), the spawn road at `?daylight=0.12` with the lanterns' pools of light (`night-spawn.png`), and the Great Tower at noon, where the entrance hall (`tower-entrance-day.png`) and the inside (`tower-interior-day.png`) are dark except where lanterns light the floor and the corners show occlusion. `blocks.png` and `models-house.png` are the two sandbox pages, which now show ambient occlusion on their blocks.
+
+The old `DayNightCycle` component, the Three.js lights and the fixed twilight sky and fog are still in `components/Game.tsx`: chunks no longer use the lights, and replacing the rest, with zone `skyTint` and `fogDensity`, is a later step.
+
 ## Tests
 
-`tests/light.test.ts`: open sky is 15; a roof falls off by one per block from the opening (checked cell by cell); a sealed room is dark by day; a lantern gives 15 to 0 at radius 15 and does not enter the ground; opaque emitters; two sources; glass and slabs and water and fences; leaves; `lightDim`; borders between two, three and four chunks and real terrain at the Town of Beginnings; determinism; edges (missing neighbours, top of the world, a lantern in the top layer of the highest section); a random-world check against a plain relaxation written from the rules and sharing no code with the engine (three seeds, with caves, canopies, glass, fog, slabs, lanterns and glowstone); and the timings above.
+`tests/meshing/baked-light.test.ts` (a sealed room dark by day, the same room with a lantern, averages round a vertex, walls and corners left out, stairs and slabs, windows, water, tint, glow, attribute shapes on real terrain), `tests/meshing/light-seams.test.ts` (the light of every vertex on the border of two real chunks agrees from both sides, for four borders), `tests/meshing/chunk-cache.test.ts` (the cache, the count of chunks generated for a block of jobs, same mesh warm or cold, lanterns across a border, `NeighbourReader` against the old reader), `tests/meshing/mesh-job-timing.test.ts`, and `tests/light.test.ts`: open sky is 15; a roof falls off by one per block from the opening (checked cell by cell); a sealed room is dark by day; a lantern gives 15 to 0 at radius 15 and does not enter the ground; opaque emitters; two sources; glass and slabs and water and fences; leaves; `lightDim`; borders between two, three and four chunks and real terrain at the Town of Beginnings; determinism; edges (missing neighbours, top of the world, a lantern in the top layer of the highest section); a random-world check against a plain relaxation written from the rules and sharing no code with the engine (three seeds, with caves, canopies, glass, fog, slabs, lanterns and glowstone); and the timings above.

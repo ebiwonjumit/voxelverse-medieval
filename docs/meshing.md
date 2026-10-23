@@ -9,20 +9,22 @@
 | `PaddedChunkReader.ts` | A `Chunk` plus a generator's `sampleBlock` for the one-block ring around it. |
 | `biomeTint.ts` | The zone colour blend for grass and leaves, ported from the old `World.tsx`. |
 | `color.ts` | `#rrggbb` to linear rgb. |
-| `LightEngine.ts` | `computeChunkLight(reader, cx, cz, registry)`: baked sky and block light for a chunk and a one block ring, from the 3x3 chunks around it. Not used by the mesher yet. See [light.md](light.md). |
-| `runMeshJob.ts` | One job: generate a chunk with a given detail level, mesh it. |
+| `LightEngine.ts` | `computeChunkLight(reader, cx, cz, registry)`: baked sky and block light for a chunk and a one block ring, from the 3x3 chunks around it. The mesher takes its result as `options.light`. See [light.md](light.md). |
+| `ChunkCache.ts` | A worker's small LRU of generated chunks, so the 3x3 a job needs is generated once, not nine times. |
+| `NeighbourReader.ts` | A `CellReader` over the nine chunks of a neighbourhood: the chunk and its ring come from the chunks themselves. |
+| `runMeshJob.ts` | One job: get the chunk and its eight neighbours (from the cache), light the chunk, mesh it, and record how long each took. |
 | `MeshWorkerPool.ts` | The worker pool: priority queue, cancel, stale results. See [renderer.md](renderer.md). |
 | `mesh.worker.ts` | Worker entry point. The one file here that imports `content/` and `worldgen/`, to build its own registry and generator. |
 
 ## Output
 
-`MeshData` is `{ cx, cz, opaque, cutout, water }`. Each bucket holds these buffers (all Float32Array except the indices):
+`MeshData` is `{ cx, cz, opaque, cutout, water, timing? }` (`timing` is milliseconds spent generating, lighting and meshing, set by `runMeshJob`, see [light.md](light.md#the-worker)). Each bucket holds these buffers (all Float32Array except the indices):
 
 | Buffer | Per vertex | What it is |
 | --- | --- | --- |
 | `positions` | 3 | Chunk-local position. |
 | `normals` | 3 | Outward face normal. |
-| `colors` | 3 | Linear rgb multiplier for ambient occlusion; white while AO is off. |
+| `light` | 4 | Baked light: sky (0 to 1), block light (0 to 1), ambient occlusion multiplier (0.55 to 1) and glow (0 to 1). See [light.md](light.md#smooth-light-in-the-mesher). |
 | `tints` | 3 | Linear rgb biome tint; white on faces that take none. |
 | `uvs` | 2 | Position inside the tile, 0 to 1. `v = 0` is the top row of the tile. |
 | `layers` | 2 | Texture array layer of the face, and the layer of its tint overlay or -1. |
@@ -31,7 +33,7 @@
 Every face is four vertices and six indices, counter-clockwise from outside. `meshTransferables(mesh)` lists the 21 buffers for `postMessage`.
 
 - Positions are chunk-local: x and z run 0 to 32, y is the world height. A block at (x, y, z) fills the unit cube from (x, y, z) to (x+1, y+1, z+1). The old renderer centred cubes on whole numbers, so the render code must place each chunk mesh half a block back on all three axes to look the same and to match the player's collision, which uses the same block-centred coordinates (see [collision.md](collision.md)).
-- Vertex colours are linear rgb (ambient occlusion, when it is switched on, see below), so the material needs `vertexColors: true`. The block's own colour no longer lives in the vertices: it comes from the texture layer. Face shading is not baked in: the Three.js lights do that through the normals.
+- There is no vertex colour any more: the light attribute replaces it, and the materials are unlit (`MeshBasicMaterial`) and shade from it. The block's own colour does not live in the vertices either: it comes from the texture layer. The face-direction factor (tops brighter than sides) is applied in the shader from the normal, not baked.
 - Buckets: `opaque` is every block the registry marks opaque, whatever its shape (cubes, stairs, slabs, farmland). `water` is water. `cutout` is everything else that draws: leaves, glass, panes, fences, plants and the small boxes. Each bucket has its own material (see [renderer.md](renderer.md)): no alpha test for opaque, alpha test for cutout, blending and the wave for water.
 
 ## Reading cells
@@ -57,9 +59,9 @@ Everything that is not a plain cube or water is drawn from the quads of its `Blo
 
 ## Ambient occlusion
 
-Full cubes (not water, not shaped blocks) can get per-vertex occlusion with the usual three-neighbour method over the layer in front of each face: two side blocks and the diagonal one, counting only blocks that cover all six sides (so a slab does not darken the cube beside it). A model quad that is a whole cell face, such as a slab's base, gets the same treatment; other model quads stay lit. Both sides solid gives the darkest level, otherwise the level is 3 minus the number of solid neighbours. At full strength levels map to multipliers `[0.55, 0.7, 0.85, 1.0]`. The quad is split along the diagonal that joins the two brighter corners, which avoids the crease you get when the wrong diagonal is interpolated.
+Full cubes (not water, not shaped blocks) get per-vertex occlusion with the usual three-neighbour method over the layer in front of each face: two side blocks and the diagonal one, counting only blocks that cover all six sides (so a slab does not darken the cube beside it). A model quad that is a whole cell face, such as a slab's base, gets the same treatment; other model quads stay lit. Both sides solid gives the darkest level, otherwise the level is 3 minus the number of solid neighbours. At full strength levels map to multipliers `[0.55, 0.7, 0.85, 1.0]`, written as the third component of the `light` attribute and multiplied into the shading by the shader. The quad is split along the diagonal that joins the two brighter corners (judged on the light as well as the occlusion, see [light.md](light.md#smooth-light-in-the-mesher)), which avoids the crease you get when the wrong diagonal is interpolated.
 
-**It is off by default.** Phase 2 promises the same look as the old renderer (flat colours, same lights), and the old renderer had no AO. The single switch is `AO_STRENGTH` in `ChunkMesher.ts`: 0 means every multiplier is 1.0 and the neighbour lookups are skipped entirely (the quad keeps its default split); 1 is the full range above, and values between scale the darkening linearly. `meshChunk` also takes `{ aoStrength, layout }` as a fifth argument, which is how the tests run the AO code at strength 1 while a separate test pins the shipped default to 0. Phase 6 (baked light) is the place to turn it on, and it will have to be rebalanced against the baked light then.
+**It is on by default since Phase 5.** Phase 2 kept it off to keep the old renderer's flat look; with light baked it is what makes corners and creases read. The single switch is `AO_STRENGTH` in `ChunkMesher.ts`: 0 means every multiplier is 1.0 and the neighbour lookups are skipped; 1 is the full range above, and values between scale the darkening linearly. `meshChunk` also takes `{ aoStrength }` as an option, which tests use for other strengths.
 
 ## Textures
 
@@ -74,13 +76,24 @@ Shaped blocks use the same tables through the face kind each quad carries (top, 
 
 ## Speed
 
-Measured by `tests/meshing/mesher-timing.test.ts` in node on an Apple M4, with AO off (the default) and chunks from `LegacyZoneAdapter` and ring sampling included (median of 9 runs after warm-up; generating the chunk is not counted):
+Meshing alone, measured by `tests/meshing/mesher-timing.test.ts` in node on an Apple M4, with AO on (the default), no light data and chunks from `LegacyZoneAdapter` with ring sampling included (median of 9 runs after warm-up; generating the chunk is not counted). Phase 2 measured 6.3 to 10.0 ms on the same chunks with AO off:
 
 | Chunk | Median | Triangles |
 | --- | ---: | ---: |
-| (0, 9), spawn at Greensom | 7.9 ms | 8,500 |
-| (0, 0), Town of Beginnings | 10.0 ms | 16,666 |
-| (-1, -1), Great Tower corner | 9.9 ms | 15,702 |
-| (53, 0), Tempest Coliseum | 6.3 ms | 2,552 |
+| (0, 9), spawn at Greensom | 6.0 ms | 7,660 |
+| (0, 0), Town of Beginnings | 8.0 ms | 16,666 |
+| (-1, -1), Great Tower corner | 8.1 ms | 15,702 |
+| (53, 0), Tempest Coliseum | 4.6 ms | 2,552 |
 
 The target was under 25 ms. The test asserts it, so a regression fails `npm test`; a heavily loaded machine can add noise, so rerun once before concluding anything. The run prints its numbers with a `[mesher]` prefix.
+
+With baked light and the neighbours already cached, `tests/meshing/mesh-job-timing.test.ts` measures what a worker spends on one job (`[job]` lines, same four chunks, median of 9 after warm-up, node):
+
+| Chunk | Light | Mesh (with light, ring from the neighbours) | Together |
+| --- | ---: | ---: | ---: |
+| (0, 9), spawn at Greensom | 3.0 ms | 4.2 ms | 7.2 ms |
+| (0, 0), Town of Beginnings | 4.2 ms | 6.5 ms | 10.7 ms |
+| (-1, -1), Great Tower corner | 4.0 ms | 6.3 ms | 10.3 ms |
+| (53, 0), Tempest Coliseum | 2.2 ms | 3.9 ms | 6.1 ms |
+
+The test asserts light plus mesh under the same 25 ms. Mesh time with light is a little below the AO-only run on the busier chunks because the ring is read from the cached neighbours instead of the generator. In the browser the average over a soak is 2.4 ms for light and 2.2 ms for meshing per job (most chunks in view are mostly empty sky or far, low detail ground).
