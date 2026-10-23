@@ -1,6 +1,6 @@
 import { Color } from 'three';
 import { describe, expect, it } from 'vitest';
-import { grassTint, leavesTint } from '../../meshing/biomeTint';
+import { grassTint, leavesTint, naturalWeight } from '../../meshing/biomeTint';
 import { hexToLinear } from '../../meshing/color';
 import { createDefaultTextureLayout } from '../../content/textures/layout';
 import { createDefaultCatalog } from '../../content/textures/TextureCatalog';
@@ -65,9 +65,19 @@ describe('hexToLinear', () => {
   });
 });
 
+// The old blend is still what grass looks like near a zone. Away from the zones the natural wilderness colour takes over
+// (tests/meshing/wild-tint.test.ts), which is the one thing that legitimately changed, so these compare only where the
+// natural colour has no weight yet.
+const NEAR_ZONES = SAMPLES.filter(([x, z]) => naturalWeight(x, z) === 0);
+
 describe('biomeTint', () => {
-  it('gives the same grass colour as the old blend at sample points', () => {
-    for (const [x, z] of SAMPLES) {
+  it('has samples near the zones to compare with the old blend', () => {
+    expect(NEAR_ZONES.length).toBeGreaterThanOrEqual(8);
+    expect(NEAR_ZONES.length).toBeLessThan(SAMPLES.length);
+  });
+
+  it('gives the same grass colour as the old blend at sample points near a zone', () => {
+    for (const [x, z] of NEAR_ZONES) {
       const want = oldTint(x, z, false);
       const got = [0, 0, 0];
       grassTint(x, z, got);
@@ -78,7 +88,7 @@ describe('biomeTint', () => {
   });
 
   it('gives the same leaf colour, grass times 0.7', () => {
-    for (const [x, z] of SAMPLES) {
+    for (const [x, z] of NEAR_ZONES) {
       const want = oldTint(x, z, true);
       const got = [0, 0, 0];
       leavesTint(x, z, got);
@@ -110,9 +120,9 @@ describe('mesher colours', () => {
     expect(got[2]).toBeCloseTo(want.b, 5);
   };
 
-  it('leaves the vertex colour white now that colour comes from the texture', () => {
+  it('leaves an open face fully lit, with no colour in the light now that colour comes from the texture', () => {
     for (const id of [BlockType.STONE, BlockType.GRASS, BlockType.LEAVES]) {
-      for (const c of face(id, 3, 3, 0, 0, 1).corners) expect(c.rgb).toEqual([1, 1, 1]);
+      for (const c of face(id, 3, 3, 0, 0, 1).corners) expect([c.sky, c.block, c.ao]).toEqual([1, 0, 1]);
     }
   });
 

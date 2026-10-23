@@ -1,18 +1,16 @@
 import { Zone, AtmosphereSettings, LodLevel } from './Zone';
 import { BlockType, WATER_LEVEL, MILE } from '../worldConstants';
 import { noise } from '../utils/perlin';
+import { WILDERNESS_BASE } from './wildernessAtmosphere';
 
 export class WildernessZone extends Zone {
   name = "Wilderness";
 
   isInside(x: number, z: number): boolean { return true; }
   
+  // Clear blue country. This is the base look; the sky refines it by the biome underfoot (wildernessAtmosphere).
   getAtmosphere(): AtmosphereSettings {
-    return {
-      fogColor: '#4a3358', // Dark purple fog
-      skyTint: '#6b4b7a', // Deep purple sky
-      fogDensity: 0.015
-    };
+    return { ...WILDERNESS_BASE };
   }
 
   getHeight(x: number, z: number, baseH: number): number {

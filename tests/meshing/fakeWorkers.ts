@@ -44,7 +44,7 @@ export const fakeWorkerFactory = (): { factory: WorkerFactory; workers: FakeWork
 };
 
 const emptyBucket = (): BucketData => ({
-  positions: new Float32Array(0), normals: new Float32Array(0), colors: new Float32Array(0),
+  positions: new Float32Array(0), normals: new Float32Array(0), light: new Float32Array(0),
   tints: new Float32Array(0), uvs: new Float32Array(0), layers: new Float32Array(0), indices: new Uint32Array(0),
 });
 
@@ -56,7 +56,7 @@ export const quadMesh = (cx: number, cz: number, buckets: Array<'opaque' | 'cuto
     mesh[name] = {
       positions: new Float32Array([0, 5, 0, 1, 5, 0, 1, 5, 1, 0, 5, 1, 30, 20, 31, 31, 20, 31, 31, 20, 32, 30, 20, 32]),
       normals: new Float32Array(24).map((_, i) => (i % 3 === 1 ? 1 : 0)),
-      colors: new Float32Array(24).fill(0.5),
+      light: new Float32Array(32).fill(0.5),
       tints: new Float32Array(24).fill(1),
       uvs: new Float32Array(16),
       layers: new Float32Array(16),

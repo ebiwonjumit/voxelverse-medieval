@@ -113,17 +113,17 @@ describe('Chunk bulk reads', () => {
     expect(c.allocatedYRange()).toEqual({ minY: -16, maxY: 111 });
   });
 
-  it('copies ids without state into a strided array and leaves empty sections alone', () => {
+  it('copies cells, state included, into a strided array and leaves empty sections alone', () => {
     const c = new Chunk(0, 0);
     c.setCell(2, -3, 4, packCell(7, 9));
     c.setCell(31, 20, 31, packCell(100, 15));
     const rowStride = 40 * 40;
     const zStride = 40;
     const out = new Uint16Array(rowStride * 30);
-    c.copyIds(out, -5, 24, 41, rowStride, zStride);
+    c.copyCells(out, -5, 24, 41, rowStride, zStride);
     const at = (lx: number, y: number, lz: number) => out[41 + (y + 5) * rowStride + lz * zStride + lx];
-    expect(at(2, -3, 4)).toBe(7);
-    expect(at(31, 20, 31)).toBe(100);
+    expect(at(2, -3, 4)).toBe(packCell(7, 9));
+    expect(at(31, 20, 31)).toBe(packCell(100, 15));
     expect(out.reduce((n, v) => n + (v ? 1 : 0), 0)).toBe(2);
   });
 });

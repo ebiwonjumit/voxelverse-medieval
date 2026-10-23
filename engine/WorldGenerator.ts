@@ -1,5 +1,6 @@
 import { LodLevel } from '../worldConstants';
 import { Chunk } from './Chunk';
+import { Cell } from './cell';
 
 export interface GenerateOptions {
   // How much small detail to build. Defaults to HIGH. Far chunks ask for LOW because nobody sees the detail.
@@ -14,6 +15,10 @@ export interface WorldGenerator {
 
   // Block id at a single position, without building a chunk. Also used outside the world's height range.
   sampleBlock(x: number, y: number, z: number): number;
+
+  // The whole cell (id and state) at a single position. Generators that place blocks with a state implement it, so a
+  // stair at the edge of a chunk is read with its facing from the next chunk over. Without it the state reads as 0.
+  sampleCell?(x: number, y: number, z: number): Cell;
 
   terrainHeight(x: number, z: number): number;
   zoneNameAt(x: number, z: number): string;

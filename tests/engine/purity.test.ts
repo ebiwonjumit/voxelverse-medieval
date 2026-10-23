@@ -6,10 +6,12 @@ import { describe, expect, it } from 'vitest';
 // so the generator is always passed in.
 describe('engine layer', () => {
   const dir = join(__dirname, '..', '..', 'engine');
-  const files = readdirSync(dir).filter((f) => f.endsWith('.ts'));
+  // Subfolders (engine/models) count as engine too.
+  const files = readdirSync(dir, { recursive: true, encoding: 'utf8' }).filter((f) => f.endsWith('.ts'));
 
   it('has source files to check', () => {
     expect(files).toContain('WorldGenerator.ts');
+    expect(files.some((f) => f.startsWith('models'))).toBe(true);
   });
 
   for (const file of files) {

@@ -9,7 +9,7 @@ Checked on 23 Oct 2026 with `npm audit` and `npm audit --omit=dev`. Run `npm aud
 | `npm audit` (everything) | 13 findings: 2 critical, 7 high, 3 moderate, 1 low | 3 findings: 2 critical, 1 moderate |
 | `npm audit --omit=dev` (what ships) | 1 moderate | 0 |
 
-`npm audit fix` (no `--force`) only moved packages inside the ranges `package.json` already allows, so `package.json` is unchanged and only `package-lock.json` changed. Typecheck, the 711 tests and `vite build` pass after it.
+`npm audit fix` (no `--force`) only moved packages inside the ranges `package.json` already allows, so `package.json` is unchanged and only `package-lock.json` changed. Typecheck, the 1,324 tests (on the merged tree) and `vite build` pass after it.
 
 ## What reaches the shipped game
 

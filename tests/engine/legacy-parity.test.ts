@@ -5,6 +5,7 @@ import { cellState } from '../../engine/cell';
 import { CHUNK_SIZE, WORLD_MAX_Y, WORLD_MIN_Y } from '../../engine/coords';
 import { LegacyZoneAdapter } from '../../worldgen/LegacyZoneAdapter';
 import { getBlockAt, getTerrainHeight } from '../../utils/terrain';
+import { timeoutMs } from '../perf';
 
 // Small seeded generator so the "random" points are the same on every run.
 const mulberry32 = (seed: number) => () => {
@@ -83,7 +84,7 @@ describe('LegacyZoneAdapter parity with the old world', () => {
     }
     expect(compared).toBeGreaterThanOrEqual(10000);
     expect(mismatches).toEqual([]);
-  }, 120000);
+  }, timeoutMs(120000));
 
   it('matches getBlockAt for every block above the ground in the landmark chunks', () => {
     const world = newWorld();
@@ -110,7 +111,7 @@ describe('LegacyZoneAdapter parity with the old world', () => {
     }
     expect(compared).toBeGreaterThan(500000);
     expect(structureBlocks).toBeGreaterThan(20000); // towers, walls, houses and trees, not just open air
-  }, 120000);
+  }, timeoutMs(120000));
 
   it('matches getBlockAt for points in chunks that are not loaded', () => {
     const rng = mulberry32(7);

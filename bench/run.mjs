@@ -4,7 +4,7 @@
 //   npm run bench                  (full run, about 2.5 minutes)
 //   npm run bench -- --quick       (harness smoke test)
 //   npm run bench -- --url http://localhost:4173/?bench --out docs/bench-prod.json
-//   npm run bench -- --smoke       (loads the real game, drops the player, walks forward, reports console errors)
+//   npm run bench -- --smoke       (loads the real game, drops the player, checks the HUD zone, walks forward, presses the sky keys, reports console errors)
 //   npm run bench -- --soak        (90 s closed-loop walk, prints geometry and triangle counts every 5 s)
 //   npm run bench -- --shot docs/screens/p2/spawn.png --url "http://localhost:3000/?shot=0,10,300,0,0"
 //                                  (screenshot at 1280x800 once the world reports window.__SHOT_READY__)
@@ -139,16 +139,32 @@ try {
     const key = (type, code, vk) =>
       send('Input.dispatchKeyEvent', { type, code, key: code.replace('Key', '').toLowerCase(), windowsVirtualKeyCode: vk }, sessionId);
 
+    // The HUD's zone name comes from the generator on the main thread; at the spawn it has to be Greensom.
+    const readZone = async () => /CURRENT LOCATION\s*\n\s*([^\n]+)/.exec(await evaluate('document.body.innerText'))?.[1]?.trim();
     await sleep(8000);
     const landed = await readXYZ();
+    const zoneAtSpawn = await readZone();
     await key('rawKeyDown', 'KeyW', 87);
     await sleep(3000);
     await key('keyUp', 'KeyW', 87);
     await sleep(500);
     const walked = await readXYZ();
 
-    console.log('  after landing:', landed);
+    // The sky keys: F4 steps to the dawn preset, then ] moves the clock on an hour and stops it.
+    const readTime = async () => /Time: (\d\d:\d\d) \(([\w.]+)\)/.exec(await evaluate('document.body.innerText'))?.slice(1, 3).join(' ');
+    const timeBefore = await readTime();
+    await key('rawKeyDown', 'F4', 115);
+    await key('keyUp', 'F4', 115);
+    await sleep(400);
+    const timeDawn = await readTime();
+    await key('rawKeyDown', 'BracketRight', 221);
+    await key('keyUp', 'BracketRight', 221);
+    await sleep(400);
+    const timeStepped = await readTime();
+
+    console.log('  after landing:', landed, 'zone:', zoneAtSpawn);
     console.log('  after 3 s of W:', walked);
+    console.log(`  sky clock: ${timeBefore}, after F4: ${timeDawn}, after ]: ${timeStepped}`);
     console.log(`  page errors: ${pageErrors.length}`);
     for (const e of pageErrors.slice(0, 5)) console.log('   ', String(e).slice(0, 200));
 
@@ -158,6 +174,9 @@ try {
       if (landed.y < 5 || landed.y > 14) problems.push(`did not land on the ground (y ${landed.y})`);
       if (landed.z - walked.z < 10) problems.push(`did not walk forward (z ${landed.z} to ${walked.z})`);
     }
+    if (zoneAtSpawn !== 'Greensom Village') problems.push(`the HUD names the zone "${zoneAtSpawn}" at the spawn`);
+    if (timeDawn !== '06:15 dawn') problems.push(`F4 did not select the dawn preset (${timeDawn})`);
+    if (timeStepped !== '07:15 stopped') problems.push(`] did not step the clock to 07:15 (${timeStepped})`);
     if (pageErrors.length) problems.push('page errors');
     console.log(problems.length ? `FAILED: ${problems.join('; ')}` : 'OK');
     shutdown(problems.length ? 1 : 0);

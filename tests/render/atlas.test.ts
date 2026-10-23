@@ -11,7 +11,7 @@ import { buildAtlas, buildAtlasPixels } from '../../render/AtlasBuilder';
 
 const catalog = createDefaultCatalog();
 const registry = createDefaultRegistry();
-registry.register({ id: 100, name: 'test:flat', color: '#336699', solid: true, opaque: true, emits: 0 });
+registry.register({ id: 4001, name: 'test:flat', color: '#336699', solid: true, opaque: true, emits: 0 });
 const layout = createDefaultTextureLayout(registry, catalog);
 const atlas = buildAtlas(catalog, layout);
 const pixels = buildAtlasPixels(catalog, layout);
@@ -57,7 +57,7 @@ describe('texture array', () => {
   });
 
   it('adds a flat tile for a block without faces and for unknown ids', () => {
-    expect(layout.faceLayer(100, 0)).toBe(atlas.layerOf('flat:#336699'));
+    expect(layout.faceLayer(4001, 0)).toBe(atlas.layerOf('flat:#336699'));
     expect(layout.faceLayer(3000, 0)).toBe(atlas.layerOf('flat:#ff00ff'));
   });
 
@@ -142,13 +142,13 @@ describe('texture layout', () => {
   it('reports a texture name the catalog lacks instead of throwing', () => {
     const r = createDefaultRegistry();
     r.register({
-      id: 100, name: 'test:odd', color: '#123456', solid: true, opaque: true, emits: 0,
+      id: 4001, name: 'test:odd', color: '#123456', solid: true, opaque: true, emits: 0,
       faces: { top: 'zzz', bottom: 'dirt', side: 'dirt' },
     });
     const l = createDefaultTextureLayout(r, catalog);
     expect(l.missing).toEqual(['zzz']);
-    expect(l.layerNames[l.faceLayer(100, 0)]).toBe('flat:#123456');
-    expect(l.layerNames[l.faceLayer(100, 1)]).toBe('dirt');
+    expect(l.layerNames[l.faceLayer(4001, 0)]).toBe('flat:#123456');
+    expect(l.layerNames[l.faceLayer(4001, 1)]).toBe('dirt');
   });
 
   it('refuses the same tile twice', () => {

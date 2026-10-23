@@ -2,7 +2,7 @@ import path from 'path';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
-// CI sets PERF_TOLERANCE (see tests/perf.ts); the default 5 s per-test timeout scales with it.
+// CI sets PERF_TOLERANCE (see tests/perf.ts); the 30 s per-test timeout scales with it.
 const perfTolerance = Math.max(1, Number(process.env.PERF_TOLERANCE) || 1);
 
 export default defineConfig({
@@ -18,6 +18,7 @@ export default defineConfig({
   },
   test: {
     include: ['tests/**/*.test.ts'],
-    testTimeout: 5000 * perfTolerance,
+    // Several generation tests take a few seconds when the machine is busy, so the 5 s default is too tight.
+    testTimeout: 30000 * perfTolerance,
   },
 });

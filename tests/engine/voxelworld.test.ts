@@ -97,3 +97,22 @@ describe('VoxelWorld', () => {
     expect(world.zoneNameAt(5, 0)).toBe('East');
   });
 });
+
+describe('VoxelWorld state outside loaded chunks', () => {
+  it('reads the state from the generator when it can say it, and as 0 when it cannot', () => {
+    const registry = createDefaultRegistry();
+    const stateless = new FlatGenerator();
+    expect(new VoxelWorld(registry, stateless).getCell(3, 20, 3)).toBe(0);
+    expect(new VoxelWorld(registry, stateless).getState(3, 5, 3)).toBe(0);
+
+    const withState: WorldGenerator = {
+      generateChunk: () => {}, terrainHeight: () => 10, zoneNameAt: () => 'x',
+      sampleBlock: () => BlockType.STONE,
+      sampleCell: (x) => packCell(BlockType.STONE, x & 7),
+    };
+    const world = new VoxelWorld(registry, withState);
+    expect(world.getBlock(3, 5, 3)).toBe(BlockType.STONE);
+    expect(world.getState(3, 5, 3)).toBe(3);
+    expect(world.getState(6, 5, 0)).toBe(6);
+  });
+});

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CLOSE_FOCUS, SLOT_SPACING_X, SLOT_SPACING_Z, columnsFor, defaultCamera, layoutBlocks, meshStage, parseSandbox, shortName,
+  CLOSE_FOCUS, NATURE_COLS, NATURE_FOCUS, SLOT_SPACING_X, SLOT_SPACING_Z, columnsFor, defaultCamera, layoutBlocks, meshStage, parseSandbox, shortName,
 } from '../components/sandbox/sandboxLayout';
 import { createDefaultRegistry } from '../content/blocks';
+import { NatureBlock, natureBlockIds } from '../content/blocksNature';
 import { createDefaultTextureLayout } from '../content/textures/layout';
 import { BIOME_ZONES, grassTint } from '../meshing/biomeTint';
 import { hexToLinear } from '../meshing/color';
@@ -24,6 +25,8 @@ describe('parseSandbox', () => {
     expect(parseSandbox('?sandbox=blocks&focus=marble, gold_block')?.focus).toEqual(['marble', 'gold_block']);
     expect(parseSandbox('?sandbox=blocks&cam=1,2,3,4,5,6')?.cam).toEqual({ position: [1, 2, 3], target: [4, 5, 6] });
     expect(parseSandbox('?sandbox=blocks&cam=1,2,3')?.cam).toBeNull();
+    expect(parseSandbox('?sandbox=blocks&focus=marble&cols=6')?.cols).toBe(6);
+    expect(parseSandbox('?sandbox=blocks&focus=marble&cols=0')?.cols).toBeUndefined();
     expect(parseSandbox('?sandbox=blocks&cam=1,2,x,4,5,6')?.cam).toBeNull();
   });
 });
@@ -63,11 +66,11 @@ describe('layoutBlocks', () => {
 
   it('shows blocks that no catalog tile covers, since the layout falls back to flat tiles', () => {
     const extended = createDefaultRegistry();
-    extended.register({ id: 90, name: 'test:untextured', color: '#336699', solid: true, opaque: true, emits: 0 });
+    extended.register({ id: 4010, name: 'test:untextured', color: '#336699', solid: true, opaque: true, emits: 0 });
     const l = layoutBlocks(extended);
-    expect(l.slots.some((s) => s.id === 90 && s.name === 'untextured')).toBe(true);
+    expect(l.slots.some((s) => s.id === 4010 && s.name === 'untextured')).toBe(true);
     const flat = createDefaultTextureLayout(extended);
-    const stage = { blocks: [{ id: 90, x: 0, y: 0, z: 0 }], shiftX: 0, shiftZ: 0 };
+    const stage = { blocks: [{ id: 4010, x: 0, y: 0, z: 0 }], shiftX: 0, shiftZ: 0 };
     const [{ mesh }] = meshStage(stage, extended, flat);
     expect(flat.layerNames[mesh.opaque.layers[0]]).toBe('flat:#336699');
     expect(mesh.opaque.indices.length).toBe(36);
@@ -82,6 +85,39 @@ describe('layoutBlocks', () => {
     const eight = layoutBlocks(registry, CLOSE_FOCUS);
     expect(eight.cols).toBe(4);
     expect(eight.rows).toBe(2);
+  });
+});
+
+describe('the nature view', () => {
+  it('lists the wilderness blocks, in id order, six to a row', () => {
+    const options = parseSandbox('?sandbox=blocks&view=nature')!;
+    expect(options.focus).toEqual(NATURE_FOCUS);
+    expect(options.cols).toBe(NATURE_COLS);
+    const l = layoutBlocks(registry, options.focus, options.cols);
+    expect(l.slots.map((s) => s.id)).toEqual(natureBlockIds().sort((a, b) => a - b));
+    expect(l.slots).toHaveLength(23);
+    expect(l.cols).toBe(NATURE_COLS);
+    expect(l.rows).toBe(Math.ceil(23 / NATURE_COLS));
+    expect(l.slots.find((s) => s.id === NatureBlock.FERN)?.name).toBe('fern');
+  });
+
+  it('meshes every nature block from its own tiles', () => {
+    const l = layoutBlocks(registry, NATURE_FOCUS, NATURE_COLS);
+    const names = new Set<string>();
+    for (const { mesh } of meshStage(l.stages[0], registry, textureLayout)) {
+      for (const bucket of [mesh.opaque, mesh.cutout, mesh.water]) {
+        for (let i = 0; i < bucket.layers.length; i += 2) names.add(textureLayout.layerNames[bucket.layers[i]]);
+      }
+    }
+    for (const n of ['cedar_log_side', 'sakura_leaves', 'bamboo', 'fern', 'fallen_leaves', 'moss_side', 'granite']) {
+      expect(names.has(n), n).toBe(true);
+    }
+    expect([...names].filter((n) => n.startsWith('flat:'))).toEqual([]);
+  });
+
+  it('is part of the full view too: every registered block has a slot', () => {
+    const slots = layoutBlocks(registry).slots.map((s) => s.id);
+    for (const id of natureBlockIds()) expect(slots).toContain(id);
   });
 });
 

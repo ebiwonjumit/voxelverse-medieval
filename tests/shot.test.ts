@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseShot } from '../bench/shot';
+import { parseDaylight, parseShot } from '../bench/shot';
 
 describe('parseShot', () => {
   it('reads x,y,z,yaw,pitch', () => {
@@ -17,5 +17,20 @@ describe('parseShot', () => {
     expect(parseShot('?shot=1,2,3,4,5,6')).toBeNull();
     expect(parseShot('?shot=1,2,x,4,5')).toBeNull();
     expect(parseShot('?shot=')).toBeNull();
+  });
+});
+
+describe('parseDaylight', () => {
+  it('reads a number from 0 to 1 and clamps the rest', () => {
+    expect(parseDaylight('?daylight=0.25')).toBe(0.25);
+    expect(parseDaylight('?shot=0,1,2,3,4&daylight=0')).toBe(0);
+    expect(parseDaylight('?daylight=3')).toBe(1);
+    expect(parseDaylight('?daylight=-1')).toBe(0);
+  });
+
+  it('returns null when absent, empty or not a number', () => {
+    expect(parseDaylight('')).toBeNull();
+    expect(parseDaylight('?daylight=')).toBeNull();
+    expect(parseDaylight('?daylight=night')).toBeNull();
   });
 });
