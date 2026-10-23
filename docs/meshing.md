@@ -4,7 +4,7 @@
 
 | File | What it does |
 | --- | --- |
-| `ChunkMesher.ts` | `meshChunk(reader, cx, cz, registry)` returns `MeshData`. Also `LEGACY_BOXES`, `meshTransferables` and `meshTriangleCount`. |
+| `ChunkMesher.ts` | `meshChunk(reader, cx, cz, registry)` returns `MeshData`. Also `meshTransferables` and `meshTriangleCount`. Plain cubes are meshed here; every other block from the quads of its model (`engine/models`, see [models.md](models.md)). |
 | `CellReader.ts` | The interface the mesher reads cells through, in world coordinates. |
 | `PaddedChunkReader.ts` | A `Chunk` plus a generator's `sampleBlock` for the one-block ring around it. |
 | `biomeTint.ts` | The zone colour blend for grass and leaves, ported from the old `World.tsx`. |
@@ -31,31 +31,32 @@ Every face is four vertices and six indices, counter-clockwise from outside. `me
 
 - Positions are chunk-local: x and z run 0 to 32, y is the world height. A block at (x, y, z) fills the unit cube from (x, y, z) to (x+1, y+1, z+1). The old renderer centred cubes on whole numbers, so the render code must place each chunk mesh half a block back on all three axes to look the same and to match the player's `Math.round` collision.
 - Vertex colours are linear rgb (ambient occlusion, when it is switched on, see below), so the material needs `vertexColors: true`. The block's own colour no longer lives in the vertices: it comes from the texture layer. Face shading is not baked in: the Three.js lights do that through the normals.
-- Buckets: `opaque` is every block the registry marks opaque. `water` is water. `cutout` is everything else that draws: leaves, glass, and the shaped legacy blocks. Each bucket has its own material (see [renderer.md](renderer.md)): no alpha test for opaque, alpha test for cutout, blending and the wave for water.
+- Buckets: `opaque` is every block the registry marks opaque, whatever its shape (cubes, stairs, slabs, farmland). `water` is water. `cutout` is everything else that draws: leaves, glass, panes, fences, plants and the small boxes. Each bucket has its own material (see [renderer.md](renderer.md)): no alpha test for opaque, alpha test for cutout, blending and the wave for water.
 
 ## Reading cells
 
-`CellReader.getCell(x, y, z)` answers for the chunk and a one block ring around it, which is all the mesher asks about. `PaddedChunkReader` reads the chunk from its own cells and the ring from `generator.sampleBlock`, so a worker generates exactly one chunk per job. For the legacy adapter `sampleBlock` equals what `generateChunk` would put in a neighbour (the parity tests prove it), so seams match.
+`CellReader.getCell(x, y, z)` answers for the chunk and a one block ring around it, which is all the mesher asks about. It returns whole cells, state included: the mesher's padded grid holds cells, and its tables (kind, covered sides, opaque, wet) are indexed by the cell, so a stair facing north and one facing east cull differently. `PaddedChunkReader` reads the chunk from its own cells and the ring from `generator.sampleCell`, or `sampleBlock` with state 0 for a generator without one, so a worker generates exactly one chunk per job. For the legacy adapter `sampleBlock` equals what `generateChunk` would put in a neighbour (the parity tests prove it), so seams match.
 
-Two optional reader methods exist for speed. `yRange()` tells the mesher which heights can hold blocks, so it skips empty sky. `copyChunkIds()` copies the chunk's ids in bulk instead of one `getCell` call per cell. Without them the mesher still works, only slower; a test checks both paths give identical meshes. `Chunk` gained `allocatedYRange()` and `copyIds()` for this.
+Two optional reader methods exist for speed. `yRange()` tells the mesher which heights can hold blocks, so it skips empty sky. `copyChunkCells()` copies the chunk's cells in bulk instead of one `getCell` call per cell. Without them the mesher still works, only slower; a test checks both paths give identical meshes. `Chunk` has `allocatedYRange()` and `copyCells()` for this.
 
 ## Culling
 
-A face is drawn unless the block beside it is opaque. Details:
+A face is drawn unless the block beside it covers the side the face looks at. Details (the full rules for partial blocks are in [models.md](models.md#faces-hidden-by-neighbours)):
 
-- Water faces are not drawn against water, or against opaque blocks. A solid face next to water is drawn, because water is not opaque.
+- Water faces are not drawn against water, or against a block that covers the side they look at (a full opaque cube; a slab covers only its flat side, so water beside one is drawn). A solid face next to water is drawn, because water covers nothing.
 - Full-cube blocks that are not opaque (leaves, glass) hide faces against a neighbour of the same id, and are drawn against anything else.
+- A cube face is hidden only by a neighbour that covers its whole side. A face of a model that lies flat against a side of its cell is hidden when the neighbour covers every quarter the face touches; a slab's wall hides behind the slab beside it.
 - Below the bottom of the world counts as solid, so the underside of the world is never drawn.
-- A lily pad cell also holds a water cube, as the old renderer drew one under every pad.
+- A block with `holdsWater` (the lily pad) also draws a water cube in its cell, as the old renderer did under every pad.
 - Ids the registry does not know are drawn as magenta cubes (the layout's unknown tile, a flat `#ff00ff`), so a missing registration is visible rather than silent.
 
-## Legacy shapes
+## Shaped blocks
 
-`LEGACY_BOXES` holds the boxes the old `World.tsx` made by scaling and moving a cube: flowers, small rock, magic crystal, fence, wheat and its two growth stages, farmland, lily pad, sugarcane, tall grass, lantern and red apple. Each is a size plus a vertical offset from the block centre. They draw all six faces, get no ambient occlusion and never hide a neighbour. Their random rotations were dropped. A test holds the old numbers separately and checks every box against them.
+Everything that is not a plain cube or water is drawn from the quads of its `BlockModel`: stairs, slabs, fences, panes, plants, crops and the small boxes (the old `LEGACY_BOXES` table is gone, those blocks have models now). A model's quads are cell-local, shared between cells and moved to the block's place as they are copied into the bucket; fences and panes get a view of their four neighbours from the mesher's grid to choose the variant with the right arms. Models of opaque blocks go in the opaque bucket, the rest in cutout. See [models.md](models.md) for the shapes, the state bits and the culling.
 
 ## Ambient occlusion
 
-Full cubes (not water, not boxes) can get per-vertex occlusion with the usual three-neighbour method over the layer in front of each face: two side blocks and the diagonal one, using the registry's `opaque` flag. Both sides solid gives the darkest level, otherwise the level is 3 minus the number of solid neighbours. At full strength levels map to multipliers `[0.55, 0.7, 0.85, 1.0]`. The quad is split along the diagonal that joins the two brighter corners, which avoids the crease you get when the wrong diagonal is interpolated.
+Full cubes (not water, not shaped blocks) can get per-vertex occlusion with the usual three-neighbour method over the layer in front of each face: two side blocks and the diagonal one, counting only blocks that cover all six sides (so a slab does not darken the cube beside it). A model quad that is a whole cell face, such as a slab's base, gets the same treatment; other model quads stay lit. Both sides solid gives the darkest level, otherwise the level is 3 minus the number of solid neighbours. At full strength levels map to multipliers `[0.55, 0.7, 0.85, 1.0]`. The quad is split along the diagonal that joins the two brighter corners, which avoids the crease you get when the wrong diagonal is interpolated.
 
 **It is off by default.** Phase 2 promises the same look as the old renderer (flat colours, same lights), and the old renderer had no AO. The single switch is `AO_STRENGTH` in `ChunkMesher.ts`: 0 means every multiplier is 1.0 and the neighbour lookups are skipped entirely (the quad keeps its default split); 1 is the full range above, and values between scale the darkening linearly. `meshChunk` also takes `{ aoStrength, layout }` as a fifth argument, which is how the tests run the AO code at strength 1 while a separate test pins the shipped default to 0. Phase 6 (baked light) is the place to turn it on, and it will have to be rebalanced against the baked light then.
 
@@ -68,7 +69,7 @@ The mesher is given a `TextureLayout` (`meshChunk(reader, cx, cz, registry, { la
 
 Every face stretches its tile over the whole face. Walls are upright and read left to right as seen from outside, so a tile is never mirrored or turned. On the top face `v = 0` points north (-z), on the bottom face south.
 
-Shaped legacy blocks (the boxes below) use the same tables, so a fence is a plank-textured box and a flower is a flower tile on a small box until Phase 4.
+Shaped blocks use the same tables through the face kind each quad carries (top, bottom or side), so a stair wears the top tile on its treads, and a fence, flower or crop wears one tile everywhere. A block with a model but no `faces` is that model in its flat colour.
 
 ## Speed
 
