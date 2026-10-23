@@ -8,6 +8,7 @@ import { PlateModel } from '../engine/models/PlateModel';
 import { BlockType, COLORS } from '../worldConstants';
 import { registerNatureBlocks } from './blocksNature';
 import { registerShapedBlocks } from './blocksShaped';
+import { registerTempestBlocks } from './blocksTempest';
 
 // The legacy blocks, registered under their old BlockType numbers so the existing zones keep working.
 // Flat colours come from COLORS. They are the fallback tile for blocks without faces, so blocks added later
@@ -194,5 +195,6 @@ export const createDefaultRegistry = (): BlockRegistry => {
   }
   registerNatureBlocks(registry);
   registerShapedBlocks(registry);
+  registerTempestBlocks(registry);
   return registry;
 };
