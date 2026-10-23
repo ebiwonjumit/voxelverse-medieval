@@ -259,6 +259,22 @@ Details that came up in wiring it:
 - **Collision.** Walking each of the six roads end to end with the game's own physics (`tests/worldgen/road-walk.test.ts`): no road sticks or falls. A player has to jump at each one-block rise (1 jump on the 30 block Greensom road, 23 to 62 on the others) as before; bridges are walked on their planks.
 - **Legacy.** `LegacyZoneAdapter` stays in `worldgen/` as the reference the zone cores, the parity tests and the mesher timing tests are checked against. Nothing in the game imports it.
 
+## Structures and the Tempest layout (`worldgen/structures/`, `worldgen/tempest/`)
+
+Phase 7 puts buildings into the zones. Step 7.1b added the machinery, described in [tempest.md](tempest.md); this is what it adds to `worldgen/`.
+
+| Folder | What it is |
+| --- | --- |
+| `structures/` | Pure and generic: `Blueprint` (a sparse volume of cells with bounds, turning, mirroring, merging, a stable hash and a `Placement` that answers `cellAt` in world coordinates in one array read), the `StylePack` (roles mapped to blocks, with palette families), roof profiles as data and the roofs built from them, the `BlueprintBuilder` with its Japanese-fusion helpers, `Lot`, `BuildingKit`, `KitRegistry` and a placeholder `BoxHouseKit`. Nothing in it names a Tempest block. |
+| `tempest/` | `style.ts` (the Tempest pack and its families), `layout.ts` (the contract of where the town's streets, blocks, districts and landmarks are, and the gates it shares with the roads), and `kits/` (the demonstration kits and `createTempestKits()`). |
+
+Two connections to what is above:
+
+- **Roads.** `layout.ts` reads `GATES.tempestWest` and `GATES.tempestNorth` from `roads/layout.ts` and lays its roads to them, so the network's road meets the town's head on. A test builds the `RoadNetwork` from the seed and checks that its Tempest roads start at those gates.
+- **Zones.** The layout is a new description of the Federation of Tempest's interior and is not wired into `zones/TempestZone.ts` yet; the zone keeps building the old planned grid until the zone step replaces it. It uses the same footprint (circle of 700 about (1500, 0), core 550, ground y = 8), so the terrain blender needs no change.
+
+`structures/` and `tempest/` are pure like the rest of `worldgen/`, and the engine and `content/` never import them (`tests/worldgen/structures-purity.test.ts`). The viewer for kits is `components/sandbox/` (`?sandbox=kits`); `npx vite-node tools/render-tempest-layout.ts` draws the layout as a map.
+
 ## Tools
 
 Node-side only (they use `node:fs` and `node:zlib`). Run them with `vite-node`.
@@ -285,7 +301,7 @@ Known weak spots: the rivers are many and thin on the overview and read a little
 
 ## Tests
 
-`tests/worldgen/integration.test.ts` and `tests/worldgen/road-walk.test.ts` cover the wiring, see [Wired into the game](#wired-into-the-game).
+`tests/worldgen/integration.test.ts` and `tests/worldgen/road-walk.test.ts` cover the wiring, see [Wired into the game](#wired-into-the-game). The structures and the Tempest layout have their own tests, listed in [tempest.md](tempest.md#tests).
 
 `tests/worldgen/blender.test.ts` checks: no height step above 2 along rays that cross every zone border (120 crossing rays per zone at many angles and positions plus sweeps along the border across the road strips), the open wilderness being walkable (rivers and ponds included), the cores of the Town, Greensom, Tempest and Amestris matching `LegacyZoneAdapter` at 3,000 random points and cell for cell in seven landmark chunks, `sampleBlock` equal to `generateChunk` at 3,000 random points and down whole columns, heights inside the terrain bounds with nothing piled on them, the same seed giving the same chunk hash, LOD 0 only dropping plants, wilderness chunks averaging under 40 ms, and `ZoneInfo` agreeing with the legacy zones. `terrain.test.ts` covers `softLimit` and the geography of `TerrainField`.
 

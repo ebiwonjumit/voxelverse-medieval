@@ -208,7 +208,7 @@ Choices worth knowing:
 
 Looking at the street next to the pictures, honestly:
 
-- **Eaves are straight.** The pictures have upswept pagoda eaves; the set has the horned ridge ends but no curved eave tip, and flaring an eave is left to the builder, with upside-down stairs and top slabs at the corners. A flared tile block would need ids and a model; there are none left in 128 to 199.
+- **Eaves are curved by the builder, not by a block.** The pictures have upswept pagoda eaves; the set has the horned ridge ends but no curved eave tip. Step 7.1b builds the flare from the existing stairs and slabs (a lifted lip of top slabs, a flat run, then the climb, with corner tips: roof profiles in [tempest.md](tempest.md#roofs-profiles-as-data)); the corner tips are blocky, and a flared tile block would need ids and a model, which 128 to 199 no longer have (200 to 255 do).
 - **The hall is a diorama.** Its pediment is a 45 degree step pyramid and its windows are glass panes. The landmark step builds the real Town Hall (a flatter pediment, arched windows, three gables).
 - **Yurt domes, the aqueduct and the terraced glowing pools** of the pictures are not in the set. The domes want a round roof the box models cannot make; the pool and aqueduct are built from stone, slabs and water (the basin and `fan_paving` are there for the pools).
 - **Scale of detail.** A tile is 16 pixels: the red lanterns read as lanterns up close and as red dots from a distance, which is what the pictures' lanterns do too.
