@@ -71,9 +71,20 @@ export interface SandboxLabel {
   text: string;
   /** Second, dimmer line (the block id, or what the cube shows). */
   sub?: string;
+  /** A section title rather than a caption: drawn larger. */
+  heading?: boolean;
   /** Where the label is anchored, in display coordinates. */
   x: number;
   z: number;
+}
+
+/** One placed block. `state` is the 4-bit cell state (a stair's facing, a slab's half), 0 when left out. */
+export interface StageBlock {
+  id: number;
+  x: number;
+  y: number;
+  z: number;
+  state?: number;
 }
 
 /**
@@ -82,7 +93,7 @@ export interface SandboxLabel {
  * shown, so a grass block meshed at the centre of a zone can be shown next to the plain blocks.
  */
 export interface Stage {
-  blocks: Array<{ id: number; x: number; y: number; z: number }>;
+  blocks: StageBlock[];
   shiftX: number;
   shiftZ: number;
 }
@@ -160,17 +171,23 @@ export const layoutBlocks = (registry: BlockRegistry, focus: string[] | null = n
 
 class StageReader implements CellReader {
   private readonly cells = new Map<string, Cell>();
+  private minY = 0;
+  private maxY = 0;
   constructor(blocks: Stage['blocks']) {
-    for (const b of blocks) this.cells.set(`${b.x},${b.y},${b.z}`, packCell(b.id));
+    for (const b of blocks) {
+      this.cells.set(`${b.x},${b.y},${b.z}`, packCell(b.id, b.state ?? 0));
+      this.minY = Math.min(this.minY, b.y);
+      this.maxY = Math.max(this.maxY, b.y);
+    }
   }
 
   getCell(x: number, y: number, z: number): Cell {
     return this.cells.get(`${x},${y},${z}`) ?? 0;
   }
 
-  // Everything sits at y = 0, so the mesher need not scan the whole height of the world.
+  // Only the rows that hold blocks, so the mesher need not scan the whole height of the world.
   yRange(): { minY: number; maxY: number } {
-    return { minY: 0, maxY: 0 };
+    return { minY: this.minY, maxY: this.maxY };
   }
 }
 
@@ -214,12 +231,25 @@ const unit = (a: Vec3): Vec3 => {
   return [a[0] / l, a[1] / l, a[2] / l];
 };
 
+/** What the camera has to fit: the content box from the origin, labels not included, and how to look at it. */
+export interface FrameBox {
+  width: number;
+  depth: number;
+  /** Tallest block top, default 1 (a row of cubes). */
+  height?: number;
+  /** Degrees to swing the camera round to the east of straight in front. Default 0. */
+  azimuth?: number;
+  /** Degrees above the horizon. Default 50, or 45 when focused. */
+  elevation?: number;
+}
+
 /**
  * A camera that fits the whole layout, labels included, looking down at it from the front. Focused views sit
  * lower and closer. The distance is the smallest one at which every corner of the content box is on screen.
  */
-export const defaultCamera = (layout: SandboxLayout, aspect: number, focused: boolean): CameraPose => {
-  const elevation = ((focused ? 45 : 50) * Math.PI) / 180;
+export const defaultCamera = (layout: FrameBox, aspect: number, focused: boolean): CameraPose => {
+  const elevation = ((layout.elevation ?? (focused ? 45 : 50)) * Math.PI) / 180;
+  const azimuth = ((layout.azimuth ?? 0) * Math.PI) / 180;
   const margin = focused ? 0.9 : 0.94;
   const halfV = Math.tan((CAMERA_FOV * Math.PI) / 360);
   const halfH = halfV * aspect;
@@ -227,12 +257,12 @@ export const defaultCamera = (layout: SandboxLayout, aspect: number, focused: bo
   // The content box: the cubes, the labels under the front row, and a little air around them.
   const x0 = -0.6, x1 = layout.width + 0.6;
   const z0 = -0.3, z1 = layout.depth + 1.4;
-  const y1 = 1.2;
+  const y1 = (layout.height ?? 1) + 0.2;
   const corners: Vec3[] = [];
   for (const x of [x0, x1]) for (const y of [0, y1]) for (const z of [z0, z1]) corners.push([x, y, z]);
 
-  const target: Vec3 = [(x0 + x1) / 2, 0.5, (z0 + z1) / 2];
-  const back: Vec3 = [0, Math.sin(elevation), Math.cos(elevation)];
+  const target: Vec3 = [(x0 + x1) / 2, layout.height ? y1 / 2 : 0.5, (z0 + z1) / 2];
+  const back: Vec3 = [Math.sin(azimuth) * Math.cos(elevation), Math.sin(elevation), Math.cos(azimuth) * Math.cos(elevation)];
   const forward: Vec3 = [-back[0], -back[1], -back[2]];
   const right = unit(cross(forward, [0, 1, 0]));
   const up = cross(right, forward);

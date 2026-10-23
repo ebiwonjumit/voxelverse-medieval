@@ -26,6 +26,18 @@ Phase 1 of the rebuild plan added a block and chunk layer under the game. The pl
 
 One cell is a `Uint16`: the low 12 bits are the block id (0 to 4095), the high 4 bits are the block state (0 to 15). What the state means belongs to the block's model: a slab's half, a stair's facing and half. Models that only look different next to other blocks (fences, panes) store nothing, see [models.md](models.md).
 
+What the state bits mean, per model (`engine/models/`, details and the quads each produces in [models.md](models.md)):
+
+| Model | Bits | Meaning |
+| --- | --- | --- |
+| `CubeModel` (no model) | none | ignored |
+| `SlabModel` | bit 0 | 0 fills the lower half, 1 the upper half |
+| `StairModel` | bits 0-1, bit 2 | facing, the way you climb (the tall back is on that side): 0 north (-z), 1 east (+x), 2 south (+z), 3 west (-x); bit 2 set is upside down. Build it with `stairState(facing, upsideDown)` |
+| `FenceModel`, `PaneModel` | none | which sides they join is read from the four neighbours whenever the block is meshed or bumped into, never stored |
+| `CrossModel`, `CropModel`, `BoxModel`, `PlateModel` | none | one look each (a crop's growth stage is a block of its own) |
+
+A model ignores state bits it does not use, so a stray bit never changes anything. Bit 3 of a stair's state and bits 1 to 3 of a slab's are unused today; a model that starts using bits must say so in this table. A new model kind declares its states here and in [models.md](models.md), and shows up in `?sandbox=models` by itself.
+
 ## Blocks
 
 `BlockRegistry` holds a `BlockDef` per block: id, name, flat colour, `solid`, `opaque`, `emits`, and optionally `faces`, `tint`, `model` and `holdsWater`. The legacy blocks keep their old `BlockType` numbers as ids, so the old zones work without changes. Registration rejects duplicate ids and names, any colour that is not `#rrggbb`, a `faces` object with a missing name and a `tint` other than `grass` or `foliage`.
@@ -112,3 +124,4 @@ World (React) -> ChunkRenderer.update(x, z)
 
 Details: [meshing.md](meshing.md) for the mesher, [renderer.md](renderer.md) for the pool and the Three.js side. Measured results against the baseline, with the soak and before and after screenshots, are in [perf-after-p2.md](perf-after-p2.md).
 - **A page to look at blocks.** `?sandbox=blocks` (`components/sandbox/`) meshes every registered block with the same `meshChunk`, layout, texture array and materials as the world and shows them on a grid under neutral light. It is selected in `App.tsx` before the game mounts and needs no world, workers or player. See [textures.md](textures.md#block-sandbox).
+- **A page to look at models.** `?sandbox=models` (also in `components/sandbox/`, sharing the page code of the block sandbox) shows every block that has a model in every state, labelled, under the same neutral light, and a small house built from stairs, slabs, fences and panes. `&view=close`, `&view=joins` and `&view=house` frame parts of it. See [models.md](models.md#model-sandbox).

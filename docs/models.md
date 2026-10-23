@@ -97,6 +97,43 @@ Their random rotations were already dropped in Phase 2. The old `HOLDS_WATER` li
 
 Stairs and slabs are `solid` and `opaque` (so they go in the opaque bucket and cover what their model says); the pane is solid and not opaque (cutout bucket).
 
+## Model sandbox
+
+![Every model in every state, and the house](screens/p4/models.png)
+
+`/?sandbox=models` replaces the game with a page that draws every block that has a model, in every state its model distinguishes, each with a caption, under the same fixed neutral light as [the block sandbox](textures.md#block-sandbox) and through the same mesher, texture array and materials as the world (`SandboxView.tsx` is shared by the two pages; the page code only differs in what it puts on the stage). Orbit with the mouse. It is built from the registry, so a block another branch gives a model appears by itself: stairs and slabs get their own rows, any model kind it does not know goes in the last section with its kind under it.
+
+| URL | Shows |
+| --- | --- |
+| `?sandbox=models` | everything: the stairs and slabs on the left; the house, the fence and pane joins, and the single-state models on the right |
+| `?sandbox=models&view=close` | one stair block in all eight states (the four facings, then the same four upside down) and two slab blocks, bottom and top |
+| `?sandbox=models&view=joins` | a fence and a pane beside nothing, a copy of themselves, and a stone brick and glass cube |
+| `?sandbox=models&view=house` | the house alone, from the south east |
+| `&cam=px,py,pz,tx,ty,tz` | an explicit camera, on any view |
+
+Sections, top to bottom: **stairs** (six stair blocks, eight cells each, captioned with the facing and a triangle for upside down, the block id on the first), **slabs** (bottom and top for each of six blocks), **fence** and **pane** (eight surroundings each: alone, pair, line, corner, T, cross, against stone brick, against glass), and the one-state models (plants, crops, lantern, rock, farmland, lily pad, with the block id and model kind). The fence row shows the join rules: it reaches stone brick and other fences but leaves the glass cube alone; the pane row shows panes joining stone and glass, and the lone pane drawing its cross.
+
+![Stairs in all eight states and slabs, close up](screens/p4/models-close.png)
+
+The close shot above is `view=close` with `cam=8.5,13,26,8.5,0.3,5.2`. Read it like this: the tall back of each stair is on the side its caption names (north is away from the camera), the low step opposite it; the upside-down row has the step on top and the full-height back still on the named side; a bottom slab fills the lower half of its cell and a top slab floats on the upper half.
+
+![Fences and panes joining their neighbours](screens/p4/models-joins.png)
+
+### The house
+
+![A house corner with a stair roof](screens/p4/models-house.png)
+
+`buildHouse` in `components/sandbox/modelsLayout.ts` places about 200 blocks: a cobblestone course, two courses of stone brick, a plank beam and dark plank corner posts; a doorway with a half-block top slab lintel; a floor of bottom slabs half a block up and a doorstep slab to match; window panes that join the wall on both sides (and a double window that joins itself); a gable roof of red stairs that climb half a block per half block to a one block ridge from both eaves, so the south slope faces north and the north slope faces south, overhanging the gables; a porch of fence posts that join the wall behind them under a bottom slab roof; and a fenced yard with a gate gap, lanterns on the gate posts and cobblestone slab stepping stones. It is a fixed test of stairs, slabs, fences and panes meeting each other, and `tests/sandboxModels.test.ts` checks the layout (roof facings and heights, lintel and floor states, every pane between solid blocks, the fence ending at the corner posts) and that two stairs back to back at the ridge lose exactly the two faces that touch.
+
+The pure half (`parseModelSandbox`, `layoutModels`, `buildHouse`, `modelKind`) is in `components/sandbox/modelsLayout.ts` and `components/sandbox/sandboxLayout.ts` (which gained per-block state, the height of the content and the camera's swing and elevation for it), with Three.js and React only in `SandboxView.tsx`, `BlockSandbox.tsx` and `ModelSandbox.tsx`. The screenshots come from:
+
+```bash
+node bench/run.mjs --url "http://localhost:3101/?sandbox=models" --shot docs/screens/p4/models.png
+node bench/run.mjs --url "http://localhost:3101/?sandbox=models&view=close&cam=8.5,13,26,8.5,0.3,5.2" --shot docs/screens/p4/models-close.png
+node bench/run.mjs --url "http://localhost:3101/?sandbox=models&view=joins" --shot docs/screens/p4/models-joins.png
+node bench/run.mjs --url "http://localhost:3101/?sandbox=models&view=house" --shot docs/screens/p4/models-house.png
+```
+
 ## Adding a model
 
 Give the block a `model` in its `BlockDef`. For a shape made of boxes extend `ShapeModel`: say which variant a state (and neighbourhood) selects and build the boxes of each variant; quads, collision and coverage follow. For planes extend `PlaneModel`. The model decides what its state bits mean, document them in the table above, and keep to the 4 bits.
@@ -106,3 +143,5 @@ Give the block a `model` in its `BlockDef`. For a shape made of boxes extend `Sh
 Models cost nothing in the common case: cubes keep their own fast path in the mesher, and the tables the mesher reads (kind, covered sides, opaque, wet) are indexed by the whole cell and built once per registry. The mesher timing test (`tests/meshing/mesher-timing.test.ts`) on the same four chunks as before: spawn 7.3 ms, Town of Beginnings 9.3 ms, Great Tower corner 9.2 ms, Tempest Coliseum 5.7 ms (7.9, 10.0, 9.9 and 6.3 ms in Phase 2), with fewer triangles at spawn (7,660 against 8,500: a flower is 4 quads, not 6).
 
 Production build, the same flythrough and machine as [perf-after-p3.md](perf-after-p3.md) ([`bench-p4-prod.json`](bench-p4-prod.json)): 60.0 fps in every leg, p99 17.2 to 17.7 ms, worst frame 21.1 ms, no frame over 50 ms, draw calls and geometry counts as in Phase 3 (142 to 151 draw calls, 367 geometries on the long leg against 368), triangles within 3 percent (286,450 at rest against 295,840; 559,132 on the long leg against 558,584), heap about the same (108 and 269 MB against 112 and 258 MB). The Phase 2 targets all still hold. World screenshots at the five viewpoints are in `docs/screens/p4/`.
+
+After the box collision step and the sandbox (step 4.3) the same production flythrough ([`bench-p4-final-prod.json`](bench-p4-final-prod.json)) gives 60 fps in every leg, p99 17.7 to 17.8 ms, worst frame 28.1 ms (the load leg; 23.4 ms on the long walk, 18.4 ms jumping), no frame over 50 ms, and exactly the draw calls (142 to 151), triangles (286,450 at rest, 559,132 on the long leg) and geometry counts (367 on the long leg) of the run above; heap 105 to 130 MB at the shorter legs and 249 MB at the end of the long one. The Phase 2 targets (jump p99 under 20 ms, walking p99 under 25 ms, no frame over 50 ms while walking, 60 fps, flat geometry count) all still hold. The game's smoke run (`node bench/run.mjs --smoke`) reports no page errors.
