@@ -5,6 +5,7 @@ import { meshTriangleCount } from '../../meshing/ChunkMesher';
 import { runMeshJob } from '../../meshing/runMeshJob';
 import { createWorkerGenerator } from '../../worldgen/createWorkerGenerator';
 import { LodLevel } from '../../worldConstants';
+import { tolerant } from '../perf';
 
 const registry = createDefaultRegistry();
 const generator = createWorkerGenerator(registry);
@@ -41,7 +42,7 @@ describe('mesh job timing (light and mesh, neighbours cached, node)', () => {
       }
       console.log(`[job] ${name} chunk (${cx}, ${cz}): light ${median(light).toFixed(1)} ms, mesh ${median(mesh).toFixed(1)} ms, `
         + `together ${median(total).toFixed(1)} ms (max ${Math.max(...total).toFixed(1)}), ${meshTriangleCount(last)} triangles`);
-      expect(median(total)).toBeLessThan(TARGET_MS);
+      expect(median(total)).toBeLessThan(tolerant(TARGET_MS));
     });
   }
 });

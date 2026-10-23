@@ -57,6 +57,8 @@ The land between the zones is generated from a seed (`WORLD_SEED`): the same wor
 npm run dev         # start the game at http://localhost:3000
 npm run typecheck   # TypeScript, no emit
 npm test            # Vitest unit tests (tests/)
+PERF_TOLERANCE=4 npm test   # same, with the wall-clock limits multiplied (what CI uses on slow runners)
+npm audit --omit=dev   # dependency check for what ships, see docs/dependencies.md
 npm run bench       # scripted flythrough in headless Chrome, needs the dev server running
 npm run textures:sheet   # dump the texture catalog to docs/screens/p3/catalog.png
 npm run bench -- --smoke   # loads the real game, lands the player, walks forward, presses F4 and ] to check the sky keys, reports page errors
@@ -75,6 +77,8 @@ Screenshot mode: `/?shot=x,y,z,yawDeg,pitchDeg` parks the camera, hides the HUD 
 Time of day: the sky runs a 20 minute day starting at 09:00 (see [docs/sky.md](docs/sky.md)). `/?sky=dawn|noon|dusk|night|twilight|cycle` picks a preset, `/?time=18:30` (or `7.5`) starts at an hour and stops there, `&sky=cycle` or `&speed=0..3` lets it run, `&daylength=seconds` changes the length of the day. `?shot` pages default to `sky=noon`; `?bench` runs the live cycle. `/?daylight=0..1` overrides only how much baked sky light the chunks show (1 is noon, 0 the darkest night) and leaves the sky and fog on the clock. Block light (lanterns, crystals) is never scaled by the time of day.
 
 Block sandbox: `/?sandbox=blocks` replaces the game with every registered block as a labelled cube on a grid under fixed neutral light, plus the grass and leaves under each zone's biome tint; drag to orbit. `&view=close` shows a few materials up close, `&focus=wood_plank,marble` any blocks by short name, `&cam=px,py,pz,tx,ty,tz` sets the camera. It raises `window.__SHOT_READY__` like `?shot`, so `--shot` works on it (see [docs/textures.md](docs/textures.md#block-sandbox)).
+
+CI (`.github/workflows/ci.yml`) runs typecheck, tests and the build on every pull request and push to main. Dependency audit results and what remains are in [docs/dependencies.md](docs/dependencies.md).
 
 Model sandbox: `/?sandbox=models` shows every block model in every state (stairs in all eight, slabs top and bottom, how fences and panes join their neighbours, plants and the rest), labelled, plus a small house built from stairs, slabs, fences and panes. `&view=close`, `&view=joins` and `&view=house` frame parts of it and `&cam=px,py,pz,tx,ty,tz` sets the camera; it raises `__SHOT_READY__` too (see [docs/models.md](docs/models.md#model-sandbox)).
 

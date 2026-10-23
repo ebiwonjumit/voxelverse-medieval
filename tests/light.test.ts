@@ -8,6 +8,7 @@ import {
 } from '../meshing/LightEngine';
 import { LegacyZoneAdapter } from '../worldgen/LegacyZoneAdapter';
 import { BlockType } from '../worldConstants';
+import { tolerant } from './perf';
 
 const registry = createDefaultRegistry();
 // Ids far above every range the game uses, so other branches adding blocks never collide with them.
@@ -546,7 +547,7 @@ describe('light timing (LegacyZoneAdapter chunks, node)', () => {
       console.log(`[light] ${name} chunk (${cx}, ${cz}): median ${med.toFixed(1)} ms, min ${Math.min(...times).toFixed(1)} ms, `
         + `max ${Math.max(...times).toFixed(1)} ms, ${light.storedSections()} stored sections, `
         + `generating the 9 chunks took ${genTimes.reduce((a, b) => a + b, 0).toFixed(0)} ms`);
-      expect(med).toBeLessThan(TARGET_MS);
+      expect(med).toBeLessThan(tolerant(TARGET_MS));
     });
   }
 });
