@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "bench": "node bench/run.mjs",
-    "textures:sheet": "vite-node bench/textureSheet.ts"
+    "textures:sheet": "vite-node bench/textureSheet.ts",
+    "map": "vite-node tools/render-map.ts --",
+    "bench:chunks": "vite-node tools/bench-chunks.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",

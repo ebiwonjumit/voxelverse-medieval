@@ -7,10 +7,10 @@ Phase 1 of the rebuild plan added a block and chunk layer under the game. The pl
 | Folder | What is in it |
 | --- | --- |
 | `engine/` | Voxel core: `coords`, `cell`, `BlockRegistry`, `Chunk`, `ChunkStore`, `VoxelWorld`, the `WorldGenerator` interface and box `collision` ([collision.md](collision.md)). No Three.js, no React. `engine/models/` holds the block models, see [models.md](models.md). |
-| `content/` | Block definitions. `blocks.ts` registers the legacy blocks, `blocksShaped.ts` the stairs, slabs and pane (ids 80 to 92). `content/textures/` holds the generated pixel-art tiles, see [textures.md](textures.md). |
+| `content/` | Block definitions. `blocks.ts` registers the legacy blocks (ids 0 to 47), then calls `registerNatureBlocks` (`blocksNature.ts`, ids 48 to 79) for the wilderness and `registerShapedBlocks` (`blocksShaped.ts`, the stairs, slabs and pane at ids 80 to 92). `content/textures/` holds the generated pixel-art tiles, see [textures.md](textures.md). |
 | `meshing/` | Pure chunk mesher, the light engine and the mesh worker pool, worker-safe. See [meshing.md](meshing.md) and [light.md](light.md). |
 | `render/` | The Three.js chunk renderer and `SkySystem`, the day/night clock, sky dome and fog. See [renderer.md](renderer.md) and [sky.md](sky.md). |
-| `worldgen/` | Things that implement `WorldGenerator`. `LegacyZoneAdapter` wraps the old zones. |
+| `worldgen/` | Things that implement `WorldGenerator`. `LegacyZoneAdapter` wraps the old zones; `VoxelverseGenerator` is the Phase 6 generator described in [worldgen.md](worldgen.md). |
 | `worldConstants.ts` | Numbers and enums (`BlockType`, `LodLevel`) with no Three.js import, so generation can run in a worker. `constants.ts` re-exports them and adds the Three.js vectors. |
 | `gameWorld.ts` | The `voxelWorld` and `blockRegistry` the game uses on the main thread. |
 

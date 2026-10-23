@@ -6,6 +6,7 @@ import { CrossModel } from '../engine/models/CrossModel';
 import { FenceModel } from '../engine/models/FenceModel';
 import { PlateModel } from '../engine/models/PlateModel';
 import { BlockType, COLORS } from '../worldConstants';
+import { registerNatureBlocks } from './blocksNature';
 import { registerShapedBlocks } from './blocksShaped';
 
 // The legacy blocks, registered under their old BlockType numbers so the existing zones keep working.
@@ -191,6 +192,7 @@ export const createDefaultRegistry = (): BlockRegistry => {
       holdsWater: type === BlockType.LILY_PAD ? true : undefined,
     });
   }
+  registerNatureBlocks(registry);
   registerShapedBlocks(registry);
   return registry;
 };

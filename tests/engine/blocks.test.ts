@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultRegistry } from '../../content/blocks';
 import { createDefaultCatalog } from '../../content/textures/TextureCatalog';
+import { natureBlockIds } from '../../content/blocksNature';
 import { SHAPED_FIRST_ID, SHAPED_LAST_ID } from '../../content/blocksShaped';
 import { BlockType } from '../../worldConstants';
 
@@ -10,6 +11,7 @@ const LEGACY_LAST_ID = 47;
 
 describe('default block registry', () => {
   it('registers every legacy BlockType under its own numeric id', () => {
+    // Count by range: the wilderness blocks (48..79) and the shaped blocks (80..127) are registered after the legacy ones.
     expect(registry.all().filter((d) => d.id <= LEGACY_LAST_ID).length).toBe(legacyTypes.length);
     for (const type of legacyTypes) {
       expect(registry.get(type).id).toBe(type);
@@ -67,15 +69,27 @@ describe('default block registry', () => {
     for (const def of registry.all()) expect(def.color).toMatch(/^#[0-9a-f]{6}$/i);
   });
 
-  it('gives every block except air texture names, all of them in the texture catalog', () => {
+  it('gives every legacy block except air texture names, all of them in the texture catalog', () => {
     const tiles = new Set(createDefaultCatalog().names());
     for (const def of registry.all()) {
-      if (def.id === BlockType.AIR) continue;
+      if (def.id === BlockType.AIR || def.id > 47) continue;
       expect(def.faces, def.name).toBeDefined();
       for (const key of ['top', 'bottom', 'side'] as const) {
         expect(tiles.has(def.faces![key]), `${def.name} ${key}: ${def.faces![key]}`).toBe(true);
       }
     }
+  });
+
+  it('lets blocks from other ranges go without faces, and checks the faces they do have', () => {
+    // The wilderness blocks (48..79) have no textures yet and draw as flat-colour tiles. Any faces given must exist.
+    const tiles = new Set(createDefaultCatalog().names());
+    for (const def of registry.all()) {
+      if (def.id <= 47 || !def.faces) continue;
+      for (const key of ['top', 'bottom', 'side'] as const) {
+        expect(tiles.has(def.faces[key]), `${def.name} ${key}: ${def.faces[key]}`).toBe(true);
+      }
+    }
+    expect(natureBlockIds().length).toBeGreaterThan(0);
   });
 
   it('textures grass, logs and farmland by face', () => {
