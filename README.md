@@ -114,7 +114,6 @@ VoxelVerse is partway through a rebuild. The goal is to make **Tempest and the w
 
 ### Known issues
 
-- The wilderness still has the old violet sky and fog tint, so it looks odd over sunny meadows, and grass far from every zone is a dull grey-green because the biome tint still blends by distance to the zones. Both are atmosphere settings that belong to the wilderness zone rather than to the new generator, and are not fixed yet.
 - Bosse, Fremmevilla and Magnolia are still small placeholders inside, and Amestris is basic. The new terrain blends them into the land, but their interiors wait for the zone template.
 - A few timing-sensitive unit tests can fail when the machine is heavily loaded and pass on a rerun.
 - The Phase 2 rule that the soak's geometry count stays within 10 percent of its 30 second value does not hold literally on the new scenery, because the soak loop passes through varied terrain. The count returns to the same peaks and troughs lap after lap ([explanation](docs/perf-after-integration.md)).
