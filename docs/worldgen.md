@@ -94,7 +94,7 @@ A brute-force scan of every column pair from 30 blocks outside each zone to the 
 
 ## Nature blocks (`content/blocksNature.ts`)
 
-Ids 48 to 79 belong to the wilderness; 23 are used (48 to 70), registered by one `registerNatureBlocks(registry)` call from `createDefaultRegistry`. `NatureBlock` is the enum the generator uses. Every block has a flat `#rrggbb` colour until textures arrive.
+Ids 48 to 79 belong to the wilderness; 23 are used (48 to 70), registered by one `registerNatureBlocks(registry)` call from `createDefaultRegistry`. `NatureBlock` is the enum the generator uses. Every block has generated textures and, for plants, a model (crossing planes, or a thin plate for fallen leaves and petals): see [textures.md](textures.md#nature-block-tiles). The flat `#rrggbb` colour is only the fallback. None of them takes the biome tint.
 
 | Kind | Blocks | solid | opaque |
 | --- | --- | --- | --- |

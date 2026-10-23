@@ -5,6 +5,7 @@ import { TextureLayout } from '../../engine/TextureLayout';
 import { CellReader } from '../../meshing/CellReader';
 import { MeshData, meshChunk } from '../../meshing/ChunkMesher';
 import { BIOME_ZONES } from '../../meshing/biomeTint';
+import { NatureBlock, natureBlockIds } from '../../content/blocksNature';
 
 // The pure half of the ?sandbox=blocks page: which block goes where, which blocks to mesh together and where
 // the camera starts. Three.js and React stay in BlockSandbox.tsx, so all of this runs in the tests.
@@ -15,6 +16,11 @@ import { BIOME_ZONES } from '../../meshing/biomeTint';
 
 /** Blocks shown by ?sandbox=blocks&view=close: a few materials worth a close look. */
 export const CLOSE_FOCUS = ['grass', 'wood_plank', 'stone_brick', 'wood_log', 'cobblestone', 'red_brick', 'marble', 'gold_block'];
+
+/** Blocks shown by ?sandbox=blocks&view=nature: the wilderness set, ids 48 to 70, in id order. */
+export const NATURE_FOCUS = natureBlockIds().map((id) => NatureBlock[id].toLowerCase());
+/** Columns of the nature view: wide, so the 23 blocks fit four rows. */
+export const NATURE_COLS = 6;
 
 /** Distance between neighbouring cubes, in blocks. Labels are wide, so the gaps are wider than the cubes. */
 export const SLOT_SPACING_X = 3;
@@ -30,6 +36,8 @@ export interface SandboxOptions {
   focus: string[] | null;
   /** Explicit camera from ?cam=px,py,pz,tx,ty,tz, or null for the framed default. */
   cam: CameraPose | null;
+  /** Grid columns from ?cols=n, or the view's own (the nature view is eight wide). Left out when not given. */
+  cols?: number;
 }
 
 /** Reads the page's query string. Returns null unless it says sandbox=blocks, so nothing else selects the page. */
@@ -38,9 +46,14 @@ export const parseSandbox = (search: string): SandboxOptions | null => {
   if (params.get('sandbox') !== 'blocks') return null;
 
   const focusParam = params.get('focus');
+  const view = params.get('view');
   const focus = focusParam
     ? focusParam.split(',').map((s) => s.trim()).filter(Boolean)
-    : params.get('view') === 'close' ? CLOSE_FOCUS : null;
+    : view === 'close' ? CLOSE_FOCUS : view === 'nature' ? NATURE_FOCUS : null;
+  const colsParam = Number(params.get('cols'));
+  const cols = Number.isInteger(colsParam) && colsParam >= 1 && colsParam <= 40
+    ? colsParam
+    : !focusParam && view === 'nature' ? NATURE_COLS : undefined;
 
   let cam: CameraPose | null = null;
   const camParam = params.get('cam');
@@ -50,7 +63,7 @@ export const parseSandbox = (search: string): SandboxOptions | null => {
       cam = { position: [n[0], n[1], n[2]], target: [n[3], n[4], n[5]] };
     }
   }
-  return { focus: focus && focus.length > 0 ? focus : null, cam };
+  return { focus: focus && focus.length > 0 ? focus : null, cam, ...(cols !== undefined ? { cols } : {}) };
 };
 
 /** "voxelverse:wood_plank" shown as "wood_plank". */
@@ -116,7 +129,7 @@ export const columnsFor = (n: number): number => Math.max(1, Math.ceil(Math.sqrt
  * Lays the blocks out on the grid in id order, and, unless it is a focused view, adds two rows under it: the
  * grass block and the oak leaves under each zone's biome tint. Air is skipped.
  */
-export const layoutBlocks = (registry: BlockRegistry, focus: string[] | null = null): SandboxLayout => {
+export const layoutBlocks = (registry: BlockRegistry, focus: string[] | null = null, columns?: number): SandboxLayout => {
   let defs = registry.all().filter((def) => def.id !== 0);
   if (focus) {
     const wanted = new Set(focus);
@@ -125,7 +138,7 @@ export const layoutBlocks = (registry: BlockRegistry, focus: string[] | null = n
     defs.sort((a, b) => focus.indexOf(shortName(a)) - focus.indexOf(shortName(b)));
   }
 
-  const cols = focus ? Math.max(1, Math.min(4, defs.length)) : columnsFor(defs.length);
+  const cols = columns ?? (focus ? Math.max(1, Math.min(4, defs.length)) : columnsFor(defs.length));
   const rows = Math.max(1, Math.ceil(defs.length / cols));
   const slots: BlockSlot[] = [];
   const labels: SandboxLabel[] = [];

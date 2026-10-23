@@ -31,10 +31,10 @@ A `ModelQuad` is one face, ready to copy into the mesh: four corners counter-clo
 | `StairModel` | straight stairs: a low step and a full-height back | bits 0 and 1: the facing, bit 2: 0 bottom half, 1 upside down | the six stairs (81, 83, 85, 87, 89, 91) |
 | `FenceModel` | a post a quarter of a block wide with two rails towards each joined side | unused, **connections are read from the neighbours** | wood fence (34) |
 | `PaneModel` | a thin upright pane, two sixteenths thick, joining sideways | unused, connections read from the neighbours | glass pane (92) |
-| `CrossModel(width, height)` | two planes crossing on the diagonals, each drawn on both sides | unused | flowers, tall grass, sugarcane |
+| `CrossModel(width, height)` | two planes crossing on the diagonals, each drawn on both sides | unused | flowers, tall grass, sugarcane, and the nature plants: bamboo, bamboo leaves, fern, reeds, four wildflowers, two mushrooms (ids 52 to 55, 58 to 63) |
 | `CropModel` | four planes in a number sign, a quarter in from each edge, each on both sides, a sixteenth lower than the cell | unused (the growth stage is in the tile: one block per stage) | wheat and its two growth stages |
 | `BoxModel(boxes, uv)` | one or more fixed boxes | unused | small rock, magic crystal, lantern, red apple, and farmland (a cube 15/16 high) |
-| `PlateModel(inset, y)` | a flat square 1/16 thick, lying at height `y` | unused | lily pad |
+| `PlateModel(inset, y)` | a flat square 1/16 thick, lying at height `y` | unused | lily pad, fallen leaves and sakura petals (ids 64, 65: `PlateModel(0, 0)`, a carpet over the whole cell) |
 
 **Stair facing** is the way you climb: the tall back is on that side and the low step on the other. Facings turn clockwise seen from above: 0 north (-z), 1 east (+x), 2 south (+z), 3 west (-x), the order of `HORIZONTAL_SIDES`. `stairState(facing, upsideDown)` builds the state byte. Only straight stairs exist, no corners.
 

@@ -77,7 +77,7 @@ const blit = (tile: Uint8Array, x0: number, y0: number, scale: number, repeat = 
 };
 
 const names = catalog.names();
-const CELL = 16 * 6 + 24;
+const CELL = 16 * 6 + 48; // wide enough for the longest tile name at the 8 px a letter takes
 const perRow = Math.floor((W - MARGIN) / CELL);
 const tileable = names.filter((n) => catalog.get(n).recipe.tiling === 'both');
 const biomes: Array<[string, string]> = [
@@ -87,7 +87,7 @@ const biomes: Array<[string, string]> = [
 
 const sec1 = Math.ceil(names.length / perRow) * (16 * 6 + 30);
 const sec2 = 16 * 6 * 2 + 70;
-const repCell = 16 * 2 * 3 + 24;
+const repCell = 16 * 2 * 3 + 48;
 const perRep = Math.floor((W - MARGIN) / repCell);
 const sec3 = Math.ceil(tileable.length / perRep) * (16 * 2 * 3 + 24) + 30;
 H = MARGIN + 30 + sec1 + 30 + sec2 + 30 + sec3;
