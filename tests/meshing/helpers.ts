@@ -14,12 +14,13 @@ registry.register({ id: WHITE, name: 'test:white', color: '#ffffff', solid: true
 export class MapReader implements CellReader {
   private readonly cells = new Map<string, Cell>();
 
-  constructor(blocks: Array<[number, number, number, number]> = []) {
-    for (const [x, y, z, id] of blocks) this.set(x, y, z, id);
+  // Blocks are [x, y, z, id] or [x, y, z, id, state].
+  constructor(blocks: Array<[number, number, number, number, number?]> = []) {
+    for (const [x, y, z, id, state] of blocks) this.set(x, y, z, id, state);
   }
 
-  set(x: number, y: number, z: number, id: number): this {
-    this.cells.set(`${x},${y},${z}`, packCell(id));
+  set(x: number, y: number, z: number, id: number, state = 0): this {
+    this.cells.set(`${x},${y},${z}`, packCell(id, state));
     return this;
   }
 
