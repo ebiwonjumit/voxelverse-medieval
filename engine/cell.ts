@@ -1,5 +1,5 @@
 // A cell is one Uint16: the low 12 bits are the block id, the high 4 bits are the block state
-// (facing, half, connections, used by shaped blocks from Phase 4).
+// (facing, half and the like). What the state means is defined by the block's model, see engine/models.
 
 export type Cell = number;
 

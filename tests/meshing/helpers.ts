@@ -5,8 +5,9 @@ import { CellReader } from '../../meshing/CellReader';
 
 export const registry = createDefaultRegistry();
 
-// A few plain blocks above the legacy range, so colours are easy to predict (white is linear 1).
-export const WHITE = 48;
+// A plain block well above every range the game uses (legacy 0-47, nature 48-79, shaped 80-127, Tempest 128-255), so
+// other branches adding blocks never collide with it. White is linear 1, which makes colours easy to predict.
+export const WHITE = 4000;
 registry.register({ id: WHITE, name: 'test:white', color: '#ffffff', solid: true, opaque: true, emits: 0 });
 
 // A reader over a handful of cells in world coordinates. Anything not listed is air.

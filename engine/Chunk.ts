@@ -1,4 +1,4 @@
-import { Cell, MAX_BLOCK_ID } from './cell';
+import { Cell } from './cell';
 import {
   CHUNK_SIZE, SECTION_COUNT, SECTION_HEIGHT, SECTION_VOLUME, WORLD_MAX_Y, WORLD_MIN_Y, cellIndex, inWorldY, localY, sectionIndex,
 } from './coords';
@@ -51,10 +51,10 @@ export class Chunk {
     return { minY: WORLD_MIN_Y + first * SECTION_HEIGHT, maxY: WORLD_MIN_Y + (last + 1) * SECTION_HEIGHT - 1 };
   }
 
-  // Bulk read for the mesher. Writes the block id (state stripped) of cell (lx, y, lz) to
+  // Bulk read for the mesher. Writes the cell (block id and state) at (lx, y, lz) to
   // out[offset + (y - minY) * rowStride + lz * zStride + lx] for every y in minY..maxY. Cells in sections that
   // were never allocated are skipped, so out must start out zeroed (air).
-  copyIds(out: Uint16Array, minY: number, maxY: number, offset: number, rowStride: number, zStride: number): void {
+  copyCells(out: Uint16Array, minY: number, maxY: number, offset: number, rowStride: number, zStride: number): void {
     const lo = Math.max(minY, WORLD_MIN_Y);
     const hi = Math.min(maxY, WORLD_MAX_Y);
     for (let y = lo; y <= hi; y++) {
@@ -64,7 +64,7 @@ export class Chunk {
       let src = localY(y) * CHUNK_SIZE * CHUNK_SIZE;
       for (let lz = 0; lz < CHUNK_SIZE; lz++) {
         const dst = rowOut + lz * zStride;
-        for (let lx = 0; lx < CHUNK_SIZE; lx++) out[dst + lx] = section[src + lx] & MAX_BLOCK_ID;
+        for (let lx = 0; lx < CHUNK_SIZE; lx++) out[dst + lx] = section[src + lx];
         src += CHUNK_SIZE;
       }
     }

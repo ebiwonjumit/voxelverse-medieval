@@ -4,7 +4,7 @@ import { packCell } from '../../engine/cell';
 import { WORLD_MIN_Y } from '../../engine/coords';
 import { createTextureLayout } from '../../engine/TextureLayout';
 import { WorldGenerator } from '../../engine/WorldGenerator';
-import { AO_STRENGTH, LEGACY_BOXES, meshChunk, meshTransferables } from '../../meshing/ChunkMesher';
+import { AO_STRENGTH, meshChunk, meshTransferables } from '../../meshing/ChunkMesher';
 import { PaddedChunkReader } from '../../meshing/PaddedChunkReader';
 import { BlockType } from '../../worldConstants';
 import { WHITE, MapReader, bounds, faceCount, quadsOf, registry, totalFaces } from './helpers';
@@ -211,20 +211,22 @@ describe('see-through blocks', () => {
 });
 
 describe('buckets', () => {
-  const cases: Array<[string, number, 'opaque' | 'cutout']> = [
-    ['stone', BlockType.STONE, 'opaque'],
-    ['grass', BlockType.GRASS, 'opaque'],
-    ['glass', BlockType.GLASS, 'cutout'],
-    ['leaves', BlockType.LEAVES, 'cutout'],
-    ['flower', BlockType.FLOWER_RED, 'cutout'],
-    ['fence', BlockType.WOOD_FENCE, 'cutout'],
+  // Name, block, bucket and how many faces a lone block draws (a flower is two planes, each seen from both sides).
+  const cases: Array<[string, number, 'opaque' | 'cutout', number]> = [
+    ['stone', BlockType.STONE, 'opaque', 6],
+    ['grass', BlockType.GRASS, 'opaque', 6],
+    ['glass', BlockType.GLASS, 'cutout', 6],
+    ['leaves', BlockType.LEAVES, 'cutout', 6],
+    ['flower', BlockType.FLOWER_RED, 'cutout', 4],
+    ['fence', BlockType.WOOD_FENCE, 'cutout', 6],
+    ['farmland', BlockType.FARMLAND, 'opaque', 6],
   ];
-  for (const [name, id, bucket] of cases) {
+  for (const [name, id, bucket, faces] of cases) {
     it(`sends ${name} to ${bucket} only`, () => {
       const m = mesh(new MapReader([[3, 3, 3, id]]));
       const counts = { opaque: faceCount(m.opaque), cutout: faceCount(m.cutout), water: faceCount(m.water) };
-      expect(counts[bucket]).toBe(6);
-      expect(totalFaces(m)).toBe(6);
+      expect(counts[bucket]).toBe(faces);
+      expect(totalFaces(m)).toBe(faces);
     });
   }
 

@@ -63,11 +63,11 @@ describe('layoutBlocks', () => {
 
   it('shows blocks that no catalog tile covers, since the layout falls back to flat tiles', () => {
     const extended = createDefaultRegistry();
-    extended.register({ id: 90, name: 'test:untextured', color: '#336699', solid: true, opaque: true, emits: 0 });
+    extended.register({ id: 4010, name: 'test:untextured', color: '#336699', solid: true, opaque: true, emits: 0 });
     const l = layoutBlocks(extended);
-    expect(l.slots.some((s) => s.id === 90 && s.name === 'untextured')).toBe(true);
+    expect(l.slots.some((s) => s.id === 4010 && s.name === 'untextured')).toBe(true);
     const flat = createDefaultTextureLayout(extended);
-    const stage = { blocks: [{ id: 90, x: 0, y: 0, z: 0 }], shiftX: 0, shiftZ: 0 };
+    const stage = { blocks: [{ id: 4010, x: 0, y: 0, z: 0 }], shiftX: 0, shiftZ: 0 };
     const [{ mesh }] = meshStage(stage, extended, flat);
     expect(flat.layerNames[mesh.opaque.layers[0]]).toBe('flat:#336699');
     expect(mesh.opaque.indices.length).toBe(36);

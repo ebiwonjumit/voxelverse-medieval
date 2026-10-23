@@ -1,5 +1,12 @@
 import { BlockFaces, BlockRegistry, BlockTint } from '../engine/BlockRegistry';
+import { BlockModel } from '../engine/models/BlockModel';
+import { BoxModel } from '../engine/models/BoxModel';
+import { CropModel } from '../engine/models/CropModel';
+import { CrossModel } from '../engine/models/CrossModel';
+import { FenceModel } from '../engine/models/FenceModel';
+import { PlateModel } from '../engine/models/PlateModel';
 import { BlockType, COLORS } from '../worldConstants';
+import { registerShapedBlocks } from './blocksShaped';
 
 // The legacy blocks, registered under their old BlockType numbers so the existing zones keep working.
 // Flat colours come from COLORS. They are the fallback tile for blocks without faces, so blocks added later
@@ -64,19 +71,42 @@ const NOT_SOLID = new Set<BlockType>([
   BlockType.WHEAT_STAGE_1, BlockType.WHEAT_STAGE_2, BlockType.LILY_PAD,
 ]);
 
-// Blocks the old renderer drew smaller than a full cube, or see-through ones.
+// See-through blocks and the ones that are mostly air. Farmland used to be here because it was drawn as a box;
+// its model now covers its own base, so it is an opaque material like any other.
 const NOT_OPAQUE = new Set<BlockType>([
   ...NOT_SOLID,
   BlockType.GLASS, BlockType.LEAVES, BlockType.BIRCH_LEAVES, BlockType.PINE_LEAVES,
   BlockType.SMALL_ROCK, BlockType.WOOD_FENCE, BlockType.LANTERN, BlockType.RED_APPLE,
-  BlockType.MAGIC_CRYSTAL, BlockType.FARMLAND,
+  BlockType.MAGIC_CRYSTAL,
+]);
+
+// The legacy blocks the old renderer scaled out of a cube, as models. Sizes follow the old scales where the shape
+// is still a box (rock, crystal, lantern, apple); plants became crossing planes with the tile as the picture, and
+// the fence and farmland took the shapes the phase gave them. Everything else is a cube.
+const FLOWER = new CrossModel(0.8, 0.8);
+const WHEAT_CROP = new CropModel();
+const MODELS = new Map<BlockType, BlockModel>([
+  [BlockType.FLOWER_YELLOW, FLOWER],
+  [BlockType.FLOWER_RED, FLOWER],
+  [BlockType.SMALL_ROCK, new BoxModel([[0.3, 0, 0.3, 0.7, 0.2, 0.7]])],
+  [BlockType.MAGIC_CRYSTAL, new BoxModel([[0.2, 0.1, 0.2, 0.8, 0.9, 0.8]])],
+  [BlockType.WOOD_FENCE, new FenceModel()],
+  [BlockType.WHEAT, WHEAT_CROP],
+  [BlockType.WHEAT_STAGE_1, WHEAT_CROP],
+  [BlockType.WHEAT_STAGE_2, WHEAT_CROP],
+  [BlockType.FARMLAND, new BoxModel([[0, 0, 0, 1, 15 / 16, 1]], 'cell')],
+  [BlockType.LILY_PAD, new PlateModel(0.2, 0.985)],
+  [BlockType.SUGARCANE, new CrossModel(0.9, 1)],
+  [BlockType.TALL_GRASS, new CrossModel(0.9, 0.9)],
+  [BlockType.LANTERN, new BoxModel([[0.35, 0.1, 0.35, 0.65, 0.5, 0.65]])],
+  [BlockType.RED_APPLE, new BoxModel([[0.4, 0.4, 0.4, 0.6, 0.6, 0.6]])],
 ]);
 
 const same = (name: string): BlockFaces => ({ top: name, bottom: name, side: name });
 const ends = (end: string, side: string): BlockFaces => ({ top: end, bottom: end, side });
 
-// Texture names come from the catalog in content/textures. Shaped blocks (fences, crops, flowers) are still
-// boxes and wear the same tile on every face until Phase 4 gives them real models.
+// Texture names come from the catalog in content/textures. Models with one picture (plants, fences, lanterns) wear
+// the same tile on every face.
 const FACES: Record<Colored, BlockFaces> = {
   [BlockType.GRASS]: { top: 'grass_top', bottom: 'dirt', side: 'grass_side' },
   [BlockType.DIRT]: same('dirt'),
@@ -152,7 +182,11 @@ export const createDefaultRegistry = (): BlockRegistry => {
       emits: EMITS.get(type) ?? 0,
       faces: type === BlockType.AIR ? undefined : FACES[type as Colored],
       tint: TINT.get(type),
+      model: MODELS.get(type),
+      // The old renderer drew a water cube under every lily pad.
+      holdsWater: type === BlockType.LILY_PAD ? true : undefined,
     });
   }
+  registerShapedBlocks(registry);
   return registry;
 };
