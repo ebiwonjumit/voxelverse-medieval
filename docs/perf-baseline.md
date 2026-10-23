@@ -73,7 +73,7 @@ Added in Phase 2 step 2.1, before the renderer changes, so the new renderer can 
 
 ## Console noise found while measuring
 
-`DayNightCycle` calls `new Color('#385865ca')` inside `useRef(...)`, which runs on every render. Three.js does not accept 8-digit hex and logs a warning, so the console receives one warning per frame (more than 25,000 in a few minutes). `COLORS.WATER` (`'#5194ffff'`) has the same problem. This is not fixed in Phase 0 so the baseline matches current behaviour. `DayNightCycle` is replaced in Phase 5 and the colour constants move into the block registry in Phase 1.
+`DayNightCycle` calls `new Color('#385865ca')` inside `useRef(...)`, which runs on every render. Three.js does not accept 8-digit hex and logs a warning, so the console receives one warning per frame (more than 25,000 in a few minutes). `COLORS.WATER` (`'#5194ffff'`) has the same problem. This is not fixed in Phase 0 so the baseline matches current behaviour. `DayNightCycle` was replaced in Phase 5 (see [sky.md](sky.md)) and the colour constants moved into the block registry in Phase 1.
 
 ## Phase 2 targets
 

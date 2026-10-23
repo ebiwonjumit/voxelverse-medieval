@@ -9,7 +9,7 @@ Phase 1 of the rebuild plan added a block and chunk layer under the game. The pl
 | `engine/` | Voxel core: `coords`, `cell`, `BlockRegistry`, `Chunk`, `ChunkStore`, `VoxelWorld`, the `WorldGenerator` interface and box `collision` ([collision.md](collision.md)). No Three.js, no React. `engine/models/` holds the block models, see [models.md](models.md). |
 | `content/` | Block definitions. `blocks.ts` registers the legacy blocks, `blocksShaped.ts` the stairs, slabs and pane (ids 80 to 92). `content/textures/` holds the generated pixel-art tiles, see [textures.md](textures.md). |
 | `meshing/` | Pure chunk mesher, the light engine and the mesh worker pool, worker-safe. See [meshing.md](meshing.md) and [light.md](light.md). |
-| `render/` | The Three.js chunk renderer. See [renderer.md](renderer.md). |
+| `render/` | The Three.js chunk renderer and `SkySystem`, the day/night clock, sky dome and fog. See [renderer.md](renderer.md) and [sky.md](sky.md). |
 | `worldgen/` | Things that implement `WorldGenerator`. `LegacyZoneAdapter` wraps the old zones. |
 | `worldConstants.ts` | Numbers and enums (`BlockType`, `LodLevel`) with no Three.js import, so generation can run in a worker. `constants.ts` re-exports them and adds the Three.js vectors. |
 | `gameWorld.ts` | The `voxelWorld` and `blockRegistry` the game uses on the main thread. |
@@ -96,14 +96,16 @@ Loaded chunks answer from their stored cells. Anything else, which means a chunk
 
 ## Meshing and rendering architecture
 
-The whole path from block data to pixels, as of Phase 5 step 2 (baked light):
+The whole path from block data to pixels, as of Phase 5 step 3 (baked light and the sky system):
 
 ```
 main thread                                   worker (1 to 4)
 -----------                                   ---------------
 Player / bench / shot camera
   writes playerState {x, y, z}
-World (React) -> ChunkRenderer.update(x, z)
+SkyRig (React) -> SkySystem.update(dt, camera, player zone)
+  clock -> sun, moon, daylight, sky colours, fog, zone atmosphere
+World (React) -> ChunkRenderer.setDaylight / setSkyLightColor, ChunkRenderer.update(x, z)
   chunk of the player changed?
   yes: wanted ring = 8 chunks, LOD by ring
        MeshWorkerPool.request(cx, cz, lod) -->  mesh.worker.ts
@@ -123,11 +125,11 @@ World (React) -> ChunkRenderer.update(x, z)
 - **Two copies of the world, on purpose.** Workers generate the chunk they mesh and, for its light, the eight around it (cached per worker, see [light.md](light.md#the-worker)). The main thread keeps its own `VoxelWorld` for collision and the HUD, answered by the generator block by block, so physics never waits on rendering. Both use the same `LegacyZoneAdapter`, and the parity tests keep the generator's `sampleBlock` and `generateChunk` identical, which is why chunk borders meet without a seam.
 - **Nothing on the main thread depends on height.** The renderer recomputes only when the player's chunk changes, so a jump sends no job and rebuilds nothing. The old renderer rebuilt every visible chunk because `playerY` was a React dependency.
 - **Meshes are plain Three.js objects, not React.** `components/World.tsx` creates one `ChunkRenderer` and calls `update` from a frame hook. There is no per-chunk component, no instancing and no per-chunk material.
-- **Faces are culled in the mesher** (a face is drawn unless the block beside it covers the side it looks at, which a model decides, see [models.md](models.md)), each vertex carries a layer of the block texture array, a uv, a biome tint and its baked light (sky, block light, ambient occlusion and glow, see [light.md](light.md)). Chunk materials are unlit and shade from that light with a `uDaylight` uniform, so the Three.js scene lights no longer touch chunk geometry; fog colours and the water wave are unchanged, and fog distances scale with the render distance.
+- **Faces are culled in the mesher** (a face is drawn unless the block beside it covers the side it looks at, which a model decides, see [models.md](models.md)), each vertex carries a layer of the block texture array, a uv, a biome tint and its baked light (sky, block light, ambient occlusion and glow, see [light.md](light.md)). Chunk materials are unlit and shade from that light with `uDaylight` and `uSkyLight` uniforms that the sky clock sets every frame, so there are no Three.js scene lights at all and day and night re-mesh nothing. The fog colour and distances come from the sky system (the time of day blended with the player's zone `fogColor` and `fogDensity`, never thinner than the render distance needs); the water wave is unchanged. See [sky.md](sky.md).
 - **Budgets keep frames even.** At most 2 geometries are uploaded per frame, nearest chunk first. The job queue is ranked by distance to the player when a worker frees up. Chunks are dropped one chunk beyond the render distance (hysteresis) and their geometries disposed.
 - **One layout, two builders.** The mesher writes texture layer numbers into vertices in a worker; the atlas builder fills the texture array on the main thread. Both build an `engine/TextureLayout` from the same catalog and registry (`content/textures/layout.ts`), which is deterministic, so layer numbers agree without passing any texture data to the worker. A test checks the layout is identical when built twice.
 - **Layers.** `meshing/` and `engine/` import neither Three.js nor React (a test checks both), so a worker can load them. `render/` and `components/` are the only places that touch Three.js; `mesh.worker.ts` is the only file in `meshing/` that imports `content/` and `worldgen/`.
 
-Details: [meshing.md](meshing.md) for the mesher, [renderer.md](renderer.md) for the pool and the Three.js side. Measured results against the baseline, with the soak and before and after screenshots, are in [perf-after-p2.md](perf-after-p2.md).
+Details: [meshing.md](meshing.md) for the mesher, [renderer.md](renderer.md) for the pool and the Three.js side, [light.md](light.md) for baked light and [sky.md](sky.md) for the clock, the sky and the fog. Measured results against the baseline, with the soak and before and after screenshots, are in [perf-after-p2.md](perf-after-p2.md).
 - **A page to look at blocks.** `?sandbox=blocks` (`components/sandbox/`) meshes every registered block with the same `meshChunk`, layout, texture array and materials as the world and shows them on a grid under neutral light. It is selected in `App.tsx` before the game mounts and needs no world, workers or player. See [textures.md](textures.md#block-sandbox).
 - **A page to look at models.** `?sandbox=models` (also in `components/sandbox/`, sharing the page code of the block sandbox) shows every block that has a model in every state, labelled, under the same neutral light, and a small house built from stairs, slabs, fences and panes. `&view=close`, `&view=joins` and `&view=house` frame parts of it. See [models.md](models.md#model-sandbox).

@@ -1,6 +1,6 @@
 # Light engine
 
-Phase 5 bakes light into the world instead of leaving it to Three.js lights. Step 5.1 is the pure engine, `meshing/LightEngine.ts`, which computes the light of one chunk. Step 5.2 puts that light into the mesh and the shader: see [Smooth light in the mesher](#smooth-light-in-the-mesher), [The worker](#the-worker) and [The shader](#the-shader) below. The day/night cycle that drives the daylight uniform comes in a later step. Like the mesher the engine is plain data code (no three, no React, no DOM), so it runs in the mesh worker.
+Phase 5 bakes light into the world instead of leaving it to Three.js lights. Step 5.1 is the pure engine, `meshing/LightEngine.ts`, which computes the light of one chunk. Step 5.2 puts that light into the mesh and the shader: see [Smooth light in the mesher](#smooth-light-in-the-mesher), [The worker](#the-worker) and [The shader](#the-shader) below. Step 5.3, the day/night cycle that drives the daylight uniform, is in [sky.md](sky.md). Like the mesher the engine is plain data code (no three, no React, no DOM), so it runs in the mesh worker.
 
 ## What it computes
 
@@ -137,13 +137,13 @@ computed as follows (constants at the top of the fragment declarations):
 - **Glow.** The block light an emitter's own faces show is at least its emission, and the result is multiplied by `1 + glow * 0.45`, so a lantern is a little brighter than the light around it and stays lit when the area is dark. Block light by itself would make a magic crystal (10) only two thirds lit.
 - Fog is the scene's, as before. Water uses the same lighting, then its wave and blending.
 
-`uDaylight` is one uniform shared by the three materials, 0 to 1. `ChunkRenderer.setDaylight(value)` sets it (clamped), and `World` calls it every frame. Nothing is re-meshed when it changes: sky light is baked as a level and scaled here. Until the day/night cycle of the next step drives it, `World` reads `?daylight=0..1` from the page address (default 1, noon), which is how the night screenshots below were taken.
+`uDaylight` is one uniform shared by the three materials, 0 to 1. `ChunkRenderer.setDaylight(value)` sets it (clamped), and `World` calls it every frame. Nothing is re-meshed when it changes: sky light is baked as a level and scaled here. The sky clock ([sky.md](sky.md)) sets it every frame, together with `uSkyLight`, a colour multiplier on sky light (white by day, warm at dusk, blue at night, neutral in the sandbox pages). `?daylight=0..1` in the page address still overrides the number alone, which is handy for looking at the light without moving the sky.
 
 ## Screenshots
 
-In [screens/p5/](screens/p5/): the six standard world shots at noon (`world-*.png`, compare [p4](screens/p4/)), the spawn road at `?daylight=0.12` with the lanterns' pools of light (`night-spawn.png`), and the Great Tower at noon, where the entrance hall (`tower-entrance-day.png`) and the inside (`tower-interior-day.png`) are dark except where lanterns light the floor and the corners show occlusion. `blocks.png` and `models-house.png` are the two sandbox pages, which now show ambient occlusion on their blocks.
+In [screens/p5/](screens/p5/): the six standard world shots at noon (`world-*.png`, compare [p4](screens/p4/)), the spawn road at night with the lanterns' pools of light (`night-spawn.png`), and the Great Tower at dawn, noon, dusk and night (`sky-tower-*.png`), where the hall is dark except under the roof opening and where lanterns light the floor, and the corners show occlusion; the full dawn, noon, dusk and night set for the spawn, the tower interior and Tempest is listed in [sky.md](sky.md#screenshots). `blocks.png` and `models-house.png` are the two sandbox pages, which now show ambient occlusion on their blocks.
 
-The old `DayNightCycle` component, the Three.js lights and the fixed twilight sky and fog are still in `components/Game.tsx`: chunks no longer use the lights, and replacing the rest, with zone `skyTint` and `fogDensity`, is a later step.
+The old `DayNightCycle`, the Three.js lights, the drei `Sky` and the shadow map are gone from `components/Game.tsx` (step 5.3, [sky.md](sky.md)).
 
 ## Tests
 

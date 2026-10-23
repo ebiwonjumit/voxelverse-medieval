@@ -18,10 +18,18 @@ The world is generated procedurally using noise functions and a custom "Zone Sys
 
 ## 🎮 Controls
 
-*   **W / A / S / D**: Move Character
-*   **Mouse**: Look Around
-*   **Space**: Jump
-*   **Click**: Lock Mouse Cursor
+| Key | Does |
+| --- | --- |
+| W / A / S / D | Move |
+| Mouse | Look around |
+| Space | Jump |
+| Shift | Sprint |
+| Click | Lock the mouse cursor |
+| H | Show or hide the help |
+| F3 | Debug panel (position, zone, chunks, time of day) |
+| F4 | Sky preset: live cycle, dawn, noon, dusk, night, the old fixed twilight, and round |
+| `[` and `]` | Time of day one hour back or forward |
+| `-` and `=` | Time slower or faster (1x is a 20 minute day, 200x a day in 6 seconds); `-` at 1x stops the clock |
 
 ## ✨ Key Features
 
@@ -30,7 +38,7 @@ The world is generated procedurally using noise functions and a custom "Zone Sys
     *   **Zone System**: Each anime world is encapsulated in its own module, allowing for infinite expansion of new themes without cluttering the core logic.
     *   **Atmosphere Control**: Each zone dictates its own fog color, density, and lighting, which blend smoothly as you travel.
 *   **Dynamic Atmosphere**:
-    *   **Day/Night Cycle**: Real-time sun orbit, changing shadows, and ambient lighting.
+    *   **Day/Night Cycle**: A 20 minute day with a moving sun and moon, dawn and dusk colours, stars, and baked sky light that fades to night while lanterns keep shining. Each zone's `skyTint`, `fogColor` and `fogDensity` shape the sky and the fog (see docs/sky.md).
     *   **Biome Blending**: Grass and foliage colors interpolate between zones (e.g., from clear blue SAO skies to industrial Amestris smog).
 *   **Organic World Generation**:
     *   **Roads**: Paths wander organically using noise-based dithering and change materials based on distance from civilization.
@@ -47,24 +55,24 @@ npm run typecheck   # TypeScript, no emit
 npm test            # Vitest unit tests (tests/)
 npm run bench       # scripted flythrough in headless Chrome, needs the dev server running
 npm run textures:sheet   # dump the texture catalog to docs/screens/p3/catalog.png
-npm run bench -- --smoke   # loads the real game, lands the player, walks forward, reports page errors
+npm run bench -- --smoke   # loads the real game, lands the player, walks forward, presses F4 and ] to check the sky keys, reports page errors
 npm run bench -- --soak    # 90 s closed-loop walk, prints geometry and triangle counts every 5 s
 npm run bench -- --shot docs/screens/p2/spawn.png --url "http://localhost:3000/?shot=0,10,300,0,0"
 node bench/shots.mjs --prefix before --url http://localhost:3000   # every viewpoint in bench/viewpoints.json
 node bench/shots.mjs --prefix world --dir docs/screens/p3 --url http://localhost:3000   # the same, into another folder
 npm run bench -- --shot docs/screens/p3/blocks.png --url "http://localhost:3000/?sandbox=blocks"   # block sandbox screenshot
-npm run bench -- --shot docs/screens/p5/night-spawn.png --url "http://localhost:3000/?shot=0,10,300,0,0&daylight=0.12"   # the same view at night
+npm run bench -- --shot docs/screens/p5/night-spawn.png --url "http://localhost:3000/?shot=0,10,300,0,0&sky=night"   # the same view at night
 ```
 
 Screenshot mode: `/?shot=x,y,z,yawDeg,pitchDeg` parks the camera, hides the HUD and sets `window.__SHOT_READY__` when the world has loaded. Yaw 0 looks toward -z and positive yaw turns left; positive pitch looks up. `--shot <file.png>` waits for that flag and saves a 1280x800 PNG. Soak mode: `/?bench=soak` (or `npm run bench -- --soak`) records `gl.info` memory and render counters, plus the world renderer's own stats, into `result.soak`.
 
-Time of day: `/?daylight=0..1` sets how much of the baked sky light the chunks show (1 is noon, the default; 0 is the darkest night), on the game, `?shot` and `?bench` alike. Block light (lanterns, crystals) is not affected. The day/night cycle will drive this value; until then it is the only way to move it (see [docs/light.md](docs/light.md#the-shader)).
+Time of day: the sky runs a 20 minute day starting at 09:00 (see [docs/sky.md](docs/sky.md)). `/?sky=dawn|noon|dusk|night|twilight|cycle` picks a preset, `/?time=18:30` (or `7.5`) starts at an hour and stops there, `&sky=cycle` or `&speed=0..3` lets it run, `&daylength=seconds` changes the length of the day. `?shot` pages default to `sky=noon`; `?bench` runs the live cycle. `/?daylight=0..1` overrides only how much baked sky light the chunks show (1 is noon, 0 the darkest night) and leaves the sky and fog on the clock. Block light (lanterns, crystals) is never scaled by the time of day.
 
 Block sandbox: `/?sandbox=blocks` replaces the game with every registered block as a labelled cube on a grid under fixed neutral light, plus the grass and leaves under each zone's biome tint; drag to orbit. `&view=close` shows a few materials up close, `&focus=wood_plank,marble` any blocks by short name, `&cam=px,py,pz,tx,ty,tz` sets the camera. It raises `window.__SHOT_READY__` like `?shot`, so `--shot` works on it (see [docs/textures.md](docs/textures.md#block-sandbox)).
 
 Model sandbox: `/?sandbox=models` shows every block model in every state (stairs in all eight, slabs top and bottom, how fences and panes join their neighbours, plants and the rest), labelled, plus a small house built from stairs, slabs, fences and panes. `&view=close`, `&view=joins` and `&view=house` frame parts of it and `&cam=px,py,pz,tx,ty,tz` sets the camera; it raises `__SHOT_READY__` too (see [docs/models.md](docs/models.md#model-sandbox)).
 
-Open `/?bench` in a browser to run the same flythrough by hand. Baseline numbers and how to read them are in [docs/perf-baseline.md](docs/perf-baseline.md); the results after the Phase 2 rebuild are in [docs/perf-after-p2.md](docs/perf-after-p2.md) and after the textures in [docs/perf-after-p3.md](docs/perf-after-p3.md). The block and chunk layer is described in [docs/engine.md](docs/engine.md), the mesher in [docs/meshing.md](docs/meshing.md), baked sky and block light, smooth lighting, the worker's chunk cache and the lit materials in [docs/light.md](docs/light.md), the block models (stairs, slabs, fences, panes, plants) in [docs/models.md](docs/models.md), player collision and stepping in [docs/collision.md](docs/collision.md), the renderer and workers in [docs/renderer.md](docs/renderer.md), and the block textures, the texture array and the material in [docs/textures.md](docs/textures.md).
+Open `/?bench` in a browser to run the same flythrough by hand. Baseline numbers and how to read them are in [docs/perf-baseline.md](docs/perf-baseline.md); the results after the Phase 2 rebuild are in [docs/perf-after-p2.md](docs/perf-after-p2.md) and after the textures in [docs/perf-after-p3.md](docs/perf-after-p3.md). The block and chunk layer is described in [docs/engine.md](docs/engine.md), the mesher in [docs/meshing.md](docs/meshing.md), baked sky and block light, smooth lighting, the worker's chunk cache and the lit materials in [docs/light.md](docs/light.md), the day/night clock, sky dome, fog and zone atmosphere in [docs/sky.md](docs/sky.md) (measured in [docs/perf-after-p5.md](docs/perf-after-p5.md)), the block models (stairs, slabs, fences, panes, plants) in [docs/models.md](docs/models.md), player collision and stepping in [docs/collision.md](docs/collision.md), the renderer and workers in [docs/renderer.md](docs/renderer.md), and the block textures, the texture array and the material in [docs/textures.md](docs/textures.md).
 
 The world is meshed in web workers, so `npm run dev` and `vite build` both bundle `meshing/mesh.worker.ts`; nothing extra to run. The `--smoke` run also checks that the page reports no errors.
 
