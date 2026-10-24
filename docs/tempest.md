@@ -13,6 +13,7 @@ Step 7.1b of Phase 7 builds the machinery the town is made with (step 7.2a, [the
 | The demonstration kits | `worldgen/tempest/kits/` (`TimberHouseKit`, `GateKit`, `LanternPostKit`, `RoofStudyKit`) |
 | The kit viewer | `components/sandbox/KitSandbox.tsx` and `kitsLayout.ts` |
 | The district planner, the terrain, the countryside, `TempestCityZone` | `worldgen/tempest/DistrictPlanner.ts`, `terrain.ts`, `countryside.ts`, `TempestCityZone.ts` (see [below](#the-district-planner-and-the-zone)) |
+| Landmarks, set pieces, the interior furnisher and their viewer | `worldgen/tempest/landmarks/`, `worldgen/tempest/interiors/`, `components/sandbox/LandmarkSandbox.tsx`: see [tempest-landmarks.md](tempest-landmarks.md) |
 
 `worldgen/structures` and `worldgen/tempest` are pure data code like the rest of `worldgen/`: no Three.js, React or DOM (`tests/worldgen/structures-purity.test.ts`). The engine and `content/` never import them.
 
@@ -537,6 +538,10 @@ Honestly, next to Tempest-3, -4, -5 and -7:
 - **What is there:** a terracotta town (the heaviest weight in every ordinary district), dark timber against white plaster, half-timber gables, upswept roofs with horned ridge ends beside plain steep Western gables, deep eaves and awnings over the shop fronts, red and striped paper lanterns at doors and eaves, noren, signs, crates and barrels, shoji that glow at night, a stone footing and moss. The tiers of the inn and the watchtower read as pagoda roofs from a distance, and the dark ridged tile of `plaster-dark` and `vermilion-dark` reads as the heavy Japanese tile of Tempest-5.
 - **Still missing or weak:** the eave corners are blocky (two cubes up, see the roof section above). The big inns (27 by 29) have large, plain roof planes: no dormers, no secondary gables. The smallest lots (9 by 10) give a house that is mostly roof. Shop signs are small, since a sign is a block, and there are no shop fronts with glass display windows like the left of Tempest-3 or the lettered signs of Tempest-4 (no script in the block set, on purpose). The night lighting is modest: a lantern lights a few blocks, so a street needs lanterns every four or five blocks to read as lit (the planner's lamp posts and the zone's street furniture are for that), and nothing beats the glow of Tempest-4's hanging lanterns until a street is built. The hip and gable roofs show their gable triangle as a recess set back in the roof, which reads as a dormer from the front and as a notch from the side. Yurts, the neoclassical hall, the aqueduct and the pools are not here (landmarks).
 - **Not tried:** very narrow lots (the kits refuse a lot outside their frontage and depth limits and the registry offers them nothing else), a street where two kits of one family stand side by side with the same roof shape; the planner's `family` hint is what keeps neighbours apart.
+
+## Landmarks and interiors
+
+Step 7.2c draws the named places of the layout by hand (the civic compound with the Town Hall, the arena, the Central Square, the four gates, the cave, the pools, the cairn, the stalls, the pastures, the bridge, the aqueduct, the lumber clearing, and a bell tower, market hall and bath house for the planner to place) and gives the kits a `furnish(blueprint, room, kind, rng)` that fills a room with a hearth, low tables and cushions, futons, shelves, lanterns and the rest, and the larger rooms of the pictures (council hall with a dais, forge, weaving room). Each landmark is a `LandmarkSpec` that builds into exactly the layout's footprint, and `?sandbox=landmarks` shows every one, by day and night, with a cutaway to see into the rooms. All of it is in [tempest-landmarks.md](tempest-landmarks.md).
 
 ## Tests
 
