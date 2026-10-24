@@ -18,6 +18,7 @@ import { TempestCityZone, growMarkedTrees } from '../../worldgen/tempest/Tempest
 import { POND_WATER_Y } from '../../worldgen/tempest/terrain';
 import { generateZoneChunk, zoneGround } from '../../worldgen/tempest/zoneChunk';
 import { createTempestKits } from '../../worldgen/tempest/kits';
+import { RING_RADIUS, ringZone } from '../../worldgen/tempest/roundabout';
 import { ROAD_GATES, TEMPEST_CENTER_X, farmField, isWooded, landmarkById, roadAt, worldX } from '../../worldgen/tempest/layout';
 import { timeoutMs, tolerant } from '../perf';
 
@@ -82,6 +83,61 @@ describe('TempestCityZone as a zone', () => {
   });
 });
 
+describe('the Central Square, a roundabout', () => {
+  const surface = (x: number, z: number): number => cellId(zone.sample(x, zone.groundAt(x, z), z));
+  const above = (x: number, z: number, k = 1): number => cellId(zone.sample(x, zone.groundAt(x, z) + k, z));
+  const at = (dx: number, dz: number): { zone: string; surface: number; above: number } => ({
+    zone: ringZone(dx, dz), surface: surface(worldX(dx), dz), above: above(worldX(dx), dz),
+  });
+
+  it('is a circle of rings: basin, island of fan cobbles, a raised kerb, a ring road in a darker stone, an outer kerb a block high', () => {
+    expect(RING_RADIUS).toBe(7);
+    expect(landmarkById('central-square')!.shape).toMatchObject({ kind: 'circle', r: RING_RADIUS });
+    // Every ring is there, and going out from the middle they come in order (the entries and the splitters are part of the outer kerb's ring).
+    const order = ['water', 'rim', 'island', 'kerbIn', 'road', 'kerbOut', 'entry', 'splitter'];
+    const cells: Array<[number, string]> = [];
+    for (let dz = -9; dz <= 9; dz++) for (let dx = -9; dx <= 9; dx++) if (ringZone(dx, dz) !== 'outside') cells.push([Math.hypot(dx, dz), ringZone(dx, dz)]);
+    cells.sort((a, b) => a[0] - b[0]);
+    let last = 0;
+    for (const [, r] of cells) {
+      const i = Math.min(order.indexOf(r), 5);
+      expect(i, r).toBeGreaterThanOrEqual(last);
+      last = i;
+    }
+    expect(new Set(cells.map((c) => c[1])).size).toBe(order.length);
+    // The ring road is cobble, darker than the avenues' stone and fan paving round it; the kerbs are raised slabs.
+    expect(at(0, 5)).toMatchObject({ zone: 'road', surface: BlockType.STONE_BRICK });
+    // The kerb carries on across the avenue's edge lanes (the splitters), so the ring is closed but for the four mouths.
+    expect(at(4, 6)).toMatchObject({ zone: 'splitter', above: BlockType.COBBLESTONE });
+    expect(at(3, 7)).toMatchObject({ zone: 'splitter', above: BlockType.COBBLESTONE });
+    expect(at(3, 3)).toMatchObject({ zone: 'kerbIn', above: T.STONE_CURB });
+    expect(at(5, 4)).toMatchObject({ zone: 'kerbOut', above: BlockType.COBBLESTONE });
+    // The outer kerb is open where an avenue enters, in fan cobbles: the avenue's paving stops at the ring.
+    for (const [dx, dz] of [[0, 7], [0, -7], [7, 0], [-7, 0]]) expect(at(dx, dz), `${dx},${dz}`).toMatchObject({ zone: 'entry', surface: T.FAN_PAVING, above: 0 });
+    // Past the ring the avenues' own paving begins at once, flush.
+    expect([T.STONE_PAVING, T.FAN_PAVING]).toContain(surface(worldX(0), 8));
+    expect([T.STONE_PAVING, T.FAN_PAVING]).toContain(surface(worldX(8), 0));
+  });
+
+  it('has a ring of bollards on the island and posts on the outer kerb between the avenues', () => {
+    let island = 0, kerb = 0;
+    for (let dz = -8; dz <= 8; dz++) for (let dx = -8; dx <= 8; dx++) {
+      if (ringZone(dx, dz) === 'island' && above(worldX(dx), dz) === T.STONE_BOLLARD) island++;
+      else if (ringZone(dx, dz) === 'kerbOut' && above(worldX(dx), dz, 2) === T.STONE_BOLLARD) kerb++;
+    }
+    expect(island).toBe(12);
+    expect(kerb).toBeGreaterThanOrEqual(6);
+  });
+
+  it('does not run an avenue through the ring: the cells just outside it, on an avenue, are not kerb or slate', () => {
+    for (const [dx, dz] of [[9, 0], [-9, 0], [0, 9], [0, -9], [9, 3], [-3, 9]]) {
+      expect(ringZone(dx, dz)).toBe('outside');
+      expect(surface(worldX(dx), dz)).not.toBe(BlockType.STONE_BRICK);
+      expect(above(worldX(dx), dz)).not.toBe(BlockType.COBBLESTONE);
+    }
+  });
+});
+
 describe('the streets and what stands in them', () => {
   const surface = (x: number, z: number): number => cellId(zone.sample(x, zone.groundAt(x, z), z));
 
@@ -96,11 +152,13 @@ describe('the streets and what stands in them', () => {
     let fan = 0;
     for (let lx = 10; lx < 100; lx++) if (surface(worldX(lx), 0) === T.FAN_PAVING) fan++;
     expect(fan).toBeGreaterThan(50);
-    // The square: fan paving round a fountain of basins with a water jet at its middle.
+    // The square: fan paving on the island round a fountain of basins with a water jet at its middle, a ring of bollards, the kerbs and the ring
+    // road in dark cobbles (the whole of it is in the Central Square test below).
     expect(surface(worldX(4), 0)).toBe(T.FAN_PAVING);
     expect(cellId(zone.sample(worldX(0), 9, 0))).toBe(T.STONE_BASIN);
     expect(cellId(zone.sample(worldX(0), 10, 0))).toBe(T.WATER_JET);
-    expect(cellId(zone.sample(worldX(4), 9, 4))).toBe(T.STONE_BOLLARD);
+    expect(cellId(zone.sample(worldX(4), 9, 0))).toBe(T.STONE_BOLLARD);
+    expect(surface(worldX(5), 0)).toBe(BlockType.STONE_BRICK);
     // Outskirts: the boundary road's middle and a street at the grid's edge are earth, not paving.
     const earth = [BlockType.PATH, NatureBlock.GRAVEL, BlockType.DIRT];
     expect(earth).toContain(surface(worldX(186), -90));

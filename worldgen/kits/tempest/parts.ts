@@ -175,7 +175,10 @@ export const pent = (
     }
   }
   if (options.lanterns) {
+    const every = options.postEvery ?? 3;
     for (let t = from + 1; t < to; t += 3) {
+      // A lantern over a post would hang from its top and light nothing below: the lips of the roof between the posts carry them.
+      if (options.postFrom !== undefined && ((t - from) % every === 0 || t === to)) continue;
       const [x, z] = at(t, depth);
       b.set(x, y - (depth - 2) - 1, z, 'light');
     }
@@ -244,17 +247,20 @@ export const staircase = (b: BlueprintBuilder, x: number, z: number, dir: Dir, f
 
 // --- Furnishing ------------------------------------------------------------------------------------------------------
 
-export type RoomKind = 'living' | 'sleeping' | 'kitchen' | 'shop' | 'hall' | 'store' | 'empty';
+export type RoomKind = 'living' | 'sleeping' | 'kitchen' | 'shop' | 'hall' | 'store' | 'forge' | 'weaving' | 'study' | 'barracks' | 'lobby' | 'empty';
 
 /** What the interior furnisher calls each of the kits' room kinds ('empty' is left bare). */
-const FURNISHED_AS = { living: 'living', sleeping: 'bedroom', kitchen: 'kitchen', shop: 'shop', hall: 'inn', store: 'storage' } as const;
+const FURNISHED_AS = {
+  living: 'living', sleeping: 'bedroom', kitchen: 'kitchen', shop: 'shop', hall: 'inn', store: 'storage',
+  forge: 'forge', weaving: 'weaving', study: 'study', barracks: 'barracks', lobby: 'lobby',
+} as const;
 
 /**
  * Furniture for a room by what it is for, from the interior furnisher (worldgen/tempest/interiors): a hearth and low tables,
  * futons, counters with goods, shelves, lanterns hung from the ceiling. The doors and stairs stay clear, and the generator is
  * forked from the builder's by where the room is, so the same lot always gets the same rooms.
  */
-export const furnishRoom = (b: BlueprintBuilder, room: Room, kind: RoomKind, options: { tatami?: boolean; lamp?: boolean } = {}): void => {
+export const furnishRoom = (b: BlueprintBuilder, room: Room, kind: RoomKind, options: { tatami?: boolean; lamp?: boolean; keepClear?: readonly Rect[] } = {}): void => {
   if (kind === 'empty') return;
   const rng = b.rng.fork(hash2(room.rect.x0 * 131 + room.rect.z0, room.floorY, 0x1f7a));
   // A stair's cells are not entrances: the stair, its landings and the cell on each side of the run stay free, and only the real doors steer the room.
@@ -262,7 +268,7 @@ export const furnishRoom = (b: BlueprintBuilder, room: Room, kind: RoomKind, opt
   const inside = (d: { x: number; z: number }): boolean => d.x >= r.x0 && d.x <= r.x1 && d.z >= r.z0 && d.z <= r.z1;
   // (an end of a stair that lies in the wall, past the room, has no cell of the room to keep joined)
   const doors = room.doors.filter((d) => !d.stair && inside(d));
-  const keepClear: Rect[] = [];
+  const keepClear: Rect[] = [...(options.keepClear ?? [])];
   for (const d of room.doors) {
     if (!d.stair) continue;
     for (const k of [-1, 0, 1]) keepClear.push({ x0: d.x + DX[d.inward] * k, z0: d.z + DZ[d.inward] * k, x1: d.x + DX[d.inward] * k, z1: d.z + DZ[d.inward] * k });

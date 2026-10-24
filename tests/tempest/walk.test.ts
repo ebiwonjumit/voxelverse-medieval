@@ -41,16 +41,16 @@ describe('walking the town with the real collision', () => {
     expect(crown).toBeGreaterThan(FEET + 1.5);
   }, timeoutMs(60000));
 
-  // From the street through the door, and up the stairs to the top floor, for every third house of the town (about 75 of them,
+  // From the street through the door, and up the stairs to the top floor, for every second house of the town (about 100 of them,
   // of every kit and every facing): found by walking with the game's collision, no jumping.
   it('lets a player enter houses through their doors and climb to the top floor', () => {
     let entered = 0, climbed = 0;
     const kinds = new Set<string>();
-    const HOUSES = new Set(['townhouse', 'shop', 'inn', 'storehouse', 'garden-house', 'watchtower']);
-    const lots = zone.planner.lots.filter((p) => p.kind === 'building' && !p.piece && HOUSES.has(zone.kits.pick(p.lot)?.name ?? ''));
+    const HOUSES = new Set(['townhouse', 'shop', 'inn', 'storehouse', 'garden-house', 'watchtower', 'workshop', 'public-hall']);
+    const lots = zone.planner.lots.filter((p) => p.kind === 'building' && !p.piece && HOUSES.has(zone.choiceOf(p)?.kit.name ?? ''));
     lots.forEach((p, n) => {
-      if (n % 3 !== 0) return;
-      const kit = zone.kits.pick(p.lot)!;
+      if (n % 2 !== 0) return;
+      const kit = zone.choiceOf(p)!.kit;
       const pl = zone.lotPlacement(p);
       const door = pl?.markers().find((m) => m.kind === 'door');
       if (!pl || !door || door.facing === undefined) return;
@@ -78,8 +78,9 @@ describe('walking the town with the real collision', () => {
       expect(top, `${kit.name} ${l.id}: a way up`).toBeGreaterThan(FEET + 3.5);
       climbed++;
     });
-    expect(entered).toBeGreaterThanOrEqual(50);
-    expect(climbed).toBeGreaterThanOrEqual(25);
-    expect(kinds.size).toBeGreaterThanOrEqual(4);
+    console.info(`walked into ${entered} houses of ${[...kinds].join(', ')}, up to the top floor of ${climbed}`);
+    expect(entered).toBeGreaterThanOrEqual(80);
+    expect(climbed).toBeGreaterThanOrEqual(30);
+    expect(kinds.size).toBeGreaterThanOrEqual(6);
   }, timeoutMs(180000));
 });

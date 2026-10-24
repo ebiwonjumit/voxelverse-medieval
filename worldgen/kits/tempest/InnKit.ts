@@ -35,7 +35,8 @@ export class InnKit extends BuildingKit {
     const veranda = 2;
     // A three storey inn needs the depth for its tiers (each tier is four blocks narrower than the one below).
     const want = variant === 0 ? lot.floors : Math.min(2, lot.floors);
-    const garden = Math.max(5, Math.min(9, D - (want >= 3 ? 24 : 17)));
+    // On the shallowest lot the garden gives way to the rooms: a flight of four needs the cell in front of its foot.
+    const garden = D <= 17 ? 3 : Math.max(5, Math.min(9, D - (want >= 3 ? 24 : 17)));
     const M = rect(3, garden + 3, W - 4, D - 1 - veranda - 1);
     const spacing = 4;
     const inner = rect(M.x0 + 1, M.z0 + 1, M.x1 - 1, M.z1 - 1);

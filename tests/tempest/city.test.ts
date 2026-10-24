@@ -38,8 +38,9 @@ describe('the lots', () => {
     for (const p of zone.planner.lots) {
       if (p.kind !== 'building' || p.piece) continue;
       buildings++;
-      if (zone.kits.pick(p.lot)) continue;
-      if (zone.kits.pickFitted(p.lot)) fitted++; else boxes++;
+      const choice = zone.choiceOf(p);
+      if (!choice) boxes++;
+      else if (choice.fitted) fitted++;
     }
     expect(buildings).toBeGreaterThan(200);
     expect(boxes).toBe(0);
@@ -48,7 +49,7 @@ describe('the lots', () => {
   });
 
   it('give every district its kinds of house: shops on the avenue, storehouses at the far west, inns in the tourism sector', () => {
-    const names = (district: string): Set<string> => new Set(zone.planner.lots.filter((p) => p.kind === 'building' && p.lot.district === district).map((p) => (zone.kits.pick(p.lot) ?? zone.kits.pickFitted(p.lot)?.kit)!.name));
+    const names = (district: string): Set<string> => new Set(zone.planner.lots.filter((p) => p.kind === 'building' && p.lot.district === district).map((p) => zone.choiceOf(p)!.kit.name));
     expect(names('commercial').has('shop')).toBe(true);
     expect(names('storage').has('storehouse')).toBe(true);
     expect(names('tourism').has('inn') || names('tourism').has('garden-house')).toBe(true);

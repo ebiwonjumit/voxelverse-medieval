@@ -18,10 +18,12 @@ import {
 } from './layout';
 import { LandmarkRegistry, LandmarkSpec, LANDMARK_SEED, createTempestLandmarks, frameSize, landmarkLot, placeBlueprint } from './landmarks';
 import { Lru } from './lru';
+import { apronBollard, apronCell, islandBollard, kerbBollard, ringZone, wedgeOf } from './roundabout';
 import { roadBlock } from './streets';
 import { TEMPEST_STYLE } from './style';
 import { TempestTerrain, POND_WATER_Y } from './terrain';
 import { TreeKind, TreeShape, VARIANTS, columnKey, forestTree, smallTree } from './trees';
+import { BuildingChoice, Plan, chooseBuildings } from './variety';
 
 // The Federation of Tempest as one zone: the district planner's streets and lots, the kits' buildings, the river, the
 // farms, the pastures and the forest, answered a cell at a time. It extends the legacy `Zone` so it can stand where
@@ -95,6 +97,8 @@ export class TempestCityZone extends Zone {
   readonly planner: DistrictPlanner;
   readonly style: StylePack;
   readonly kits: KitRegistry;
+  /** Which kit and variant stands on each building lot (`variety.ts`), by the lot's index in the planner. */
+  readonly plan: Plan;
   private readonly fillers = createFillerKits();
   private readonly fallbackKit: BuildingKit = new BoxHouseKit();
   private readonly countryside: Countryside;
@@ -123,6 +127,7 @@ export class TempestCityZone extends Zone {
     this.terrain = new TempestTerrain(this.seed);
     this.planner = new DistrictPlanner({ seed: this.seed, style: this.style, groundAt: (x, z) => this.terrain.ground(x, z) });
     this.countryside = new Countryside(this.seed, this.terrain);
+    this.plan = chooseBuildings(this.planner, this.kits);
     // A landmark is built by the kit registered under its layout id, else by the hand-built spec that covers it (the compound covers
     // the Town Hall), else by nothing, except the east bridge, which has a placeholder.
     const landmarks = options.landmarks === undefined ? createTempestLandmarks() : options.landmarks;
@@ -190,9 +195,14 @@ export class TempestCityZone extends Zone {
 
   // --- Lots and landmarks ----------------------------------------------------------------------------------------------
 
+  /** The building chosen for a building lot (the kit, its variant and the lot it stands on), or undefined for any other kind of lot. */
+  choiceOf(p: PlannedLot): BuildingChoice | undefined {
+    return p.kind === 'building' ? this.plan.get(p.index) : undefined;
+  }
+
   /** The kit that builds a planned lot. */
   kitFor(p: PlannedLot): BuildingKit {
-    if (p.kind === 'building') return this.kits.pick(p.lot) ?? this.fallbackKit;
+    if (p.kind === 'building') return this.choiceOf(p)?.kit ?? this.fallbackKit;
     const name = p.kind === 'garden' ? 'garden-lot' : p.kind === 'park' ? 'park-lot' : p.kind === 'meadow' ? 'meadow-lot' : 'construction-site';
     return this.kits.get(name) ?? this.fillers.get(name)!;
   }
@@ -201,7 +211,8 @@ export class TempestCityZone extends Zone {
   lotPlacement(p: PlannedLot): Placement | null {
     let pl = this.lotCache.get(p.index);
     if (pl === undefined) {
-      pl = this.place(p.lot, this.kitFor(p));
+      const choice = this.choiceOf(p);
+      pl = this.place(choice?.lot ?? p.lot, this.kitFor(p), true, choice?.variant);
       this.lotCache.set(p.index, pl);
     }
     return pl;
@@ -211,14 +222,15 @@ export class TempestCityZone extends Zone {
   private lotStands(p: PlannedLot): Stand[] {
     const spec = p.piece ? this.freePieces.get(p.piece) : undefined;
     // A building lot bigger than any kit of its district takes is built on part of it, with a lawn round.
-    const fitted = !spec && p.kind === 'building' && !this.kits.pick(p.lot) ? this.kits.pickFitted(p.lot) : null;
+    const choice = this.choiceOf(p);
+    const fitted = !spec && choice?.fitted ? choice : null;
     if (!spec && !fitted) {
       const pl = this.lotPlacement(p);
       return pl ? [pl] : [];
     }
     let stands = this.pieceCache.get(p.index);
     if (!stands) {
-      stands = spec ? this.pieceStands(p, spec) : this.fittedStands(p, fitted!.kit, fitted!.lot);
+      stands = spec ? this.pieceStands(p, spec) : this.fittedStands(p, fitted!.kit, fitted!.lot, fitted!.variant);
       this.pieceCache.set(p.index, stands);
     }
     return stands;
@@ -230,9 +242,9 @@ export class TempestCityZone extends Zone {
     return park ? [new MaskedStand(park, hole.x, hole.z, hole.x + hole.w - 1, hole.z + hole.d - 1)] : [];
   }
 
-  private fittedStands(p: PlannedLot, kit: BuildingKit, sub: Lot): Stand[] {
+  private fittedStands(p: PlannedLot, kit: BuildingKit, sub: Lot, variant: number): Stand[] {
     const out = this.lawnWithHole(p.lot, sub);
-    const pl = this.place(sub, kit);
+    const pl = this.place(sub, kit, true, variant);
     if (pl) out.push(pl);
     return out;
   }
@@ -290,15 +302,15 @@ export class TempestCityZone extends Zone {
     let pl = this.propCache.get(p.index);
     if (pl === undefined) {
       const kit = this.kits.get(p.kit) ?? this.fillers.get(p.kit);
-      pl = kit ? this.place(p.lot, kit) : null;
+      pl = kit ? this.place(p.lot, kit, true, p.variant) : null;
       this.propCache.set(p.index, pl);
     }
     return pl;
   }
 
   // A kit that throws is not allowed to take a chunk down: the box house stands in for a building (a landmark just stays empty).
-  private place(lot: Lot, kit: BuildingKit, fallback = true): Placement | null {
-    const variant = kit.variants > 1 ? hash2(lot.seed, 0x7a41, 1) % kit.variants : 0;
+  private place(lot: Lot, kit: BuildingKit, fallback = true, chosen?: number): Placement | null {
+    const variant = chosen ?? (kit.variants > 1 ? hash2(lot.seed, 0x7a41, 1) % kit.variants : 0);
     let bp: Blueprint;
     try {
       bp = buildWithKit(kit, lot, this.style, variant);
@@ -363,7 +375,11 @@ export class TempestCityZone extends Zone {
     } else {
       const block = planner.blockOf(x, z);
       if (block) this.free(c, block, x, z, ground, high);
-      else if (x >= COMPOUND.x0 && x <= COMPOUND.x1 && z >= COMPOUND.z0 && z <= COMPOUND.z1) {
+      else if (apronCell(x - SQUARE.cx, z - SQUARE.cz)) {
+        const dx = x - SQUARE.cx, dz = z - SQUARE.cz;
+        c.surface = packCell((wedgeOf(dx, dz) & 1) === 0 ? T.FAN_PAVING : T.STONE_PAVING);
+        if (apronBollard(dx, dz)) this.addProp(c, ground + 1, T.STONE_BOLLARD);
+      } else if (x >= COMPOUND.x0 && x <= COMPOUND.x1 && z >= COMPOUND.z0 && z <= COMPOUND.z1) {
         const court = x >= forecourt.x0 && x <= forecourt.x1 && z >= forecourt.z0 && z <= forecourt.z1;
         c.surface = packCell(court ? T.STONE_PAVING : BlockType.GRASS);
       } else this.open(c, x, z, ground, high);
@@ -380,19 +396,40 @@ export class TempestCityZone extends Zone {
     if (b && b.maxY > c.maxY) c.maxY = b.maxY;
   }
 
-  // The Central Square: a disc of fan paving with a fountain (a ring of basins round a water jet) and bollards in the corners of the crossing.
-  // The landmark's own kit, when there is one, is drawn over this.
+  // The Central Square, ring by ring (roundabout.ts): a basin round a water jet, the island of fan cobbles with its bollards, the raised
+  // kerbs, the ring road in dark cobbles. The landmark's own spec, when there is one, draws the same rings with the pillar of ore and the
+  // lamps over this.
   private square(c: ColumnCache, x: number, z: number, ground: number): boolean {
     const dx = x - SQUARE.cx, dz = z - SQUARE.cz;
-    const d = Math.hypot(dx, dz);
-    if (d > SQUARE.r) return false;
-    c.surface = packCell(d < 3 ? T.STONE_PAVING : T.FAN_PAVING);
-    if (d < 2.7) {
-      this.addProp(c, ground + 1, T.STONE_BASIN);
-      if (dx === 0 && dz === 0) { this.addProp(c, ground + 2, T.WATER_JET); this.addProp(c, ground + 3, T.WATER_JET); }
-    } else if (d >= 5.6 && Math.min(Math.abs(dx), Math.abs(dz)) >= 3 && ((dx + dz) & 1) === 0) {
-      // Bollards in the four corners of the crossing, an arc round the fountain that the avenues leave open.
-      this.addProp(c, ground + 1, T.STONE_BOLLARD);
+    if (ringZone(dx, dz) === 'outside') return false;
+    switch (ringZone(dx, dz)) {
+      case 'water': case 'rim':
+        c.surface = packCell(T.STONE_PAVING);
+        this.addProp(c, ground + 1, T.STONE_BASIN);
+        if (dx === 0 && dz === 0) { this.addProp(c, ground + 2, T.WATER_JET); this.addProp(c, ground + 3, T.WATER_JET); }
+        break;
+      case 'island':
+        c.surface = packCell((wedgeOf(dx, dz) & 1) === 0 ? T.FAN_PAVING : T.STONE_PAVING);
+        if (islandBollard(dx, dz)) this.addProp(c, ground + 1, T.STONE_BOLLARD);
+        break;
+      case 'kerbIn':
+        c.surface = packCell(BlockType.COBBLESTONE);
+        this.addProp(c, ground + 1, T.STONE_CURB);
+        break;
+      case 'splitter':
+        c.surface = packCell(BlockType.COBBLESTONE);
+        this.addProp(c, ground + 1, BlockType.COBBLESTONE);
+        break;
+      case 'road':
+        c.surface = packCell(BlockType.STONE_BRICK);
+        break;
+      case 'entry':
+        c.surface = packCell(T.FAN_PAVING);
+        break;
+      default: // the outer kerb, a block high, with a bollard on it beside each mouth
+        c.surface = packCell(BlockType.COBBLESTONE);
+        this.addProp(c, ground + 1, BlockType.COBBLESTONE);
+        if (kerbBollard(dx, dz)) this.addProp(c, ground + 2, T.STONE_BOLLARD);
     }
     return true;
   }

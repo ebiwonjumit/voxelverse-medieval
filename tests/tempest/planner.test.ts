@@ -211,7 +211,7 @@ describe('the district planner: landmarks, trees, lamps, props', () => {
   it('lines the boundary road with stalls whose fronts face it', () => {
     expect(planner.props.length).toBeGreaterThan(8);
     const boundary = ROADS.find((r) => r.id === 'boundary-east')!;
-    for (const p of planner.props) {
+    for (const p of planner.props.filter((o) => o.kit === 'street-stall')) {
       expect(p.lot.facing).toBe(3);
       expect(p.lot.x).toBeGreaterThanOrEqual(boundary.rect!.x0);
       expect(p.lot.x + p.lot.w - 1).toBeLessThanOrEqual(boundary.rect!.x1);

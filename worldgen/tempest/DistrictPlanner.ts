@@ -2,7 +2,7 @@ import { Rng, hash2 } from '../noise';
 import { Lot, NO_NEIGHBOUR, NeighbourInfo } from '../structures/Lot';
 import { StylePack } from '../structures/StylePack';
 import {
-  BLOCKS, Block, Facing, LANDMARKS, Landmark, ROADS, RoadSegment, TEMPEST_CENTER_X, TEMPEST_CENTER_Z, TEMPEST_GROUND, blockAt, inBlock, inShape,
+  BLOCKS, Block, Facing, LANDMARKS, Landmark, ROADS, Rect, RoadSegment, TEMPEST_CENTER_X, TEMPEST_CENTER_Z, TEMPEST_GROUND, blockAt, inBlock, inShape,
   localX, localZ, roadAt, sectorOfBlock, shapeBounds, worldZ,
 } from './layout';
 import { TEMPEST_STYLE } from './style';
@@ -34,6 +34,8 @@ export interface PlannedLot {
   sector: string;
   /** The free set piece (the landmarks' `bell-tower`, `market-hall`, `bath-house`) that stands on this lot, if the plan gives it one. */
   piece?: string;
+  /** What the plan wants on the lot, when it wants one thing: `shrine` (see `SHRINE_BLOCKS`). The zone's choice of building follows it. */
+  role?: 'shrine';
 }
 
 export interface PlannedLandmark {
@@ -48,6 +50,8 @@ export interface PlannedProp {
   index: number;
   kit: string;
   lot: Lot;
+  /** Which of the kit's variants stands here, when the planner has a say (the wells alternate); otherwise the lot's seed decides. */
+  variant?: number;
 }
 
 export interface TreeSpot { x: number; z: number; kind: TreeKind; variant: number; lean: Lean }
@@ -108,15 +112,24 @@ export const splitLength = (len: number, avg: number, min: number, max: number, 
  */
 export const SET_PIECE_BLOCKS: Readonly<Record<string, string>> = { c1r1: 'bell-tower', c2r2: 'market-hall', c1r3: 'bath-house' };
 
+/**
+ * The blocks given whole to one shrine each, in a park at the forest edge: the south east corner of the tourism sector (a
+ * meadow in the plan) and the north west corner of the guest houses. The value is the shrine's variant.
+ */
+export const SHRINE_BLOCKS: Readonly<Record<string, number>> = { c4r4: 0, 'c-4r-4': 1 };
+
 type LayoutStyle = 'ring' | 'rows' | 'single' | 'quad' | 'column';
 
 const layoutStyle = (b: Block, w: number, h: number, rng: Rng): LayoutStyle => {
   if (w < 24) return 'column';
-  if (SET_PIECE_BLOCKS[b.id]) { rng.next(); return 'single'; }
+  if (SET_PIECE_BLOCKS[b.id] || SHRINE_BLOCKS[b.id] !== undefined) { rng.next(); return 'single'; }
   const r = rng.next();
+  // The blocks beside the north-south avenue face it with a ring of houses: a row of lots would show it only the ends of buildings.
+  const onAvenue = Math.abs(b.col) === 1;
   switch (b.district) {
-    case 'residential': return w >= 34 && h >= 34 && r < 0.6 ? 'ring' : 'rows';
-    case 'commercial': case 'production': return r < 0.25 && w >= 34 && h >= 34 ? 'ring' : 'rows';
+    case 'residential': return w >= 34 && h >= 34 && (r < 0.6 || onAvenue) ? 'ring' : 'rows';
+    case 'commercial': return w >= 34 && h >= 34 && (r < 0.25 || onAvenue) ? 'ring' : 'rows';
+    case 'production': return r < 0.25 && w >= 34 && h >= 34 ? 'ring' : 'rows';
     case 'storage': case 'government': return 'rows';
     case 'tourism': return b.density === 'empty' ? 'single' : r < 0.2 ? 'single' : r < 0.55 ? 'rows' : 'quad';
     case 'luxury': return b.density === 'empty' ? 'quad' : r < 0.55 ? 'rows' : r < 0.85 ? 'quad' : 'single';
@@ -136,14 +149,14 @@ const avgFrontage = (b: Block): [number, number, number] => {
 type Blocked = (x: number, z: number) => boolean;
 const NEVER: Blocked = () => false;
 
-/** The runs of consecutive integers in lo..hi for which `free` holds. */
+/** The runs of consecutive integers in lo..hi for which `free` holds (the coordinates may be negative: the north half of the town is). */
 const runs = (lo: number, hi: number, free: (t: number) => boolean): Array<[number, number]> => {
   const out: Array<[number, number]> = [];
-  let start = -1;
+  let start: number | null = null;
   for (let t = lo; t <= hi + 1; t++) {
     const ok = t <= hi && free(t);
-    if (ok && start < 0) start = t;
-    if (!ok && start >= 0) { out.push([start, t - 1]); start = -1; }
+    if (ok && start === null) start = t;
+    if (!ok && start !== null) { out.push([start, t - 1]); start = null; }
   }
   return out;
 };
@@ -197,18 +210,24 @@ const rowsOf = (b: Block, ax0: number, ax1: number, az0: number, h: number, id: 
   return [...rowN(ax0, ax1, az0, d1, 0, `${id}:n`, b, rng, blocked), ...rowN(ax0, ax1, az0 + d1, d2, 2, `${id}:s`, b, rng, blocked)];
 };
 
+/** What a block is cut into: its lots, and the courtyard a ring of them leaves in the middle. */
+interface BlockPlan { plots: Plot[]; court?: Rect }
+
 /** A ring of small lots round a courtyard. */
-const ringOf = (b: Block, ax0: number, ax1: number, az0: number, az1: number, id: string, rng: Rng, blocked: Blocked): Plot[] => {
+const ringOf = (b: Block, ax0: number, ax1: number, az0: number, az1: number, id: string, rng: Rng, blocked: Blocked): BlockPlan => {
   const d1 = 12 + rng.int(2), d2 = 12 + rng.int(2), dw = 12 + rng.int(2), de = 12 + rng.int(2);
-  return [
-    ...rowN(ax0, ax1, az0, d1, 0, `${id}:n`, b, rng, blocked),
-    ...rowN(ax0, ax1, az1 - d2 + 1, d2, 2, `${id}:s`, b, rng, blocked),
-    ...colE(az0 + d1, az1 - d2, ax0, dw, 3, `${id}:w`, b, rng, blocked),
-    ...colE(az0 + d1, az1 - d2, ax1 - de + 1, de, 1, `${id}:e`, b, rng, blocked),
-  ];
+  return {
+    plots: [
+      ...rowN(ax0, ax1, az0, d1, 0, `${id}:n`, b, rng, blocked),
+      ...rowN(ax0, ax1, az1 - d2 + 1, d2, 2, `${id}:s`, b, rng, blocked),
+      ...colE(az0 + d1, az1 - d2, ax0, dw, 3, `${id}:w`, b, rng, blocked),
+      ...colE(az0 + d1, az1 - d2, ax1 - de + 1, de, 1, `${id}:e`, b, rng, blocked),
+    ],
+    court: { x0: ax0 + dw, z0: az0 + d1, x1: ax1 - de, z1: az1 - d2 },
+  };
 };
 
-const planBlock = (b: Block, rng: Rng, crossed: boolean): Plot[] => {
+const planBlock = (b: Block, rng: Rng, crossed: boolean): BlockPlan => {
   const ax0 = b.rect.x0 + VERGE, ax1 = b.rect.x1 - VERGE, az0 = b.rect.z0 + VERGE, az1 = b.rect.z1 - VERGE;
   const w = ax1 - ax0 + 1;
   const h = az1 - az0 + 1;
@@ -219,27 +238,29 @@ const planBlock = (b: Block, rng: Rng, crossed: boolean): Plot[] => {
     // block's own edges wherever the diagonal and its lots leave room.
     const stair = diagonalPlots(b, rng);
     const blocked: Blocked = (x, z) => roadAt(x, z) !== null || stair.some((o) => x >= o.x - 1 && x < o.x + o.w + 1 && z >= o.z - 1 && z < o.z + o.d + 1);
-    const edge = w >= 34 && h >= 34 && b.lotSize === 'small' ? ringOf(b, ax0, ax1, az0, az1, id, rng, blocked) : rowsOf(b, ax0, ax1, az0, h, id, rng, blocked);
-    return [...stair, ...edge];
+    const edge = w >= 34 && h >= 34 && b.lotSize === 'small' ? ringOf(b, ax0, ax1, az0, az1, id, rng, blocked).plots : rowsOf(b, ax0, ax1, az0, h, id, rng, blocked);
+    return { plots: [...stair, ...edge] };
   }
   switch (style) {
     case 'ring': return ringOf(b, ax0, ax1, az0, az1, id, rng, NEVER);
-    case 'rows': return rowsOf(b, ax0, ax1, az0, h, id, rng, NEVER);
+    case 'rows': return { plots: rowsOf(b, ax0, ax1, az0, h, id, rng, NEVER) };
     case 'single': {
       const facing = towardAvenue(b) ?? (rng.int(4) as Facing);
-      return [{ x: ax0, z: az0, w, d: h, facing, row: `${id}:o` }];
+      return { plots: [{ x: ax0, z: az0, w, d: h, facing, row: `${id}:o` }] };
     }
     case 'quad': {
       const w1 = Math.floor(w / 2) + rng.int(3) - 1, h1 = Math.floor(h / 2) + rng.int(3) - 1;
-      return [
-        { x: ax0, z: az0, w: w1, d: h1, facing: 0, row: `${id}:q0` },
-        { x: ax0 + w1, z: az0, w: w - w1, d: h1, facing: 1, row: `${id}:q1` },
-        { x: ax0 + w1, z: az0 + h1, w: w - w1, d: h - h1, facing: 2, row: `${id}:q2` },
-        { x: ax0, z: az0 + h1, w: w1, d: h - h1, facing: 3, row: `${id}:q3` },
-      ];
+      return {
+        plots: [
+          { x: ax0, z: az0, w: w1, d: h1, facing: 0, row: `${id}:q0` },
+          { x: ax0 + w1, z: az0, w: w - w1, d: h1, facing: 1, row: `${id}:q1` },
+          { x: ax0 + w1, z: az0 + h1, w: w - w1, d: h - h1, facing: 2, row: `${id}:q2` },
+          { x: ax0, z: az0 + h1, w: w1, d: h - h1, facing: 3, row: `${id}:q3` },
+        ],
+      };
     }
     default: // an annex: one column of lots along the street, fronts to the compound's side
-      return colE(az0, az1, ax0, w, b.col < 0 ? 1 : 3, `${id}:a`, b, rng, NEVER);
+      return { plots: colE(az0, az1, ax0, w, b.col < 0 ? 1 : 3, `${id}:a`, b, rng, NEVER) };
   }
 };
 
@@ -325,7 +346,8 @@ const FLOORS_BY_DISTRICT: Record<string, [number, number]> = {
 const chooseKind = (b: Block, rng: Rng): LotKind => {
   const r = rng.next();
   if (b.density === 'empty') return b.district === 'luxury' ? 'garden' : r < 0.5 ? 'meadow' : 'park';
-  if (b.underConstruction && r < 0.55) return 'construction';
+  // The public strip is the plan's "under construction" sector, but it is also where the school, the clinic and the barracks stand: fewer sites.
+  if (b.underConstruction && r < (b.district === 'public' ? 0.3 : 0.55)) return 'construction';
   switch (b.district) {
     case 'guest': return r < 0.22 ? 'park' : r < 0.27 ? 'garden' : 'building';
     case 'tourism': return r < 0.16 ? 'park' : r < 0.24 ? 'garden' : r < 0.28 ? 'meadow' : 'building';
@@ -360,6 +382,8 @@ export class DistrictPlanner {
   private readonly lampAtCell = new Map<number, LampSpot>();
   private readonly treeCells = new Map<number, TreeSpot[]>();
   private readonly roadIndex = new Map<RoadSegment, number>();
+  /** The courtyards the rings of lots leave in the middle of their blocks: where the wells stand. */
+  private readonly courts: Array<{ block: string; district: string; rect: Rect }> = [];
 
   constructor(options: PlannerOptions) {
     this.seed = options.seed | 0;
@@ -455,8 +479,9 @@ export class DistrictPlanner {
     const mixStr = (s: string): void => { for (let i = 0; i < s.length; i++) mix(s.charCodeAt(i)); };
     for (const p of this.lots) {
       const l = p.lot;
-      mixStr(l.id); mix(l.x); mix(l.z); mix(l.w); mix(l.d); mix(l.facing); mix(l.seed); mix(l.floors); mixStr(p.kind); mixStr(l.family ?? '');
+      mixStr(l.id); mix(l.x); mix(l.z); mix(l.w); mix(l.d); mix(l.facing); mix(l.seed); mix(l.floors); mixStr(p.kind); mixStr(l.family ?? ''); mixStr(p.role ?? '');
     }
+    for (const p of this.props) { mixStr(p.kit); mix(p.lot.x); mix(p.lot.z); mix(p.lot.w); mix(p.lot.d); mix(p.variant ?? -1); }
     for (const p of this.landmarkLots) { mixStr(p.lot.id); mix(p.lot.seed); mix(p.lot.groundY); }
     for (const t of this.trees) { mix(t.x); mix(t.z); mixStr(t.kind); mix(t.variant); mix(t.lean); }
     for (const l of this.lamps) { mix(l.x); mix(l.z); mix(l.toward); mix(l.striped ? 1 : 0); }
@@ -485,7 +510,9 @@ export class DistrictPlanner {
       const sector = sectorOfBlock(b).id;
       const plots: Plot[] = [];
       const crossed = crossedByDiagonal(b);
-      for (const p of planBlock(b, rng, crossed)) {
+      const cut = planBlock(b, rng, crossed);
+      if (cut.court) this.courts.push({ block: b.id, district: b.district, rect: cut.court });
+      for (const p of cut.plots) {
         const fitted = p.w >= MIN_LOT && p.d >= MIN_LOT ? fitPlot(b, p) : null;
         if (fitted && fitted.w >= MIN_LOT && fitted.d >= MIN_LOT) plots.push(fitted);
       }
@@ -494,7 +521,8 @@ export class DistrictPlanner {
       const drafts = plots.map((p, n) => {
         const seed = hash2(bi * 64 + n, 0x10705, this.seed) | 0;
         const lrng = new Rng(seed);
-        const kind = SET_PIECE_BLOCKS[b.id] && plots.length === 1 ? 'building' : chooseKind(b, lrng);
+        const whole = plots.length === 1 && (!!SET_PIECE_BLOCKS[b.id] || SHRINE_BLOCKS[b.id] !== undefined);
+        const kind = whole ? 'building' : chooseKind(b, lrng);
         const floors = kind === 'building' ? floorsOf(b, p.x, p.z, lrng) : 1;
         let family = this.style.pickFamily(lrng.fork(1), b.district);
         // The town reads as one terracotta mass: the accent palettes (dark tile, green glaze, thatch) are kept to accents.
@@ -518,7 +546,11 @@ export class DistrictPlanner {
           groundY: TEMPEST_GROUND,
           neighbours: { left: infoOf(nextIsLeft ? next : prev), right: infoOf(nextIsLeft ? prev : next), back: infoOf(behind) },
         });
-        lots.push({ index: lots.length, lot, kind: d.kind, block: b.id, sector, piece: SET_PIECE_BLOCKS[b.id] && plots.length === 1 ? SET_PIECE_BLOCKS[b.id] : undefined });
+        lots.push({
+          index: lots.length, lot, kind: d.kind, block: b.id, sector,
+          piece: SET_PIECE_BLOCKS[b.id] && plots.length === 1 ? SET_PIECE_BLOCKS[b.id] : undefined,
+          role: SHRINE_BLOCKS[b.id] !== undefined && plots.length === 1 ? 'shrine' : undefined,
+        });
       });
     }
     return lots;
@@ -551,6 +583,21 @@ export class DistrictPlanner {
         groundY: TEMPEST_GROUND,
       });
       props.push({ index: props.length, kit: 'street-stall', lot });
+    }
+    // A well in the middle of each courtyard the rings of residential and commercial houses leave: the square of the block.
+    for (const { block, rect: c } of this.courts) {
+      const cw = c.x1 - c.x0 + 1, cd = c.z1 - c.z0 + 1;
+      if (cw < 9 || cd < 9) continue;
+      const x = c.x0 + ((cw - 7) >> 1), z = c.z0 + ((cd - 7) >> 1);
+      // Never on a street or a lot (a diagonal's lots can reach into the courtyard).
+      let clear = true;
+      for (let zz = z - 1; zz <= z + 7 && clear; zz++) for (let xx = x - 1; xx <= x + 7; xx++) if (roadAt(xx, zz) || this.lotAt(xx, zz)) { clear = false; break; }
+      if (!clear) continue;
+      const n = props.length;
+      props.push({
+        index: n, kit: 'well', variant: n % 2,
+        lot: new Lot({ id: `well.${block}`, x, z, w: 7, d: 7, facing: 2, district: 'residential', seed: hash2(n + 1, 0x3e11, this.seed) | 0, floors: 1, groundY: TEMPEST_GROUND }),
+      });
     }
     return props;
   }
@@ -585,7 +632,7 @@ export class DistrictPlanner {
         for (let x0 = b.rect.x0 + 3; x0 <= b.rect.x1 - 3; x0 += 7) {
           const h = hash2(x0, z0, this.seed ^ 0xc0);
           const x = x0 + (h & 3) - 1, z = z0 + ((h >>> 2) & 3) - 1;
-          if (((h >>> 8) & 255) / 256 > 0.6 || !inBlock(b, x, z) || this.roadNear(x, z, 3) || this.lotNear(x, z, 3)) continue;
+          if (((h >>> 8) & 255) / 256 > 0.6 || !inBlock(b, x, z) || this.roadNear(x, z, 3) || this.lotNear(x, z, 3) || this.propNear(x, z, 3)) continue;
           if (trees.some((t) => Math.abs(t.x - x) < 5 && Math.abs(t.z - z) < 5)) continue;
           trees.push({ x, z, kind: (h >>> 12) % 3 === 0 ? 'cedar' : (h >>> 12) % 3 === 1 ? 'sakura' : 'birch', variant: (h >>> 16) % 8, lean: 4 });
         }
@@ -597,6 +644,10 @@ export class DistrictPlanner {
   private roadNear(x: number, z: number, r: number): boolean {
     for (let dz = -r; dz <= r; dz += 1) for (let dx = -r; dx <= r; dx += 1) if (this.roadOf(x + dx, z + dz)) return true;
     return false;
+  }
+
+  private propNear(x: number, z: number, r: number): boolean {
+    return this.props.some((p) => x >= p.lot.x - r && x < p.lot.x + p.lot.w + r && z >= p.lot.z - r && z < p.lot.z + p.lot.d + r);
   }
 
   private lotNear(x: number, z: number, r: number): boolean {

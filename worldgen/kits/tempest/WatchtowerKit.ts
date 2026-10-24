@@ -6,7 +6,7 @@ import { BuildingKit, KitSize } from '../../structures/BuildingKit';
 import { Lot } from '../../structures/Lot';
 import { StylePack } from '../../structures/StylePack';
 import { FLARED, FLARED_TIGHT } from '../../structures/roofProfile';
-import { Rect, framedWindow, furnishRoom, mirrorX, pathDoors, roofOver, stairPath, straightPath, windowRow } from './parts';
+import { Rect, WOOD_SLAB, framedWindow, furnishRoom, mirrorX, pathDoors, roofOver, stairPath, straightPath, windowRow } from './parts';
 
 // The watchtower: a stone base with arrow slits, timber storeys above it with lit screens and a lacquered rail on the
 // ledge, a skirt roof under the upper storey, the corners swept up, lanterns on the posts and a stair inside up to the top:
@@ -94,18 +94,26 @@ export class WatchtowerKit extends BuildingKit {
     // Inside: a flight of five up the east side of the base into the first storey, another up the west side to the next.
     const flight1 = straightPath(t1Inner.x1, t1Inner.z1, NORTH, 5);
     const flight2 = straightPath(t1Inner.x0, t1Inner.z1, NORTH, 5);
+    // Nothing stands at the foot of a flight, on its landing or beside it: a player climbs a stair from the cell in front of it.
+    const foot = (f: ReadonlyArray<readonly [number, number]>): Rect => rect(f[0][0] - 1, f[0][1], f[0][0] + 1, f[0][1] + 1);
     const groundRoom = b.room(baseInner, 1, { doors: [{ x: cx, z: base.z1 - 1, inward: NORTH }, ...pathDoors(flight1)] });
-    furnishRoom(b, groundRoom, 'store');
+    furnishRoom(b, groundRoom, 'store', { keepClear: [foot(flight1)] });
     const storey = b.room(baseInner, BASE_TOP, { doors: [...pathDoors(flight1), ...(floorsAbove.length > 0 ? pathDoors(flight2) : [])] });
-    furnishRoom(b, { ...storey, rect: t1Inner }, 'living');
+    furnishRoom(b, { ...storey, rect: t1Inner }, 'living', { keepClear: [foot(flight2), rect(flight2[0][0] - 1, flight2[0][1], flight2[0][0] + 1, flight2[0][1]), rect(flight1[4][0] - 1, flight1[4][1] - 1, flight1[4][0] + 1, flight1[4][1])] });
     if (floorsAbove.length > 0) {
       const upperRoom = b.room(t1Inner, PLATE1, { doors: pathDoors(flight2) });
-      furnishRoom(b, upperRoom, variant === 0 ? 'sleeping' : 'empty');
+      furnishRoom(b, upperRoom, variant === 0 ? 'sleeping' : 'empty', { keepClear: [rect(flight2[4][0] - 1, flight2[4][1] - 1, flight2[4][0] + 1, flight2[4][1])] });
       b.set(cx, PLATE1 - 1, cz, 'light');
     }
     b.set(cx, BASE_TOP - 1, cz, 'light');
     stairPath(b, flight1, 1);
-    if (floorsAbove.length > 0) stairPath(b, flight2, BASE_TOP);
+    if (floorsAbove.length > 0) {
+      stairPath(b, flight2, BASE_TOP);
+      // The second flight starts against the wall of the storey, with no cell in front of its foot: a player steps up onto it from the side,
+      // which the back half of a stair block forbids at floor height. A slab beside the foot is the half step in between.
+      const beside = flight2[0][0] + (flight2[0][0] < cx ? 1 : -1);
+      b.set(beside, BASE_TOP + 1, flight2[0][1], WOOD_SLAB, 0);
+    }
     b.treeSpot(1, 1, 'cedar');
     b.treeSpot(W - 2, 1, 'cedar');
     void WEST;

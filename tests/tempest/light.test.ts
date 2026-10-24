@@ -38,7 +38,9 @@ describe('the light of the town', () => {
     expect(lanterns.length).toBeGreaterThan(3);
     for (const [lx, y, lz] of lanterns) {
       expect(light.block(lx, y, lz), `lantern ${lx},${y},${lz}`).toBe(registry.get(cellId(chunk.getCell(lx, y, lz))).emits);
-      // The cell under it has lost one step of the light (paper lets it through, and a lantern hangs over air, a bench or a flower).
+      // The cell under it has lost one step of the light (paper lets it through, and a lantern hangs over air, a bench or a flower). A lantern
+      // that stands on a counter or a table has a solid block under it, which lights nothing.
+      if (registry.isOpaque(cellId(chunk.getCell(lx, y - 1, lz)))) continue;
       expect(light.block(lx, y - 1, lz)).toBeGreaterThanOrEqual(registry.get(cellId(chunk.getCell(lx, y, lz))).emits - 2);
     }
     // And the glow reaches the paving: some street cell next to a lantern reads at least 8.

@@ -4,6 +4,7 @@ import { GardenHouseKit } from './GardenHouseKit';
 import { GardenPlotKit } from './GardenPlotKit';
 import { InnKit } from './InnKit';
 import { MarketStallKit } from './MarketStallKit';
+import { PublicHallKit } from './PublicHallKit';
 import { RiverBridgeKit } from './RiverBridgeKit';
 import { ShopKit } from './ShopKit';
 import { ShrineKit } from './ShrineKit';
@@ -11,8 +12,9 @@ import { StorehouseKit } from './StorehouseKit';
 import { TownhouseKit } from './TownhouseKit';
 import { WatchtowerKit } from './WatchtowerKit';
 import { WellKit } from './WellKit';
+import { WorkshopKit } from './WorkshopKit';
 
-export { GardenHouseKit, GardenPlotKit, InnKit, MarketStallKit, RiverBridgeKit, ShopKit, ShrineKit, StorehouseKit, TownhouseKit, WatchtowerKit, WellKit };
+export { GardenHouseKit, GardenPlotKit, InnKit, MarketStallKit, PublicHallKit, RiverBridgeKit, ShopKit, ShrineKit, StorehouseKit, TownhouseKit, WatchtowerKit, WellKit, WorkshopKit };
 
 // The kits of Tempest's districts and the chance of each on a lot of a district. The names are the layout's districts
 // (civic, guest, government, public, luxury, commercial, production, storage, residential, tourism) and the kinds of lot the
@@ -31,6 +33,9 @@ const WEIGHTS = {
   'market-stall': { market: 6, commercial: 3, tourism: 3, production: 0.5, residential: 0.3 },
   well: { residential: 0.6, civic: 2, production: 0.5, commercial: 0.3, shrine: 0.5, luxury: 0.3, 'forest-edge': 0.5 },
   'river-bridge': { bridge: 10 },
+  // The production sector's forges, smithies, weaving halls and lumber yards; the public strip's schools, clinics and barracks.
+  workshop: { production: 9, storage: 1, commercial: 0.3, residential: 0.03 },
+  'public-hall': { public: 9, government: 1.5, civic: 0.5, tourism: 0.2 },
 } as const;
 
 /**
@@ -41,7 +46,7 @@ export const registerTempestKits = (registry: KitRegistry, style: StylePack): Ki
   if (style.familyNames.length === 0) throw new Error(`Style pack ${style.name} has no palette families: the Tempest kits choose one per lot`);
   const kits = [
     new TownhouseKit(), new ShopKit(), new InnKit(), new ShrineKit(), new WatchtowerKit(), new StorehouseKit(),
-    new GardenHouseKit(), new GardenPlotKit(), new MarketStallKit(), new WellKit(), new RiverBridgeKit(),
+    new GardenHouseKit(), new GardenPlotKit(), new MarketStallKit(), new WellKit(), new RiverBridgeKit(), new WorkshopKit(), new PublicHallKit(),
   ];
   for (const kit of kits) registry.register(kit, WEIGHTS[kit.name as keyof typeof WEIGHTS], 0);
   return registry;

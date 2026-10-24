@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ShapedBlock } from '../../content/blocksShaped';
 import { TempestBlock as T } from '../../content/blocksTempest';
 import { AIR_CELL, cellId, cellState } from '../../engine/cell';
 import { createTempestKitRegistry } from '../../worldgen/kits/tempest';
@@ -8,6 +9,7 @@ import { BuildingKit, buildWithKit } from '../../worldgen/structures/BuildingKit
 import { Lot } from '../../worldgen/structures/Lot';
 import { TEMPEST_STYLE } from '../../worldgen/tempest/style';
 import { tolerant } from '../perf';
+import { BlueprintWorld, walk } from '../landmarks/helpers';
 import { floatingCells, registry, roofIds, unsupportedRoof, walkFrom } from './analysis';
 
 const kits = createTempestKitRegistry(TEMPEST_STYLE);
@@ -31,7 +33,7 @@ const minY = (kit: BuildingKit): number => (kit.name === 'river-bridge' ? BRIDGE
 describe('the Tempest district kits', () => {
   it('has the kits of the brief, and at least fourteen variants', () => {
     const names = kits.kits.map((k) => k.name).sort();
-    expect.soft(names).toEqual(['garden-house', 'garden-plot', 'inn', 'market-stall', 'river-bridge', 'shop', 'shrine', 'storehouse', 'townhouse', 'watchtower', 'well']);
+    expect.soft(names).toEqual(['garden-house', 'garden-plot', 'inn', 'market-stall', 'public-hall', 'river-bridge', 'shop', 'shrine', 'storehouse', 'townhouse', 'watchtower', 'well', 'workshop']);
     const total = kits.kits.reduce((s, k) => s + k.variants, 0);
     expect.soft(total).toBeGreaterThanOrEqual(14);
     // Every kit declares sizes it can build and storeys inside 1 to 3.
@@ -176,6 +178,36 @@ describe('the Tempest district kits', () => {
       const wanted = kit.name === 'storehouse' || kit.name === 'shrine' || kit.name === 'garden-house' ? need : floors >= 2 || kit.name === 'watchtower' ? need : 0;
       expect.soft(walk.maxY, label(kit, variant)).toBeGreaterThanOrEqual(wanted);
     }
+  });
+
+  it('can be climbed to the top floor by a player with the game\'s own collision, not just by the analysis walker, at every size: a stair is entered from the cell in front of its foot', () => {
+    let climbed = 0;
+    for (const { kit, variant } of everyBuild()) {
+      const mid = (a: number, c: number): number => Math.floor((a + c) / 2);
+      const sizes: Array<[number, number]> = [];
+      for (const w of [kit.frontage.min, mid(kit.frontage.min, kit.frontage.max), kit.frontage.max]) for (const d of [kit.depth.min, mid(kit.depth.min, kit.depth.max), kit.depth.max]) sizes.push([w, d]);
+      for (const [w, d] of sizes) {
+        for (const seed of [1, 2, 3]) {
+          const lot = lotFor(kit, variant, { seed: seed * 977, w, d, floors: kit.floors.max, family: 'timber-terracotta' });
+          const bp = buildWithKit(kit, lot, TEMPEST_STYLE, variant);
+          const door = bp.markers.find((m) => m.kind === 'door' && m.facing === 2);
+          const reference = walkFrom(bp, lot.frontage, lot.depth).maxY;
+          let stairs = 0;
+          bp.forEach((_x, _y, _z, c) => { if (cellId(c) === ShapedBlock.DARK_PLANK_STAIRS) stairs++; });
+          if (!door || reference < 5 || stairs === 0) continue;
+          const places = walk(new BlueprintWorld(bp), { x: door.x, z: door.z + 3, feet: door.y - 0.5 }, {
+            minX: -3, maxX: lot.frontage + 3, minZ: -3, maxZ: lot.depth + 6, max: 200000,
+          });
+          let top = 0;
+          for (const p of places.values()) top = Math.max(top, p.feet);
+          // The analysis walker's top is the highest cell it stands in, which may be on a roof or a ledge: the floor a stair serves is up to two and a
+          // half blocks under it, and a stair that cannot be climbed leaves the player a storey short, not two blocks.
+          expect.soft(top, label(kit, variant, `${w}x${d} seed ${seed * 977}: top ${top}, analysis ${reference}`)).toBeGreaterThanOrEqual(reference - 2.6);
+          climbed++;
+        }
+      }
+    }
+    expect(climbed).toBeGreaterThan(300);
   });
 
   it('has windows that let the light through, and lit ones that glow', () => {
