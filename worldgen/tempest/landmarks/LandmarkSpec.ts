@@ -34,6 +34,12 @@ export interface LandmarkSpec {
    * size at the origin and a district planner stands it on a lot of its own, with `placeOnLot`. A zone skips these.
    */
   free?: boolean;
+  /**
+   * The channel the landmark assumes under it, in its own frame, for pieces that cross water (the east bridge): the river runs
+   * along z between columns x0 and x1, its bed `bed` rows below the ground row and its surface at row `surface`. The zone carves
+   * the real river; the viewer digs this one so the arch can be seen over water.
+   */
+  river?: { x0: number; x1: number; bed: number; surface: number };
   /** The id of the landmark that already contains this one (the Town Hall is drawn inside the compound): a zone places only the container. */
   partOf?: string;
   /** Draws the landmark in its frame. Must be deterministic: everything that varies comes from `rng`. */

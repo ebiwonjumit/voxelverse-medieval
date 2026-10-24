@@ -12,6 +12,7 @@ Step 7.1b of Phase 7 builds the machinery the town is made with: a **layout** th
 | The Tempest layout | `worldgen/tempest/layout.ts` |
 | The demonstration kits | `worldgen/tempest/kits/` (`TimberHouseKit`, `GateKit`, `LanternPostKit`, `RoofStudyKit`) |
 | The kit viewer | `components/sandbox/KitSandbox.tsx` and `kitsLayout.ts` |
+| Landmarks, set pieces, the interior furnisher and their viewer | `worldgen/tempest/landmarks/`, `worldgen/tempest/interiors/`, `components/sandbox/LandmarkSandbox.tsx`: see [tempest-landmarks.md](tempest-landmarks.md) |
 
 `worldgen/structures` and `worldgen/tempest` are pure data code like the rest of `worldgen/`: no Three.js, React or DOM (`tests/worldgen/structures-purity.test.ts`). The engine and `content/` never import them.
 
@@ -287,6 +288,10 @@ Honestly, comparing the viewer with Tempest-3, -4, -5 and -7:
 - **Yurt domes, the aqueduct and the glowing terraced pools** are not built; the layout reserves their places.
 - **Street life:** noren, awnings, signs, barrels and laundry exist as helpers and are used on the demonstration house and gate, but the town's streets will only look lived in when the district kits use them all.
 - **Plaster is greyer** than the pictures' white at noon; that is the tile, not the builder.
+
+## Landmarks and interiors
+
+Step 7.2c draws the named places of the layout by hand (the civic compound with the Town Hall, the arena, the Central Square, the four gates, the cave, the pools, the cairn, the stalls, the pastures, the bridge, the aqueduct, the lumber clearing, and a bell tower, market hall and bath house for the planner to place) and gives the kits a `furnish(blueprint, room, kind, rng)` that fills a room with a hearth, low tables and cushions, futons, shelves, lanterns and the rest, and the larger rooms of the pictures (council hall with a dais, forge, weaving room). Each landmark is a `LandmarkSpec` that builds into exactly the layout's footprint, and `?sandbox=landmarks` shows every one, by day and night, with a cutaway to see into the rooms. All of it is in [tempest-landmarks.md](tempest-landmarks.md).
 
 ## Tests
 

@@ -17,14 +17,14 @@ export const BRIDGE_W = 23;
 export const BRIDGE_D = 13;
 /** The column of the crown of the arch, where the river runs: the layout's river crosses the road at x 340, 14 cells in. */
 const CROWN_X = 14;
-const CROWN_RISE = 4;
+const CROWN_RISE = 6;
 const ARCH_HALF = 3;
-const SPRING_Y = -1;
+const SPRING_Y = 0;
 
-/** The deck's top row at column x: a hump bridge, flat on the crown and at the foot of each ramp, a step a cell or two between. */
+/** The deck's top row at column x: a hump bridge, flat over the crown, then a block lower each cell down to the road. */
 export const bridgeDeck = (x: number): number => {
   const t = Math.abs(x - CROWN_X);
-  return Math.max(0, Math.min(CROWN_RISE, Math.round(CROWN_RISE - (t - 2) * 0.7)));
+  return Math.max(0, Math.min(CROWN_RISE, CROWN_RISE - (t - 2)));
 };
 
 /**
@@ -46,7 +46,7 @@ const buildBridge = (style: StylePack, rng: Rng): Blueprint => {
         const dx = x - CROWN_X;
         const shape = Math.abs(dx) <= ARCH_HALF + 1 ? archCell(dx, y - SPRING_Y, ARCH_HALF) : 'solid';
         if (shape === 'open') continue;
-        if (shape === 'stair') { b.stair(x, y, z, dx < 0 ? WEST : EAST, 'stoneStairs', true); continue; }
+        if (shape === 'stair') { b.stair(x, y, z, dx < 0 ? WEST : EAST, STONE.brickStairs, true); continue; }
         const ring = Math.abs(dx) <= ARCH_HALF + 1;
         b.set(x, y, z, ring ? STONE.brick : hash01(x, y + z * 7, 91) < 0.2 ? STONE.mossyCobble : 'wallBase');
       }
@@ -88,6 +88,7 @@ const buildBridge = (style: StylePack, rng: Rng): Blueprint => {
 
 export const eastBridge = (): LandmarkSpec => ({
   id: 'east-bridge', name: 'East bridge', covers: ['east-bridge'], facing: 1, footprint: footprintOf('east-bridge'), frame: 'world', build: buildBridge,
+  river: { x0: CROWN_X - 3, x1: CROWN_X + 3, bed: -4, surface: -1 },
 });
 
 // --- The aqueduct ------------------------------------------------------------------------------------------------------------------

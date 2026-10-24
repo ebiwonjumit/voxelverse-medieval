@@ -120,6 +120,18 @@ export const buildLandmarkStage = (blocks: BlockRegistry, landmarks: LandmarkReg
       put(x, 0, z, grass);
     }
   }
+  // A landmark over water has its river dug under it: the bed and the water, so the arch stands over something.
+  if (spec.river) {
+    const water = id('water');
+    for (let x = spec.river.x0; x <= spec.river.x1; x++) {
+      for (let z = -MARGIN; z < depth + MARGIN; z++) {
+        for (let y = spec.river.bed + 1; y <= 0; y++) {
+          if (y <= spec.river.surface) put(x, y, z, water);
+          else cells.delete(`${x},${y},${z}`);
+        }
+      }
+    }
+  }
   let maxY = 6;
   blueprint.forEach((x, y, z, cell) => {
     if (!inCut(options.cut, x, y, z)) return;

@@ -6,6 +6,7 @@ import { Lot } from '../../worldgen/structures/Lot';
 import { createTempestLandmarks, LandmarkSpec, buildLandmark, frameSize, placeBlueprint, landmarkLot, placeOnLot } from '../../worldgen/tempest/landmarks';
 import { TEMPEST_STYLE } from '../../worldgen/tempest/style';
 import { DX, DZ, Dir } from '../../worldgen/structures/BlueprintBuilder';
+import { bridgeDeck } from '../../worldgen/tempest/landmarks/Waterworks';
 import { BlueprintWorld, canStandIn, columnsOf, floatingCells, registry as blocks, walk } from './helpers';
 
 // The hand-authored landmarks: each one fits its footprint, is the same every time, has nothing floating, can be walked into
@@ -159,7 +160,7 @@ describe('the long set pieces', () => {
     const { frontage, depth } = frameSize(s);
     const world = new BlueprintWorld(bp);
     const places = walk(world, { x: -3, z: 6, feet: 0.5 }, { minX: -4, maxX: frontage + 3, minZ: -4, maxZ: depth + 3 });
-    expect(canStandIn(places, 14, 5, 6), 'the crown').toBe(true);
+    expect(canStandIn(places, 14, bridgeDeck(14) + 1, 6), 'the crown').toBe(true);
     expect(canStandIn(places, frontage + 2, 1, 6), 'the far bank').toBe(true);
     // And the arch is open under it: a person could stand in the river bed under the crown.
     expect(bp.solid(14, 0, 6)).toBe(false);

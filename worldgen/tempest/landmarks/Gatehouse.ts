@@ -106,13 +106,12 @@ const buildModestGate = (style: StylePack, rng: Rng, variant: number): Blueprint
   return b.build();
 };
 
-const gate = (id: string, name: string, facing: 0 | 1 | 2 | 3, big: boolean, variant: number, note: string): LandmarkSpec => ({
+const gate = (id: string, name: string, facing: 0 | 1 | 2 | 3, big: boolean, variant: number): LandmarkSpec => ({
   id, name, covers: [id], facing, footprint: footprintOf(id), frame: 'front-south',
   build: (style, rng) => (big ? buildBigGate(style, rng, variant) : buildModestGate(style, rng, variant)),
-  ...(note ? {} : {}),
 });
 
-export const westGate = (): LandmarkSpec => gate('west-gate', 'West gate', 3, true, 0, 'The road to the Town of Beginnings.');
-export const northGate = (): LandmarkSpec => gate('north-gate', 'North gate', 0, true, 1, 'The road towards Fremmevilla.');
-export const eastGatehouse = (): LandmarkSpec => gate('east-gatehouse', 'East gatehouse', 1, false, 0, 'A plain road that fades into the wilderness.');
-export const southGatehouse = (): LandmarkSpec => gate('south-gatehouse', 'South gatehouse', 2, false, 1, 'A plain road that fades into the wilderness.');
+export const westGate = (): LandmarkSpec => gate('west-gate', 'West gate', 3, true, 0);
+export const northGate = (): LandmarkSpec => gate('north-gate', 'North gate', 0, true, 1);
+export const eastGatehouse = (): LandmarkSpec => gate('east-gatehouse', 'East gatehouse', 1, false, 0);
+export const southGatehouse = (): LandmarkSpec => gate('south-gatehouse', 'South gatehouse', 2, false, 1);
