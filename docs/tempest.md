@@ -314,7 +314,7 @@ The planner, terrain, zone, paving, filler kits and the chunk helper are exporte
 
 ### The planner
 
-`new DistrictPlanner({ seed, style?, groundAt? })` plans the whole town in 36 ms (node, measured) and is a pure function of the seed: `hash()` is a 32 bit hash of every lot, landmark lot, tree, lamp and stall, and two planners with one seed agree on it. The zone gives it `groundAt`, so a landmark's lot stands on the right ground.
+`new DistrictPlanner({ seed, style?, groundAt? })` plans the whole town in 40 to 60 ms (node, measured) and is a pure function of the seed: `hash()` is a 32 bit hash of every lot, landmark lot, tree, lamp and stall, and two planners with one seed agree on it. The zone gives it `groundAt`, so a landmark's lot stands on the right ground.
 
 **Blocks to lots.** A block is 38 cells square (the annexes beside the compound 12 wide). A **verge** one cell wide runs round it (`VERGE`): street trees, paving in the busy districts, street furniture. Inside it, the block is cut from its edges inwards in one of five ways, chosen per block from its district (`layoutStyle`) and its seed:
 
@@ -344,7 +344,7 @@ Storeys follow the distance from the Central Square, as the plan asks: two to th
 
 **Lookups.** Roads, blocks and lots of the built grid are rasterised once into three flat arrays (local -216 to 216 both ways, 187,000 cells), so `lotAt(x, z)`, `roadOf(x, z)` and `blockOf(x, z)` are one array read; outside the raster they fall back to the layout. `lotsIntersecting(minX, minZ, maxX, maxZ)` lists the lots with a cell in a chunk, `landmarksIntersecting(..., margin)` the landmark lots, `lotById(id)`, `lampAt(x, z)`, `treesInTile(tx, tz)` (16 cell tiles, for the zone's column lookups). A test checks `lotAt` against a brute-force scan of 4,000 random cells, and `lotsIntersecting` against a scan for four chunks.
 
-**Landmark lots.** `planner.landmarkLots` has a `Lot` for each of the layout's 25 landmarks: its id, its bounding rectangle, its facing and a `groundY`: the ground at its centre, except the bridge, which stands at the height of the road it carries (the ground at its end, 8). The cairn's lot is therefore at 13, on its hill, and the north cave's at 14.
+**Landmark lots.** `planner.landmarkLots` has a `Lot` for each of the layout's 23 landmarks: its id, its bounding rectangle, its facing and a `groundY`: the ground at its centre, except the bridge, which stands at the height of the road it carries (the ground at its end, 8). The cairn's lot is therefore at 13, on its hill, and the north cave's at 14.
 
 **Street trees, lamps, stalls.** A **tree** in the verge where two lots of a side meet (thinned to one per 8 cells), leaning its crown over the street so that it clears the houses; trees in the open ground a block's lots leave (a jittered lattice of 7 cells, a tree where no lot or road is within 3 cells). 304 trees. Types by hash: 55 percent sakura, 25 cedar, 20 birch on the streets. **Lamp posts**: 1,060, on the edge of every road, every 10 cells on the avenues (both sides), 12 on streets, lanes and the boundary road (the two sides half a spacing apart) and down each side of a diagonal (69 of them), 24 on the roads out within 262 cells of the centre; never at a crossing, in the Central Square or at a gate. Every other lamp is hung with a red-and-white lantern. **Stalls**: 12 market stalls on the east shoulder of the boundary road every 24 cells, their fronts to the road (the `street-stall` kit).
 
@@ -414,7 +414,7 @@ Everything that does not depend on the height is computed once per column and ke
 ![The forest and the north road](screens/p7/zone-forest.png)
 ![The town from above, all box houses](screens/p7/zone-aerial.png)
 
-*These were taken in the game itself with the zone swapped in locally (an uncommitted change of three lines, below), at 1280 by 720, noon unless said.*
+*These were taken in the game itself with the zone swapped in locally (a local change, not committed, described below), at 1280 by 720, noon unless said.*
 
 ### Wiring it in
 
@@ -428,7 +428,7 @@ Also for that step: the grass of the zone takes its colour from `GRASS_TEMPEST` 
 
 ### Chunk cost
 
-In node, `tools/bench-tempest-zone.ts`, a chunk built from scratch (stone, water and the zone's cells, with the zone's caches cold): **8.6 ms on average, 9.5 ms at the 95th percentile**, 25.7 ms the worst (the first chunk of a region that builds blueprints), over 274 chunks across the dense town, the tourism sector, the compound strip, the farms, the river, the pastures, the forest and the north road; 8 ms again when warm. Almost all of that is filling the column below the ground with stone, which the legacy zone's chunks do too, so the zone itself adds little. The workers measured 22.5 ms per job for the legacy zones and about 12 for the new wilderness ([perf-after-integration.md](perf-after-integration.md)). The planner takes 36 ms and the zone 31 ms to construct, once per worker. Blueprints are small: all 289 box-house lots together are 1.3 MB (4 KB on average, 47 KB the largest), so the cache of 256 holds almost the whole town; real kits' buildings will be larger.
+In node, `tools/bench-tempest-zone.ts`, a chunk built from scratch (stone, water and the zone's cells, with the zone's caches cold): **8.7 ms on average, 9.5 ms at the 95th percentile**, 22.9 ms the worst (the first chunk of a region that builds blueprints), over 274 chunks across the dense town, the tourism sector, the compound strip, the farms, the river, the pastures, the forest and the north road; 8 ms again when warm. Almost all of that is filling the column below the ground with stone, which the legacy zone's chunks do too, so the zone itself adds little. The workers measured 22.5 ms per job for the legacy zones and about 12 for the new wilderness ([perf-after-integration.md](perf-after-integration.md)). The planner takes 40 to 60 ms and the zone 35 to 55 ms to construct, once per worker. Blueprints are small: all 289 box-house lots together are 1.3 MB (4 KB on average, 47 KB the largest), so the cache of 256 holds almost the whole town; real kits' buildings will be larger.
 
 ### The maps
 

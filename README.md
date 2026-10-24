@@ -112,7 +112,7 @@ VoxelVerse is partway through a rebuild. The goal is to make **Tempest and the w
 - **Merged to `main`:** P0 to P3 and P6 (PR #1 and PR #2). The game on `main` still runs the old terrain, because the new generator was merged but not yet connected.
 - **In the next PR:** P4 and P5, textures for the 23 nature blocks, the new generator running the game (biomes, rivers, roads, smooth zone edges), and this README.
 - **Speed:** on the benchmark flythrough (production build, Apple M4, headless Chrome, 8 chunks of render distance) the game holds 60 fps with no frame over 50 ms. Before the rebuild, jumping ran at 9.7 fps with 189 ms frames ([results](docs/perf-after-integration.md)). Headless Chrome caps at 60 fps, so this shows the frame budget is met, not how much headroom is left.
-- **Tests:** about 1,860 unit tests cover the voxel core, mesher, worker pool, textures, models, collision, light, sky, terrain, biomes and roads, the Tempest blocks, blueprints, builder, kits and layout, and compare the new world with the old one.
+- **Tests:** about 1,840 unit tests cover the voxel core, mesher, worker pool, textures, models, collision, light, sky, terrain, biomes and roads, the Tempest blocks, blueprints, builder, kits and layout, and compare the new world with the old one.
 
 ### What comes next
 

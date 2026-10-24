@@ -138,8 +138,6 @@ export class VoxelverseGenerator implements WorldGenerator {
         const top = Math.min(ground + ZONE_SCAN_ABOVE, WORLD_MAX_Y);
         for (let y = ground; y <= top; y++) {
           if (y > ground && y <= WATER_LEVEL) continue; // already water
-          const zc = col.zone as unknown as { getCell?: (x: number, y: number, z: number, g: number, lod: LodLevel) => number };
-          if (zc.getCell) { const cell = zc.getCell(x, y, z, ground, lod); if (cell !== 0) chunk.setCell(lx, y, lz, cell); continue; }
           const block = col.zone.getBlock(x, y, z, ground, lod);
           if (block !== BlockType.AIR) chunk.setCell(lx, y, lz, packCell(block));
         }
@@ -178,13 +176,6 @@ export class VoxelverseGenerator implements WorldGenerator {
       if (post !== NO_BLOCK && canReplace(block, post)) return post;
     }
     return block;
-  }
-
-  sampleCell(x: number, y: number, z: number): number {
-    const col = this.columns.sample(x, z, this.scratch);
-    const zc = col.zone as unknown as { getCell?: (x: number, y: number, z: number, g: number, lod: LodLevel) => number };
-    if (!col.wild && zc.getCell && y >= col.ground && y > WATER_LEVEL && !col.road.onRoad) return zc.getCell(x, y, z, col.ground, LodLevel.HIGH);
-    return packCell(this.sampleBlock(x, y, z));
   }
 
   terrainHeight(x: number, z: number): number {
