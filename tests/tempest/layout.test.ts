@@ -349,6 +349,12 @@ describe('Tempest layout: the land beyond the grid', () => {
     expect(districtAt(worldX(-450), worldZ(300))).toBe('forest');
   });
 
+  it('keeps a clearing round the east bridge, so the arch and the river are seen from the banks and not through trees', () => {
+    const b = landmarkById('east-bridge')!.shape as { x0: number; x1: number; z0: number; z1: number };
+    for (const [x, z] of [[b.x0 - 20, b.z0 - 20], [b.x1 + 20, b.z1 + 20], [b.x0 - 20, b.z1 + 20], [(b.x0 + b.x1) / 2, b.z0 - 20]]) expect(isClearing(x, z), `${x},${z}`).toBe(true);
+    expect(isClearing(b.x0 - 30, 0)).toBe(false);
+  });
+
   it('is deterministic and pure: asking twice gives the same answers', () => {
     for (let i = 0; i < 300; i++) {
       const x = 1500 - 400 + ((i * 97) % 800), z = -400 + ((i * 131) % 800);

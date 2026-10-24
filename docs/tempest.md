@@ -292,7 +292,7 @@ Honestly, comparing the viewer with Tempest-3, -4, -5 and -7:
 
 ## The district planner and the zone
 
-Step 7.2a builds the town itself: a **planner** that cuts the layout's blocks into lots and decides where the street trees and lamp posts stand, the **terrain** of the zone, the **countryside** round the grid, and **`TempestCityZone`**, which answers every cell of the footprint from them and from the kits' buildings. It extends the legacy `Zone`, so it can stand where `TempestZone` stands today; the integration step swaps it in ([Wiring it in](#wiring-it-in)). Nothing in the game uses it yet.
+Step 7.2a builds the town itself: a **planner** that cuts the layout's blocks into lots and decides where the street trees and lamp posts stand, the **terrain** of the zone, the **countryside** round the grid, and **`TempestCityZone`**, which answers every cell of the footprint from them and from the kits' buildings. It extends the legacy `Zone` and stands where `TempestZone` stood: step 7.5 swapped it in ([Wiring it in](#wiring-it-in), [the finished city](#the-finished-city)).
 
 | What | Where |
 | --- | --- |
@@ -419,13 +419,13 @@ Everything that does not depend on the height is computed once per column and ke
 
 ### Wiring it in
 
-The step that connects the zone to the game does three things; none is in this step.
+Done in step 7.5. The three things it took:
 
-1. `zones/index.ts`: `new TempestCityZone({ seed: WORLD_SEED })` in place of `new TempestZone()` (the zone list is read by `getZone`; the name is the old one, so `ZoneInfo`, the tint and the blender still match). The seed must be the generator's.
-2. `worldgen/VoxelverseGenerator.ts`: ask the zone for a **cell**, not a block id. In `generateChunk`, where it calls `col.zone.getBlock(...)` and `packCell(block)`, call `getCell(...)` when the zone has one and set that; add `sampleCell` (the engine's optional `WorldGenerator.sampleCell`) so a stair on a chunk border is read with its facing. The screenshots above were taken with exactly this (a dozen lines).
-3. Give the zone the registry of kits that exist by then, and register the landmark kits under the layout ids.
+1. `zones/index.ts` builds `new TempestCityZone({ seed: WORLD_SEED })` where it built `TempestZone`. `getZone`, `ZoneInfo`, the tint and the blender are unchanged because the name, footprint and atmosphere are the old ones. `zones/TempestZone.ts` stays as the reference the zone tests and `LegacyZoneAdapter` compare against; `tests/worldgen/integration.test.ts` checks that nothing in the game imports it and that `getZone(1500, 0)` is a `TempestCityZone`.
+2. `worldgen/VoxelverseGenerator.ts` asks zones for a **cell**: `Zone.getCell` (the default is `packCell(getBlock(...))`, so the other zones are unchanged) in `generateChunk` and in the new `sampleCell`, which `sampleBlock` wraps. A stair or an awning on a chunk border is read with its facing on both threads.
+3. The zone gets the real kits: `createTempestCityKits()` (`worldgen/tempest/cityKits.ts`, the district kits), the landmark registry (`createTempestLandmarks()`) and the interior furnisher. See [the finished city](#the-finished-city).
 
-Also for that step: the grass of the zone takes its colour from `GRASS_TEMPEST` (`#2e7d32`, a dark jungle green) in `meshing/biomeTint.ts`, which looks dark next to the pictures' yellow-green meadows; and the legacy `RoadNetwork` paints its own roads on the ground between the core (550) and the edge (700), so the zone leaves those columns' surface to it (it keeps its trees clear of them).
+The grass of the zone takes `GRASS_TEMPEST` in `worldConstants.ts`, now a fresh yellow-green (`#8fc34e`) like the meadows of the pictures (it was a dark jungle green). The legacy `RoadNetwork` paints its own roads on the ground between the core (550) and the edge (700), so the zone leaves those columns' surface to it (it keeps its trees clear of them).
 
 ### Chunk cost
 
@@ -446,7 +446,9 @@ Options: `--scale n`, `--out dir`, `--region lx0,lz0,lx1,lz1` (local cells, the 
 ![The whole footprint](maps/tempest-zone.png)
 ![The top block of every column](maps/tempest-ground.png)
 
-### Compared with the plan, and with the pictures
+### Compared with the plan, and with the pictures (as of step 7.2a, with box houses)
+
+*This is what the zone looked like before the kits and landmarks; the verdict on the finished town is [below](#the-finished-city).*
 
 Against `Tempest-6.png`: the two avenues cross at the square, the grid and the diagonals are the layout's, the civic compound is at the head of the north avenue, guest houses and government to its west, the public strip with its scaffolded plots to its east, luxury villas (some left as empty gardens) in the north west, commerce along the avenue and production, storage and dense residences in the west and south west, centre-east residences, the tourism sector in the south east with its big plots, parks, meadows and sites, farms with curved fields on the east, the river down the north east, the pasture and paddock on the west, the arena clearing north east, the forest round all of it. The planner makes about 290 lots; the picture has more and smaller houses in the dense blocks, so the real kits will want to fill narrow lots (9 to 12 wide) with several buildings or the planner a second pass for the small blocks.
 
@@ -543,6 +545,95 @@ Honestly, next to Tempest-3, -4, -5 and -7:
 
 Step 7.2c draws the named places of the layout by hand (the civic compound with the Town Hall, the arena, the Central Square, the four gates, the cave, the pools, the cairn, the stalls, the pastures, the bridge, the aqueduct, the lumber clearing, and a bell tower, market hall and bath house for the planner to place) and gives the kits a `furnish(blueprint, room, kind, rng)` that fills a room with a hearth, low tables and cushions, futons, shelves, lanterns and the rest, and the larger rooms of the pictures (council hall with a dais, forge, weaving room). Each landmark is a `LandmarkSpec` that builds into exactly the layout's footprint, and `?sandbox=landmarks` shows every one, by day and night, with a cutaway to see into the rooms. All of it is in [tempest-landmarks.md](tempest-landmarks.md).
 
+## The finished city
+
+Step 7.5 merged the three parallel steps (the planner and zone, the district kits, the landmarks and interiors), connected them to the game and judged the result. **Phase 7 is done**: the game's Tempest is `TempestCityZone` with real buildings on all of its roughly 257 lots.
+
+### How it fits together
+
+```
+zones/index.ts           new TempestCityZone({ seed: WORLD_SEED })       (the generator's seed)
+ |
+ |  planner   DistrictPlanner      layout.ts blocks -> lots (kind, kit hints, family), landmark lots, trees, lamps, stalls
+ |  terrain   TempestTerrain       the zone's ground: town level, roads out, river, ponds, the cairn's hill
+ |  kits      createTempestCityKits()   townhouse, shop, inn, shrine, watchtower, storehouse, garden house and plot, market stall, well, river bridge
+ |  landmarks createTempestLandmarks()  compound, Town Hall, arena, Central Square, the four gates, cave and pools, cairn, stalls, pastures,
+ |                                      east bridge, aqueduct, lumber clearing; bell tower, market hall and bath house as free pieces
+ |  interiors InteriorFurnisher    rooms, partitions, furniture and light inside the kits' and landmarks' buildings
+ v
+getCell(x, y, z, groundH, lod)   landmark > stall > lot blueprint > things on the ground > surface > air
+ |
+ +-- VoxelverseGenerator.generateChunk / sampleCell      same code in the workers and on the main thread
+```
+
+- **Order of answers.** A cell is a landmark's, a stall's, the lot's blueprint, a lamp, tree or crop, the surface, or air, first match wins (see [the zone](#the-zone)). The generator asks a zone for cells, so stairs, awnings, ridge horns and curtains keep their facing across chunk borders.
+- **Real kits only.** A test checks that no building lot falls back to the box house; plots bigger than any kit takes (fewer than 15) get a kit's building on part of the plot with lawn round it (`pickFitted`).
+- **Doors and stairs.** The walking tests (`tests/tempest/walk.test.ts`) drive the game's own collision from the street: along the west avenue to the Central Square and up the north avenue to the Town Hall steps, across the arched east bridge (and nowhere else across the river), and into every third house through its door and up its stairs to the top floor, with no jumping. To make that true the kits' stairs face the way they climb, doors have room to walk through, the river bank at the bridge is level with the road, and trees keep out of buildings and leave the two rows a person occupies clear (`tests/tempest/trees.test.ts`).
+- **Light.** Lanterns, ore lamps and lit shoji are baked by the normal light pass (`tests/tempest/light.test.ts`): a red lantern is full strength and lights a pool of paving below it, the ore lamps of the Central Square are 15 and 13, lit shoji are 8 and glow into their rooms, and a forest with nothing to light it is dark at night.
+- **Workers and main thread agree.** `tests/tempest/city.test.ts` and `tests/worldgen/integration.test.ts` compare chunks and single cells over the square, the compound, the arena, the west gate, the bridge, the market hall, the farms, a diagonal street, the cave and the cairn, generated in any order and with a cache of one lot, and mesh the Tempest chunks to the same geometry on both threads.
+
+### Compared with the plan, `Tempest-6.png`
+
+The top-down map of what the game builds (`docs/maps/tempest-ground.png`, the top block of every column) next to the picture:
+
+![The top block of every column, the way the game builds it](maps/tempest-ground.png)
+![The same from the game's camera, 400 blocks up](screens/p7/city-aerial-top.png)
+
+| In the plan | In the game |
+| --- | --- |
+| Central Square where the two avenues cross, chamfered blocks round it | yes: a roundabout with the fountain, four clipped blocks, fan-pattern paving |
+| Grid of 6 wide streets with diagonal cut-throughs (two in the north west, a fan in the north east) | yes: `diag-nw-a` and `-b`, `diag-ne` in four pieces |
+| Civic compound at the head of the north avenue, guest houses west, government residences, the public strip east with scaffolded plots | yes: the walled compound and the Town Hall behind its forecourt, the strip and the construction sites |
+| Luxury villas north west, some lots left as empty gardens | yes |
+| Commercial along the east-west avenue, production, storage at the far west, dense residences south west | yes |
+| Dense residences centre east cut by the diagonals | yes |
+| Planned tourism sector south east, a regular grid of big plots, deliberately less dense, sites and meadows | yes: inns, the bath house, the market hall, gardens and a park with a pond |
+| Boundary road with lamps and stalls, curved radial farms and a river down the east, the bridge | yes (the farm and river course beyond the picture's edge are ours) |
+| Horse pasture and paddock west, stalls flanking the west gate road | yes |
+| Forest hugging the edge with an irregular outline; sealed cave north; cairn south east; arena north east | yes |
+| Gates | the west and north gates are exactly the RoadNetwork's; the east and south ends are plain roads with a gatehouse |
+
+Mismatches found and fixed while comparing: the packed earth of the outer roads and the river banks showed as a checkerboard of dark soil and gravel tiles (earth is now one cell of soil in a hundred, banks are sand with a little gravel); the east bridge stood hidden in the forest (it now has a clearing, `isClearing`); the farms, the gate roads and the pasture were already where the plan has them. Left as they are, said plainly: the picture has about twice as many, smaller houses in the dense blocks, so ours read as sparser (257 lots; the kits refuse lots narrower than 9); the picture's north west has a diagonal pair that is a single pair of lines, the layout has two streets (see [Deviations](#deviations-from-the-picture)).
+
+### Compared with the pictures, and what is still missing
+
+Next to Tempest-3, -4, -5 and -7, honestly:
+
+- **What reads right.** From the air the town is one warm terracotta mass with dark ridged tile, green glaze and thatch as accents (`city-aerial.png`, `city-aerial-top.png`, against Tempest-1 and -8). The civic hall is white with a teal hip roof and pediment gables behind a walled forecourt with a bollard line (`city-compound.png`, `city-compound-aerial.png`, against Tempest-3). Eye-level streets have dark timber against white plaster, half-timber gables, deep tiled eaves, striped awnings, noren, signs, barrels and crates, lit shoji and red lanterns on every lamp post (`city-commercial-avenue.png`, `city-square-day.png`, `city-pasture.png`, against Tempest-4). The Central Square is a stone plaza with fan cobbles, a fountain with glowing ore and a line of red lanterns up the north avenue; at night the lanterns, the ore lamps and the shoji are the light (`city-square-night.png`, `city-commercial-night.png`), and the cave portal glows blue in its rock face.
+- **Weaker than the pictures.** The Town Hall is smaller and plainer than Tempest-3's (no arched windows, balustrade or portico detail, fewer storeys). The streets are grey stone where the pictures' are warm beige and pink cobbles, and the lawns are flat; there are no yurts, no lettered signs (on purpose), and no glass shop fronts. Night lighting is modest compared with Tempest-4's hanging lanterns: a lantern lights a few blocks, so the streets read as lit only because of the 1,060 lamp posts. Pine and sakura crowns are large and sometimes overhang a street (`city-production-quarter.png`). The forest edge is a hard line of crowns rather than a ragged one (`city-forest-edge.png`). Interiors are furnished but small, and none is shown in the screens beyond a shop (`city-interior.png`): the council hall with its dais exists in the Town Hall ([tempest-landmarks.md](tempest-landmarks.md)), while the forge and the weaving room of Tempest-2 exist only as room kinds that no building calls yet, so the production quarter's workshops have no glowing forge. The aqueduct and cave pools exist but are far from the streets.
+- **Not tried.** Walking the whole city at night; thousands of frames of a close street with all lanterns lit (the benchmark route is a day route).
+
+### Looking at it
+
+`bench/cityshots.json` lists the 23 viewpoints; `node bench/shots.mjs --file bench/cityshots.json --prefix city --dir docs/screens/p7 --url http://localhost:3105` takes them, and each entry may carry a `query` (`&sky=dusk`, `&rd=16`). `?rd=chunks` (3 to 24) sets the render distance of a `?shot` page only, which is what lets `city-aerial.png` show the whole town; the game and the benchmark keep 8.
+
+| West gate and the highway approach | Commercial avenue, eye level, noon and night |
+| --- | --- |
+| ![](screens/p7/city-west-gate.png) | ![](screens/p7/city-commercial-avenue.png) |
+| ![](screens/p7/city-commercial-night.png) | ![](screens/p7/city-diagonal-street.png) |
+| ![](screens/p7/city-production-quarter.png) | ![](screens/p7/city-river-bridge.png) |
+| ![](screens/p7/city-river-bridge-road.png) | ![](screens/p7/city-entertainment-gardens.png) |
+| ![](screens/p7/city-farms.png) | ![](screens/p7/city-pasture.png) |
+| ![](screens/p7/city-square-day.png) | ![](screens/p7/city-square-dusk.png) |
+| ![](screens/p7/city-square-night.png) | ![](screens/p7/city-compound.png) |
+| ![](screens/p7/city-compound-aerial.png) | ![](screens/p7/city-arena-outside.png) |
+| ![](screens/p7/city-arena-inside.png) | ![](screens/p7/city-cave-portal.png) |
+| ![](screens/p7/city-interior.png) | ![](screens/p7/city-aerial.png) |
+| ![](screens/p7/city-forest-edge.png) | ![](screens/p7/city-north-gate.png) |
+
+### How to extend it
+
+- **A new building type.** Write a `BuildingKit` ([How to write a kit](#how-to-write-a-kit)), register it in `worldgen/kits/tempest/index.ts` with district weights, and a test for it comes with `tests/kits/tempestKits.test.ts` (it iterates the registry). The planner will use it on any lot it fits.
+- **A new landmark.** Add a `LandmarkSpec` in `worldgen/tempest/landmarks/` and register it in `createTempestLandmarks()` under its layout id; the layout must already list it (`LANDMARKS` in `layout.ts`).
+- **Moving or adding streets, blocks or landmarks.** Change `layout.ts` (it is the contract; its tests check overlaps, the gates and the footprint) and regenerate the maps; the planner and zone follow.
+- **A different palette for a district.** Add a family to `style.ts` and give it weights; every kit takes the family from the lot.
+- **A cheap check after any change.** `npx vite-node tools/bench-tempest-zone.ts` (chunk cost), `npx vite-node tools/render-tempest-map.ts --ground` (the map), `npx vitest run tests/tempest tests/kits tests/landmarks`, then the shots.
+- **The next zone.** P9 turns this structure (style pack, kits, planner, landmarks, zone, tests, a viewer) into the guide for the other zones.
+
+### Cost
+
+In the browser, production build, four workers: while walking the streets of Tempest a job (about 5 chunks generated) costs the workers 12.8 ms of generation, 3.0 ms of light and 2.6 ms of meshing on average (the whole run before the city: 11.4, 2.7 and 2.5), the worst light job 24.7 ms and the worst mesh job 16.4 ms. In node a zone chunk takes 9.1 ms on average cold, 10.5 at the 95th percentile and 34.9 at worst (the first chunk of a region that builds several blueprints), 8 to 9 warm; the planner takes 37 ms and the zone 32 ms to construct, once per worker. No blueprint caching, lot lookup or worker cache change was needed. Frame times are in [perf-after-p7.md](perf-after-p7.md).
+
 ## Tests
 
 | File | Covers |
@@ -555,9 +646,12 @@ Step 7.2c draws the named places of the layout by hand (the civic compound with 
 | `tests/tempest/zone.test.ts` | the zone as a `Zone` (name, footprint, atmosphere, getBlock and getCell), the paving, the fountain, bollards, lamp posts, roads out 9 wide and level, street trees, every lot's blueprint on its rectangle and the same every time, the filler kits, a kit that throws, a landmark kit by id and the bridge placeholder, `growMarkedTrees`, **the same chunks from the same seed in any order and with a cache of one lot**, **single cells asked cold against chunk generation**, buildings across chunk borders, farms, ponds, river, forest clear of roads, pastures, chunk cost |
 | `tests/kits/tempestKits.test.ts`, `tests/kits/analysis.ts` | every district kit, variant, palette family and seed: deterministic, every cell a real block in a legal state, **inside the lot** at the smallest and largest lots and storeys, turned to every facing with the footprint on the lot, **no floating blocks** (a flood from the ground over support, `floatingCells`), **no unsupported roofs** (`unsupportedRoof`), **an entrance reachable from the street and room to stand inside** (`walkFrom`: a walk over the blueprint with the player's height, steps, stairs and slabs), a way up to every upper floor, **windows that let the light through** and lit ones that glow, every palette family gives a different building, **seeds and variants never look the same twice**, **at least 14 different blueprint hashes** (26), markers inside the footprint, the bridge at every span and width, the registry by district, and the build time |
 | `tests/tempest/layout.test.ts` | the grid, blocks apart from each other and the roads, zoning against the plan, diagonals, landmarks (unique, in the footprint, not overlapping, off blocks and roads unless built on one), the Town Hall at the head of the avenue, the arena, cave and cairn, **the gates equal the RoadNetwork's and its roads (built from the seed) start there**, the river, farms and forest |
+| `tests/tempest/city.test.ts` | the finished town: every building lot built by a real kit (no box house), kinds of house by district, the three free set pieces, every landmark with blocks where the layout puts it, the Town Hall behind teal roofs at the head of the avenue, the gate roads open and the cave sealed, no crown inside the arena ring, the same chunks in any order and with a cache of one lot, single cells against chunks, chunk cost |
+| `tests/tempest/walk.test.ts` | a player with the game's real collision: the west gate to the square to the Town Hall steps, the arched bridge and no other way across the river, through the doors of every third house and up to the top floor |
+| `tests/tempest/light.test.ts`, `tests/tempest/trees.test.ts` | baked red lanterns, ore lamps and lit shoji; the forest dark at night; nothing but trunk in the two rows a person occupies |
 | `tests/worldgen/structures-purity.test.ts` | the new layers import no Three.js, React or DOM, and the engine and content do not import them |
 | `tests/kitSandbox.test.ts` | the viewer's options, stage, camera and light, meshed with the real mesher |
 
-Measured on the development machine: the 97 tests of the structures, the layout, the viewer and the purity check run in about a second and a half (the whole suite, 1,785 tests, in 17 seconds); building a house blueprint takes under a millisecond, and `blockAt` is arithmetic.
+Measured on the development machine at step 7.1b: the 97 tests of the structures, the layout, the viewer and the purity check run in about a second and a half (the whole suite, 1,785 tests, in 17 seconds); building a house blueprint takes under a millisecond, and `blockAt` is arithmetic.
 
 Blueprint build time of the district kits at their preferred size (average of ten seeds, milliseconds, measured with the whole suite running beside two other jobs): townhouse 0.89, 0.30, 0.33, 0.18; shop 0.31, 0.28, 0.33; inn 0.87, 0.47; shrine 0.28, 0.09; watchtower 0.29, 0.22; storehouse 0.18, 0.21; garden house 0.20, 0.31; garden plot 0.04, 0.10; market stall 0.04, 0.01, 0.02; well 0.02, 0.01; river bridge 0.26, 0.05. The test bounds the worst of them at 60 ms (scaled for a busy machine), a hundred times the worst measured, so a slow machine does not fail it but a quadratic kit would.
