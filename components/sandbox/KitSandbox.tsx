@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo } from 'react';
 import { BlockRegistry } from '../../engine/BlockRegistry';
 import { createTempestKits } from '../../worldgen/tempest/kits';
+import { registerTempestKits } from '../../worldgen/kits/tempest';
 import { TEMPEST_STYLE } from '../../worldgen/tempest/style';
 import SandboxView from './SandboxView';
 import { KitSandboxOptions, KitSky, buildKitStage, kitFrame, kitLook } from './kitsLayout';
@@ -11,7 +12,8 @@ import { KitSandboxOptions, KitSky, buildKitStage, kitFrame, kitLook } from './k
 /** The kits shown when the page is opened with no kit named: the demonstration set of step 7.1b. */
 export const DEMO_KITS = ['timber-house', 'gate', 'lantern-post'] as const;
 
-const kits = createTempestKits();
+// The demonstration kits of step 7.1b and the district kits of step 7.2b, all by name (`&kit=townhouse`, `&row=shop`).
+const kits = registerTempestKits(createTempestKits(), TEMPEST_STYLE);
 
 const withParam = (key: string, value: string | null): string => {
   const params = new URLSearchParams(window.location.search);

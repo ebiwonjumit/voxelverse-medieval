@@ -143,6 +143,12 @@ export const buildKitStage = (
   const dirt = id('dirt');
   const paving = id('stone_paving');
   const curb = id('stone_curb');
+  const water = id('water');
+  const treeBlocks = {
+    sakura: { log: id('sakura_log'), leaves: id('sakura_leaves') },
+    cedar: { log: id('cedar_log'), leaves: id('cedar_leaves') },
+    bamboo: { log: id('bamboo'), leaves: id('bamboo_leaves') },
+  };
   const cells = new Map<string, StageBlock>();
   const put = (x: number, y: number, z: number, blockId: number, state = 0): void => {
     cells.set(`${x},${y},${z}`, { id: blockId, x: KIT_WORLD_X + x, y, z: KIT_WORLD_Z + z, state });
@@ -203,7 +209,11 @@ export const buildKitStage = (
       id: e.lot.id, x: e.x, z: options.facing === 2 ? frontZ - e.lot.d : z0, w: e.lot.w, d: e.lot.d, facing: options.facing,
       district: 'residential', seed: options.seed, floors: e.lot.floors, family: options.family ?? undefined, groundY: 0,
     });
-    placed.place(e.blueprint).stamp((x, y, z, cell) => {
+    if (e.pick.kit.name === 'river-bridge') carveRiver(put, water, width, depthTotal, frontZ, placed);
+    const placement = placed.place(e.blueprint);
+    placement.stamp((x, y, z, cell) => {
+      // The stage has no ground below its dirt: a bridge's foundations are not drawn.
+      if (y < -1) return;
       const bid = cellId(cell);
       if (bid === 0) {
         // A carved cell is air: it clears the ground if the building dug into it.
@@ -212,6 +222,8 @@ export const buildKitStage = (
       }
       put(x, y, z, bid, cellState(cell));
     });
+    // The zone grows trees at the tree markers with its own features; the viewer stands a small tree of the species there.
+    for (const m of placement.markers()) if (m.kind === 'tree') plantStandIn(put, treeBlocks, m.x, m.y, m.z, m.tag ?? 'any');
     shown.push({
       kit: e.pick.kit.name, variant: e.pick.variant, x: e.x - MARGIN, z: placed.z - z0, w: placed.w, d: placed.d,
       hash: e.blueprint.hash(), blocks: e.blueprint.size,
@@ -231,6 +243,47 @@ export const buildKitStage = (
     height: maxHeight,
     shown,
   };
+};
+
+type PutBlock = (x: number, y: number, z: number, blockId: number, state?: number) => void;
+type TreeBlocks = Record<'sakura' | 'cedar' | 'bamboo', { log: number; leaves: number }>;
+
+/** A small stand-in tree at a marker: a trunk with a round crown (sakura), a stack of discs (cedar) or a stand of canes (bamboo). */
+const plantStandIn = (put: PutBlock, blocks: TreeBlocks, x: number, y: number, z: number, tag: string): void => {
+  const species = tag === 'cedar' || tag === 'sakura' || tag === 'bamboo' ? tag : ((x * 7 + z * 13) & 1) === 0 ? 'sakura' : 'cedar';
+  const { log, leaves } = blocks[species];
+  const n = (x * 73856093 ^ z * 19349663) >>> 0;
+  if (species === 'bamboo') {
+    for (const [dx, dz] of [[0, 0], [1, 0], [0, 1]]) for (let k = 0; k < 4 + ((n >> (dx + dz)) & 1); k++) put(x + dx, y + k, z + dz, log);
+    return;
+  }
+  const h = (species === 'sakura' ? 4 : 6) + (n % 2);
+  for (let k = 0; k < h; k++) put(x, y + k, z, log);
+  const disc = (cy: number, r: number): void => {
+    for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
+      if (dx * dx + dz * dz > r * r + 1) continue;
+      if (dx === 0 && dz === 0 && cy < y + h) continue;
+      put(x + dx, cy, z + dz, leaves);
+    }
+  };
+  if (species === 'sakura') {
+    disc(y + h - 1, 2); disc(y + h, 2); disc(y + h + 1, 2); disc(y + h + 2, 1);
+  } else {
+    const radii = [2, 2, 2, 1, 1, 0];
+    radii.forEach((r, k) => disc(y + h - 4 + k, r));
+  }
+};
+
+/** A river across the stage under a bridge lot: water in the ground row between the abutments, running the stage's width. */
+const carveRiver = (put: PutBlock, water: number, width: number, depthTotal: number, frontZ: number, lot: Lot): void => {
+  const span = lot.facing === 0 || lot.facing === 2;
+  const from = (span ? lot.z : lot.x) + 3;
+  const to = (span ? lot.z + lot.d : lot.x + lot.w) - 4;
+  if (span) {
+    for (let z = from; z <= to && z < frontZ; z++) for (let x = 0; x < width; x++) put(x, 0, z, water);
+  } else {
+    for (let x = from; x <= to; x++) for (let z = 0; z < depthTotal; z++) put(x, 0, z, water);
+  }
 };
 
 // --- Cameras --------------------------------------------------------------------------------------------------
