@@ -4,6 +4,7 @@ import { civicCompound } from './CivicCompound';
 import { eastGatehouse, northGate, southGatehouse, westGate } from './Gatehouse';
 import { arenaGuardHut, westStallsNorth, westStallsSouth } from './GuardHutAndStalls';
 import { interiorGallery } from './InteriorGallery';
+import { bathHouse, bellTower, marketHall } from './SetPieces';
 import { townHall } from './TownHall';
 import { aqueduct, eastBridge } from './Waterworks';
 import { cavePools, horsePasture, lumberClearing, northCave, paddock, southCairn } from './Wilds';
@@ -35,5 +36,5 @@ export class LandmarkRegistry {
   }
 }
 
-export const createTempestLandmarks = (): LandmarkRegistry => new LandmarkRegistry().register(centralSquare()).register(civicCompound()).register(townHall()).register(arena()).register(northCave()).register(cavePools()).register(southCairn()).register(eastBridge()).register(aqueduct()).register(lumberClearing()).register(horsePasture()).register(paddock()).register(arenaGuardHut()).register(westStallsNorth()).register(westStallsSouth())
+export const createTempestLandmarks = (): LandmarkRegistry => new LandmarkRegistry().register(centralSquare()).register(civicCompound()).register(townHall()).register(arena()).register(northCave()).register(cavePools()).register(southCairn()).register(eastBridge()).register(aqueduct()).register(bellTower()).register(marketHall()).register(bathHouse()).register(lumberClearing()).register(horsePasture()).register(paddock()).register(arenaGuardHut()).register(westStallsNorth()).register(westStallsSouth())
     .register(westGate()).register(northGate()).register(eastGatehouse()).register(southGatehouse()).register(interiorGallery());

@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { BlockType } from '../../worldConstants';
 import { Rect, landmarkById } from '../../worldgen/tempest/layout';
-import { createTempestLandmarks, LandmarkSpec, buildLandmark, frameSize, placeBlueprint, landmarkLot } from '../../worldgen/tempest/landmarks';
+import { AIR_CELL, cellId, cellState } from '../../engine/cell';
+import { Lot } from '../../worldgen/structures/Lot';
+import { createTempestLandmarks, LandmarkSpec, buildLandmark, frameSize, placeBlueprint, landmarkLot, placeOnLot } from '../../worldgen/tempest/landmarks';
 import { TEMPEST_STYLE } from '../../worldgen/tempest/style';
 import { DX, DZ, Dir } from '../../worldgen/structures/BlueprintBuilder';
-import { BlueprintWorld, canStandIn, columnsOf, floatingCells, walk } from './helpers';
+import { BlueprintWorld, canStandIn, columnsOf, floatingCells, registry as blocks, walk } from './helpers';
 
 // The hand-authored landmarks: each one fits its footprint, is the same every time, has nothing floating, can be walked into
 // from the street and through, and is built quickly. The walkers are the game's own collision (helpers.ts).
@@ -66,26 +69,27 @@ describe('landmarks', () => {
     }
   });
 
-  it('are built from air and blocks the world knows', () => {
+  it('are built from air and blocks the world knows, in legal states', () => {
     for (const s of specs) {
       buildLandmark(s).forEach((_x, _y, _z, c) => {
-        expect(c).toBeGreaterThanOrEqual(0);
+        if (c === AIR_CELL) return;
+        expect(blocks.has(cellId(c)), `${s.id} uses block ${cellId(c)}`).toBe(true);
+        expect(cellState(c)).toBeLessThanOrEqual(15);
       });
     }
   });
 
-  it('turn to face the way the plan says: the door marker looks outwards on the side of the facing', () => {
+  it('turn to face the way the plan says: every front door of the blueprint looks the landmark\'s way once placed, inside the footprint', () => {
     for (const s of specs.filter((v) => v.frame === 'front-south')) {
-      const placement = placeBlueprint(s, buildLandmark(s));
-      const lot = landmarkLot(s);
-      const doors = placement.markers().filter((m) => m.kind === 'door' && m.facing === s.facing);
-      if (s.facing === 2 && s.id !== 'north-cave' && doors.length === 0) continue;
-      // A door that looks the landmark's way stands on the footprint's edge on that side (within the eaves of the lot).
-      for (const d of doors) {
-        const f = s.footprint;
-        const edge = [f.z0, f.x1, f.z1, f.x0][s.facing as Dir];
-        const at = (s.facing === 0 || s.facing === 2) ? d.z : d.x;
-        expect(Math.abs(at - edge), `${s.id} door ${d.x},${d.z}`).toBeLessThanOrEqual(lot.depth);
+      const bp = buildLandmark(s);
+      const front = bp.markers.filter((m) => m.kind === 'door' && m.facing === 2);
+      const placed = placeBlueprint(s, bp).markers().filter((m) => m.kind === 'door' && m.facing === s.facing);
+      expect(placed.length, s.id).toBe(front.length);
+      for (const d of placed) {
+        expect(d.x, `${s.id} door x`).toBeGreaterThanOrEqual(s.footprint.x0);
+        expect(d.x, `${s.id} door x`).toBeLessThanOrEqual(s.footprint.x1);
+        expect(d.z, `${s.id} door z`).toBeGreaterThanOrEqual(s.footprint.z0);
+        expect(d.z, `${s.id} door z`).toBeLessThanOrEqual(s.footprint.z1);
       }
     }
   });
@@ -115,6 +119,66 @@ const reachFrom = (s: LandmarkSpec, door: { x: number; y: number; z: number; fac
   const places = walk(world, start, { minX: -4, maxX: frontage + 3, minZ: -4, maxZ: depth + 3, max: 600000 });
   return { places, bp, f };
 };
+
+describe('free set pieces', () => {
+  const free = registry.specs.filter((s) => s.free);
+
+  it('are the bell tower, the market hall and the bath house, and no zone places them', () => {
+    expect(free.map((s) => s.id).sort()).toEqual(['bath-house', 'bell-tower', 'market-hall']);
+    for (const s of free) expect(s.covers, s.id).toEqual([]);
+  });
+
+  it('stand on a lot facing any way, with the footprint on the lot and the door looking the lot\'s way', () => {
+    for (const s of free) {
+      const { frontage, depth } = frameSize(s);
+      for (const facing of [0, 1, 2, 3] as const) {
+        const lot = new Lot({ id: `lot-${s.id}`, x: 1000, z: 2000, w: facing & 1 ? depth : frontage, d: facing & 1 ? frontage : depth, facing, district: 'tourism', seed: 5, groundY: 8 });
+        const placed = placeOnLot(s, lot);
+        const b = placed.bounds();
+        expect(b.minX, `${s.id} ${facing}`).toBeGreaterThanOrEqual(1000);
+        expect(b.minZ).toBeGreaterThanOrEqual(2000);
+        expect(b.maxX).toBeLessThan(1000 + (facing & 1 ? depth : frontage));
+        expect(b.maxZ).toBeLessThan(2000 + (facing & 1 ? frontage : depth));
+        const doors = placed.markers().filter((m) => m.kind === 'door' && m.facing === facing);
+        expect(doors.length, `${s.id} has a door looking ${facing}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('refuse a lot that is too small', () => {
+    const s = registry.get('market-hall')!;
+    const lot = new Lot({ id: 'small', x: 0, z: 0, w: 20, d: 10, facing: 2, district: 'tourism', seed: 1, groundY: 8 });
+    expect(() => placeOnLot(s, lot)).toThrow(RangeError);
+  });
+});
+
+describe('the long set pieces', () => {
+  it('the east bridge can be crossed on foot from one end to the other, over the crown', () => {
+    const s = registry.get('east-bridge')!;
+    const bp = buildLandmark(s);
+    const { frontage, depth } = frameSize(s);
+    const world = new BlueprintWorld(bp);
+    const places = walk(world, { x: -3, z: 6, feet: 0.5 }, { minX: -4, maxX: frontage + 3, minZ: -4, maxZ: depth + 3 });
+    expect(canStandIn(places, 14, 5, 6), 'the crown').toBe(true);
+    expect(canStandIn(places, frontage + 2, 1, 6), 'the far bank').toBe(true);
+    // And the arch is open under it: a person could stand in the river bed under the crown.
+    expect(bp.solid(14, 0, 6)).toBe(false);
+  });
+
+  it('the aqueduct carries water on its deck and has arches a person could walk through at its foot', () => {
+    const s = registry.get('aqueduct')!;
+    const bp = buildLandmark(s);
+    let water = 0;
+    bp.forEach((_x, y, _z, c) => { if (cellId(c) === BlockType.WATER && y > 10) water++; });
+    expect(water).toBeGreaterThan(200);
+    const world = new BlueprintWorld(bp);
+    const { frontage, depth } = frameSize(s);
+    const places = walk(world, { x: 5, z: -3, feet: 0.5 }, { minX: 0, maxX: frontage - 1, minZ: -4, maxZ: depth + 3, max: 20000 });
+    // From the north side a walker passes under the first arch to the south side.
+    const cols = columnsOf(places);
+    expect(cols.has('9,6') || cols.has('13,6') || cols.has('17,6')).toBe(true);
+  });
+});
 
 describe('landmark entrances and interiors', () => {
   const withDoors = specs.filter((s) => s.frame === 'front-south' && buildLandmark(s).markers.some((m) => m.kind === 'door'));

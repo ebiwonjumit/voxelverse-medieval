@@ -172,6 +172,22 @@ export const bench = (b: BlueprintBuilder, x: number, y: number, z: number, len:
   }
 };
 
+/** Marks a room by a standing cell near its middle that nothing stands in, so a test can walk there. */
+export const markRoom = (b: BlueprintBuilder, r: Rect, floorY: number, tag: string): void => {
+  const cx = (r.x0 + r.x1) / 2;
+  const cz = (r.z0 + r.z1) / 2;
+  let best: [number, number] | null = null;
+  let bestD = Infinity;
+  for (let z = r.z0; z <= r.z1; z++) {
+    for (let x = r.x0; x <= r.x1; x++) {
+      if (b.bp.solid(x, floorY + 1, z) || b.bp.solid(x, floorY + 2, z)) continue;
+      const d = Math.hypot(x - cx, z - cz);
+      if (d < bestD) { bestD = d; best = [x, z]; }
+    }
+  }
+  if (best) b.mark({ kind: 'room', x: best[0], y: floorY + 1, z: best[1], tag });
+};
+
 // --- Walls ------------------------------------------------------------------------------------------------------------
 
 /**

@@ -29,6 +29,11 @@ export interface LandmarkSpec {
   frame: LandmarkFrame;
   /** A set piece the plan lists as optional. */
   optional?: boolean;
+  /**
+   * A set piece with no place of its own in the layout (the bell tower, the market hall, the bath house): the footprint is its
+   * size at the origin and a district planner stands it on a lot of its own, with `placeOnLot`. A zone skips these.
+   */
+  free?: boolean;
   /** The id of the landmark that already contains this one (the Town Hall is drawn inside the compound): a zone places only the container. */
   partOf?: string;
   /** Draws the landmark in its frame. Must be deterministic: everything that varies comes from `rng`. */
@@ -71,6 +76,18 @@ export const landmarkLot = (spec: LandmarkSpec, groundY = TEMPEST_GROUND): Lot =
 export const placeBlueprint = (spec: LandmarkSpec, blueprint: Blueprint, groundY = TEMPEST_GROUND): Placement => {
   if (spec.frame === 'world') return new Placement(blueprint, { x: spec.footprint.x0, y: groundY, z: spec.footprint.z0, turns: 0 });
   return landmarkLot(spec, groundY).place(blueprint);
+};
+
+/** The footprint of a free set piece: its size at the origin. */
+export const freeFootprint = (w: number, d: number): Rect => ({ x0: 0, z0: 0, x1: w - 1, z1: d - 1 });
+
+/** Stands a free set piece on a lot (the lot's rectangle must be at least the piece's size in its own frame). */
+export const placeOnLot = (spec: LandmarkSpec, lot: Lot, style: StylePack = TEMPEST_STYLE, seed = LANDMARK_SEED): Placement => {
+  const { frontage, depth } = frameSize(spec);
+  if (lot.frontage < frontage || lot.depth < depth) {
+    throw new RangeError(`${spec.id} needs a lot of ${frontage} by ${depth}, this one is ${lot.frontage} by ${lot.depth}`);
+  }
+  return lot.place(buildLandmark(spec, style, seed));
 };
 
 /** Builds and places a landmark: what a zone does for each one. */

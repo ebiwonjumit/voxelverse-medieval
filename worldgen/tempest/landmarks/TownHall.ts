@@ -8,7 +8,7 @@ import { GENTLE } from '../../structures/roofProfile';
 import { StylePack } from '../../structures/StylePack';
 import { InteriorFurnisher, RoomDoor } from '../interiors';
 import { LandmarkSpec } from './LandmarkSpec';
-import { WOOD } from './parts';
+import { WOOD, markRoom } from './parts';
 import { footprintOf } from './specs';
 
 // The Town Hall, the white neoclassical building of Tempest-3: a plinth, three bays (two wings that stand forward, a
@@ -108,22 +108,6 @@ const archway = (b: BlueprintBuilder, along: 'x' | 'z', fixed: number, centre: n
       }
     }
   }
-};
-
-/** Marks a room by a standing cell near its middle that nothing stands in, so a test can walk there. */
-const markRoom = (b: BlueprintBuilder, r: Rect, floorY: number, tag: string): void => {
-  const cx = (r.x0 + r.x1) / 2;
-  const cz = (r.z0 + r.z1) / 2;
-  let best: [number, number] | null = null;
-  let bestD = Infinity;
-  for (let z = r.z0; z <= r.z1; z++) {
-    for (let x = r.x0; x <= r.x1; x++) {
-      if (b.bp.solid(x, floorY + 1, z) || b.bp.solid(x, floorY + 2, z)) continue;
-      const d = Math.hypot(x - cx, z - cz);
-      if (d < bestD) { bestD = d; best = [x, z]; }
-    }
-  }
-  if (best) b.mark({ kind: 'room', x: best[0], y: floorY + 1, z: best[1], tag });
 };
 
 export const buildTownHall = (style: StylePack, rng: Rng): Blueprint => {
