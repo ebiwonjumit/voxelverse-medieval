@@ -29,6 +29,8 @@ export interface LandmarkSpec {
   frame: LandmarkFrame;
   /** A set piece the plan lists as optional. */
   optional?: boolean;
+  /** The id of the landmark that already contains this one (the Town Hall is drawn inside the compound): a zone places only the container. */
+  partOf?: string;
   /** Draws the landmark in its frame. Must be deterministic: everything that varies comes from `rng`. */
   build(style: StylePack, rng: Rng): Blueprint;
 }

@@ -4,7 +4,7 @@ import { AIR_CELL, cellId } from '../../engine/cell';
 import { Rng } from '../../worldgen/noise';
 import { NO_CELL } from '../../worldgen/structures/Blueprint';
 import { BlueprintBuilder, EAST, NORTH, SOUTH, WEST, DX, DZ, Dir } from '../../worldgen/structures/BlueprintBuilder';
-import { InteriorFurnisher, ROOM_KINDS, RoomKind, furnish } from '../../worldgen/tempest/interiors';
+import { InteriorFurnisher, ROOM_KINDS, furnish } from '../../worldgen/tempest/interiors';
 import { buildBoxRoom } from '../../worldgen/tempest/interiors/boxRoom';
 import { TEMPEST_STYLE } from '../../worldgen/tempest/style';
 import { BlueprintWorld, canStandIn, columnsOf, floatingCells, registry, walk } from './helpers';
@@ -123,8 +123,7 @@ describe('InteriorFurnisher', () => {
     for (const kind of ROOM_KINDS) {
       const { b, r } = room(11, 9);
       furnish(b.bp, r, kind, new Rng(11));
-      expect(floatingCells(b.bp), kind).toEqual([]);
-      void r;
+      expect(floatingCells(b.bp, 0), kind).toEqual([]);
     }
   });
 
@@ -168,7 +167,7 @@ describe('InteriorFurnisher', () => {
       for (let z = rm.rect.z0; z <= rm.rect.z1; z++) for (let x = rm.rect.x0; x <= rm.rect.x1; x++) if (cols.has(`${x},${z}`)) free++;
       expect(free, `room at ${rm.rect.x0},${rm.rect.z0}`).toBeGreaterThan(6);
     }
-    expect(floatingCells(b.bp)).toEqual([]);
+    expect(floatingCells(b.bp, 0)).toEqual([]);
   });
 
   it('a council hall has a dais against the wall opposite the door, a table and chairs, and banners', () => {
@@ -184,6 +183,3 @@ describe('InteriorFurnisher', () => {
     expect(platformNorth).toBeGreaterThan(5);
   });
 });
-
-const _kinds: RoomKind[] = [...ROOM_KINDS];
-void _kinds;

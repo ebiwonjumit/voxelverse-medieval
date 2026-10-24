@@ -4,7 +4,7 @@ import { BlueprintBuilder, SOUTH, EAST } from '../../structures/BlueprintBuilder
 import { StylePack } from '../../structures/StylePack';
 import { InteriorFurnisher, ROOM_KINDS, RoomKind } from '../interiors/InteriorFurnisher';
 import { buildBoxRoom } from '../interiors/boxRoom';
-import { TEMPEST_GROUND, TEMPEST_CENTER_X } from '../layout';
+import { TEMPEST_CENTER_X } from '../layout';
 import { LandmarkSpec } from './LandmarkSpec';
 
 // Not a place in the town: a row of plain box rooms, one furnished as each kind, for the viewer. It is how the interiors are
@@ -53,4 +53,3 @@ export const interiorGallery = (): LandmarkSpec => {
     footprint: { x0, z0: 0, x1: x0 + width - 1, z1: depth - 1 }, build,
   };
 };
-void TEMPEST_GROUND;

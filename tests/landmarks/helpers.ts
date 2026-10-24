@@ -23,15 +23,18 @@ export class BlueprintWorld implements CollisionWorld {
   }
 }
 
-/** Cells not joined to the ground (y <= 0) through faces, edges or corners. Air carvings are not cells. */
-export const floatingCells = (bp: Blueprint): Array<[number, number, number]> => {
+/**
+ * Cells not joined to the ground through faces, edges or corners. `groundTop` is the highest row that counts as the ground: 1 by
+ * default, as in the kit tests, because a building stands on the surface row (y 0) of terrain it does not draw. Air carvings are not cells.
+ */
+export const floatingCells = (bp: Blueprint, groundTop = 1): Array<[number, number, number]> => {
   const solid = new Set<string>();
   const stack: Array<[number, number, number]> = [];
   const seen = new Set<string>();
   bp.forEach((x, y, z, c) => {
     if (c === AIR_CELL) return;
     solid.add(`${x},${y},${z}`);
-    if (y <= 0) { stack.push([x, y, z]); seen.add(`${x},${y},${z}`); }
+    if (y <= groundTop) { stack.push([x, y, z]); seen.add(`${x},${y},${z}`); }
   });
   while (stack.length) {
     const [x, y, z] = stack.pop()!;
@@ -84,10 +87,18 @@ export const walk = (world: CollisionWorld, start: Standing, options: WalkOption
       const nx = here.x + dx;
       const nz = here.z + dz;
       if (nx < options.minX || nx > options.maxX || nz < options.minZ || nz > options.maxZ) continue;
-      const box = playerBox(here.x, here.feet + PLAYER_HEIGHT, here.z);
-      const m = moveAABB(world, box, { x: dx, y: 0, z: dz });
-      if (Math.abs(m.dx) < 0.98 && Math.abs(m.dz) < 0.98) continue;
-      const after = settle(nx, nz, m.box[1]);
+      // A block in four small steps with gravity between them, as the game moves a player frame by frame: a stair is a step
+      // of half a block up and a climb of a block is two of them, which one long move would not take.
+      let box = playerBox(here.x, here.feet + PLAYER_HEIGHT, here.z);
+      let moved = 0;
+      for (let i = 0; i < 4; i++) {
+        const m = moveAABB(world, box, { x: dx * 0.25, y: 0, z: dz * 0.25 });
+        moved += Math.abs(m.dx) + Math.abs(m.dz);
+        const g = moveAABB(world, m.box, { x: 0, y: -0.3, z: 0 });
+        box = g.box;
+      }
+      if (moved < 0.98) continue;
+      const after = settle(nx, nz, box[1]);
       if (!after) continue;
       const k = keyOf(after);
       if (places.has(k)) continue;

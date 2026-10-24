@@ -20,10 +20,9 @@ const build = (style: StylePack, rng: Rng): Blueprint => {
 
   // Paving: fan cobbles in wedges of a sixteenth of a turn, alternating with plain paving, so the pattern radiates from the
   // basin; a plain stone ring at the rim bounds it.
-  disc(c, c, R, (x, z, d) => {
+  disc(c, c, R, (x, z) => {
     const wedge = Math.floor(turnsOf(c, c, x, z) * 16);
     b.set(x, 0, z, (wedge & 1) === 0 ? 'pathAlt' : 'path');
-    void d;
   });
   annulus(c, c, 6.2, R, (x, z) => b.set(x, 0, z, 'path'));
   annulus(c, c, 3.6, 4.6, (x, z) => b.set(x, 0, z, 'path'));

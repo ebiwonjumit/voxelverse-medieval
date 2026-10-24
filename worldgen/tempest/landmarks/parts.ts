@@ -41,6 +41,17 @@ export const WOOD = {
 
 export const TOP = 1; // a slab's state for the upper half
 
+/** A deterministic value in [0, 1) from two integers and a salt: for the roughness of rock and ground, where a generator's order must not matter. */
+export const hash01 = (x: number, y: number, salt = 0): number => {
+  let h = Math.imul(x | 0, 0x1b873593) ^ Math.imul(y | 0, 0xcc9e2d51) ^ Math.imul(salt | 0, 0x85ebca6b);
+  h ^= h >>> 15;
+  h = Math.imul(h, 0x2c1b3c6d);
+  h ^= h >>> 12;
+  h = Math.imul(h, 0x297a2d39);
+  h ^= h >>> 15;
+  return (h >>> 0) / 4294967296;
+};
+
 // --- Shapes on the plan -----------------------------------------------------------------------------------------------
 
 /** Calls `fn` for every cell whose centre is within `r` of (cx, cz), with its distance. */
@@ -89,8 +100,35 @@ export const depthOf = (r: Rect): number => r.z1 - r.z0 + 1;
 export const centreX = (r: Rect): number => Math.floor((r.x0 + r.x1) / 2);
 export const centreZ = (r: Rect): number => Math.floor((r.z0 + r.z1) / 2);
 
+/**
+ * The cells of a closed ring about a centre, joined face to face (a fence along it has no gaps): every cell of the disc of
+ * radius r that has a neighbour, diagonals included, outside it.
+ */
+export const ringCells = (cx: number, cz: number, r: number): Array<[number, number]> => {
+  const inside = (x: number, z: number): boolean => Math.hypot(x - cx, z - cz) <= r;
+  const out: Array<[number, number]> = [];
+  disc(cx, cz, r, (x, z) => {
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (!inside(x + dx, z + dz)) { out.push([x, z]); return; }
+  });
+  return out;
+};
+
 /** The cell one step along a direction. */
 export const step = (x: number, z: number, d: Dir, n = 1): [number, number] => [x + DX[d] * n, z + DZ[d] * n];
+
+/**
+ * The shape of a round arch on a grid, a cell at a time. `dx` is the cell's offset from the arch's middle, `rel` its row above
+ * the springing line (the rows up to 0 are the straight sides) and `half` half the span: the opening narrows by a cell a row,
+ * and in each row the cell just outside the opening is where an upside-down stair goes, its tall back to the outside, so the
+ * corner is cut. Beyond that the wall is solid.
+ */
+export const archCell = (dx: number, rel: number, half: number): 'open' | 'stair' | 'solid' => {
+  const a = Math.abs(dx);
+  const w = rel <= 0 ? half : half - rel;
+  if (a <= w) return 'open';
+  if (rel > 0 && rel <= half && a === w + 1) return 'stair';
+  return 'solid';
+};
 
 // --- Light and street furniture ---------------------------------------------------------------------------------------
 
@@ -105,12 +143,12 @@ export const bollardLine = (b: BlueprintBuilder, x0: number, z0: number, x1: num
   }
 };
 
-/** A tall lamp post with a red lantern hung from a short arm: the street light of the plaza. */
-export const streetLamp = (b: BlueprintBuilder, x: number, y: number, z: number, arm: Dir = SOUTH, height = 5): void => {
-  b.column(x, z, y, y + height - 1, 'post');
-  b.set(x + DX[arm], y + height - 1, z + DZ[arm], 'beam');
-  b.set(x + DX[arm], y + height - 2, z + DZ[arm], 'light');
-  b.set(x, y + height, z, 'roofSlab', 0);
+/** A slim street lamp: a bamboo mast, a rail arm out to `arm` and a red lantern hanging under its end. `y` is the first row of the mast. */
+export const streetLamp = (b: BlueprintBuilder, x: number, y: number, z: number, arm: Dir = SOUTH, height = 4, lamp: BlockRef = 'light'): void => {
+  b.column(x, z, y, y + height - 1, T.BAMBOO_POLE);
+  b.set(x, y + height, z, 'rail');
+  b.set(x + DX[arm], y + height, z + DZ[arm], 'rail');
+  b.set(x + DX[arm], y + height - 1, z + DZ[arm], lamp);
 };
 
 /** A post carrying a glowing lump of ore, blue or green. */
@@ -164,6 +202,33 @@ export const wallRun = (
 /** Marks a place for a tree, the way the kits do: the zone grows it with its own tree features. */
 export const tree = (b: BlueprintBuilder, x: number, z: number, species: 'sakura' | 'cedar' | 'bamboo' | 'any' = 'any', y = 1): void => {
   b.treeSpot(x, z, species, y);
+};
+
+/**
+ * A sakura built into the blueprint: a trunk and a rounded crown of pink leaves, a little different for each seed. `y` is the
+ * ground row; the trunk starts above it.
+ */
+export const sakura = (b: BlueprintBuilder, x: number, z: number, y = 0, height = 4): void => {
+  for (let k = 1; k <= height; k++) b.set(x, y + k, z, NatureBlock.SAKURA_LOG);
+  const layers = [2, 3, 3, 2, 1];
+  layers.forEach((r, i) => {
+    const cy = y + height - 1 + i;
+    disc(x, z, r + 0.2, (cx, cz, d) => {
+      // Ragged edge: the outermost ring loses some cells, by a hash of the position, so every crown is its own.
+      if (d > r - 0.4 && ((cx * 7 + cz * 13 + cy * 5 + b.rng.int(3)) & 3) === 0) return;
+      b.setIfEmpty(cx, cy, cz, NatureBlock.SAKURA_LEAVES);
+    });
+  });
+};
+
+/** A cedar: a tall trunk and a narrow cone of dark leaves. */
+export const cedar = (b: BlueprintBuilder, x: number, z: number, y = 0, height = 7): void => {
+  for (let k = 1; k <= height; k++) b.set(x, y + k, z, NatureBlock.CEDAR_LOG);
+  const layers = [3, 3, 2, 2, 1, 1, 0];
+  layers.forEach((r, i) => {
+    const cy = y + height - 4 + i + 1;
+    disc(x, z, r + 0.1, (cx, cz) => b.setIfEmpty(cx, cy, cz, NatureBlock.CEDAR_LEAVES));
+  });
 };
 
 /** A low hedge or flower bed cell: moss with a flower on it, from a handful of the wilderness plants. */

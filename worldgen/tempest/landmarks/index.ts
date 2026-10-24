@@ -1,5 +1,12 @@
+import { arena } from './Arena';
 import { centralSquare } from './CentralSquare';
+import { civicCompound } from './CivicCompound';
+import { eastGatehouse, northGate, southGatehouse, westGate } from './Gatehouse';
+import { arenaGuardHut, westStallsNorth, westStallsSouth } from './GuardHutAndStalls';
 import { interiorGallery } from './InteriorGallery';
+import { townHall } from './TownHall';
+import { aqueduct, eastBridge } from './Waterworks';
+import { cavePools, horsePasture, lumberClearing, northCave, paddock, southCairn } from './Wilds';
 import { LandmarkSpec } from './LandmarkSpec';
 
 export * from './LandmarkSpec';
@@ -28,4 +35,5 @@ export class LandmarkRegistry {
   }
 }
 
-export const createTempestLandmarks = (): LandmarkRegistry => new LandmarkRegistry().register(centralSquare()).register(interiorGallery());
+export const createTempestLandmarks = (): LandmarkRegistry => new LandmarkRegistry().register(centralSquare()).register(civicCompound()).register(townHall()).register(arena()).register(northCave()).register(cavePools()).register(southCairn()).register(eastBridge()).register(aqueduct()).register(lumberClearing()).register(horsePasture()).register(paddock()).register(arenaGuardHut()).register(westStallsNorth()).register(westStallsSouth())
+    .register(westGate()).register(northGate()).register(eastGatehouse()).register(southGatehouse()).register(interiorGallery());

@@ -44,6 +44,8 @@ export interface InteriorRoom {
   /** The row of the lowest ceiling block. Default floorY + 4: three free cells over the floor. */
   ceilingY?: number;
   doors: readonly RoomDoor[];
+  /** Cells to leave bare (a stair, an opening in the floor above): walkable as far as the room goes, never furnished. */
+  keepClear?: readonly Rect[];
 }
 
 export interface Placed { x: number; y: number; z: number }
@@ -221,7 +223,7 @@ export class InteriorFurnisher {
    */
   partition(
     interior: Rect, floorY: number, entrance: RoomDoor, kinds: readonly RoomKind[], rng: Rng,
-    options: { ceilingY?: number; minSize?: number; furnishRooms?: boolean; maxRooms?: number } = {},
+    options: { ceilingY?: number; minSize?: number; furnishRooms?: boolean; maxRooms?: number; extraDoors?: readonly RoomDoor[]; keepClear?: readonly Rect[] } = {},
   ): Array<{ room: InteriorRoom; kind: RoomKind }> {
     const ceilingY = options.ceilingY ?? floorY + 4;
     const minSize = Math.max(3, options.minSize ?? 4);
@@ -239,6 +241,7 @@ export class InteriorFurnisher {
       const taken = new Set<number>();
       const note = (x: number, z: number): void => { if (inRect(r, x, z)) taken.add((alongX ? x : z) - origin); };
       note(entrance.x, entrance.z);
+      for (const e of options.extraDoors ?? []) note(e.x, e.z);
       for (const w of doorways) { note(w.a.x, w.a.z); note(w.b.x, w.b.z); }
       const out: number[] = [];
       for (let at = minSize; at <= len - minSize - 1; at++) {
@@ -295,11 +298,13 @@ export class InteriorFurnisher {
     const rooms = leaves.map((rect): InteriorRoom => {
       const doors: RoomDoor[] = [];
       if (inside(rect, entrance.x, entrance.z)) doors.push(entrance);
+      for (const e of options.extraDoors ?? []) if (inside(rect, e.x, e.z)) doors.push(e);
       for (const w of doorways) {
         if (inside(rect, w.a.x, w.a.z)) doors.push(w.a);
         if (inside(rect, w.b.x, w.b.z)) doors.push(w.b);
       }
-      return { rect, floorY, ceilingY, doors };
+      const keepClear = (options.keepClear ?? []).filter((k) => !(k.x1 < rect.x0 || k.x0 > rect.x1 || k.z1 < rect.z0 || k.z0 > rect.z1));
+      return { rect, floorY, ceilingY, doors, ...(keepClear.length > 0 ? { keepClear } : {}) };
     });
     // Kinds: the entrance room first, then the others by size, biggest first.
     const entry = rooms.findIndex((r) => inside(r.rect, entrance.x, entrance.z));
@@ -386,6 +391,9 @@ class Session {
     // What is there already (a hearth the kit built, a pillar) is in the way; so is the cell above the floor row if solid.
     for (let z = this.r.z0; z <= this.r.z1; z++) for (let x = this.r.x0; x <= this.r.x1; x++) {
       if (f.occupiedAt(x, this.floorY + 1, z)) this.occupied[this.idx(x, z)] = 1;
+    }
+    for (const k of room.keepClear ?? []) {
+      for (let z = k.z0; z <= k.z1; z++) for (let x = k.x0; x <= k.x1; x++) this.reserve(x, z);
     }
     // The doorway's path: the cell inside and two more along it, and the cells beside the first two.
     for (const door of room.doors) {
@@ -820,7 +828,7 @@ const councilRoom = (s: Session): void => {
   // Braziers at the dais's front corners.
   for (const t of [-half, half]) onDais(t, dd - 1, 1, T.HEARTH);
   // The long table down the middle (slabs in the upper half, held by the chairs beside it) and a chair at every place.
-  const tableLen = Math.max(3, Math.min(along - 4, depth - dd - 6));
+  const tableLen = Math.max(3, Math.min(along - 3, depth - dd - 5));
   const near = dd + 2;
   for (let k = near; k < near + tableLen; k++) {
     put(0, k, 0, WOODDARKSLAB, 1);
