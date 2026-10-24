@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TempestBlock as T } from '../../content/blocksTempest';
 import { BlockType } from '../../worldConstants';
 import { Rect, landmarkById } from '../../worldgen/tempest/layout';
 import { AIR_CELL, cellId, cellState } from '../../engine/cell';
@@ -229,3 +230,89 @@ describe('landmark entrances and interiors', () => {
     expect(near, 'cells of the council hall a walker can stand on').toBeGreaterThan(40);
   });
 });
+
+describe('the Town Hall and its compound: an impressive landmark', () => {
+  const hall = buildLandmark(registry.get('town-hall')!);
+  const compound = buildLandmark(registry.get('civic-compound')!);
+  const countOf = (bp: typeof hall, ids: number[]): number => {
+    let n = 0;
+    bp.forEach((_x, _y, _z, c) => { if (ids.includes(cellId(c))) n++; });
+    return n;
+  };
+
+  it('towers over the town: four storeys under a teal roof, forty blocks to the flagpole, over three times the height of a street of houses', () => {
+    const b = hall.bounds()!;
+    expect(b.maxY).toBeGreaterThanOrEqual(38);
+    // Walls of plaster stand to the third floor's ceiling, a block under the roof: at least eighteen blocks of wall at the front corners.
+    let wall = 0;
+    for (let y = 2; y < 30; y++) if (hall.get(2, y, 22) !== -1 && cellId(hall.get(2, y, 22)) !== 0) wall++;
+    expect(wall).toBeGreaterThanOrEqual(18);
+    expect(countOf(hall, [T.TEAL_ROOF, T.TEAL_ROOF_STAIRS, T.TEAL_ROOF_SLAB])).toBeGreaterThan(400);
+  });
+
+  it('has a portico of four columns two storeys high with a pediment over it, arched windows, pilasters and balustrades', () => {
+    for (const x of [11, 13, 17, 19]) {
+      for (let y = 2; y <= 12; y++) expect(cellId(hall.get(x, y, 22)), `column ${x},${y}`).toBe(T.WHITE_COLUMN);
+    }
+    // The pediment of the portico: plaster rising above the cornice over the columns.
+    expect(cellId(hall.get(14, 16, 22))).toBe(T.PLASTER_WHITE);
+    expect(cellId(hall.get(15, 16, 22))).toBe(T.SHOJI_PANE_LIT); // and a lit round window in its middle
+    // Arched windows: upside-down stairs at the head of each opening (the arch's corners), many of them.
+    expect(countOf(hall, [T.PLASTER_STAIRS])).toBeGreaterThanOrEqual(120);
+    // Pilasters: a pier of plaster a block proud of the wing's front, from the plinth to the cornice, on both wings.
+    for (const x of [5, 6, 24, 25]) for (let y = 2; y <= 18; y++) expect(hall.get(x, y, 23), `pilaster ${x},${y}`).not.toBe(-1);
+    // Balusters in front of the second-floor windows and along the balcony.
+    let balusters = 0;
+    for (let x = 1; x <= 29; x++) if (cellId(hall.get(x, 8, 23)) === T.WHITE_COLUMN) balusters++;
+    expect(balusters).toBeGreaterThanOrEqual(14);
+  });
+
+  it('is a lit face at night: lit paper windows on the upper floors, red lanterns under every string course, stone lanterns along the plinth', () => {
+    expect(countOf(hall, [T.SHOJI_PANE_LIT])).toBeGreaterThanOrEqual(100);
+    expect(countOf(hall, [T.PAPER_LANTERN_RED, T.PAPER_LANTERN_STRIPED])).toBeGreaterThanOrEqual(50);
+    expect(countOf(hall, [T.STONE_LANTERN_LIGHT])).toBeGreaterThanOrEqual(6);
+    // Windows on all three floors of both wings' fronts glow: lit panes at the second and third floors of the front.
+    for (const y of [F2_WINDOW, F3_WINDOW]) {
+      let lit = 0;
+      for (let x = 2; x <= 28; x++) if (cellId(hall.get(x, y, 22)) === T.SHOJI_PANE_LIT) lit++;
+      expect(lit, `row ${y}`).toBeGreaterThanOrEqual(8);
+    }
+  });
+
+  it('stands in view from the avenue: the compound\'s front wall is a low rail between posts, and only the towers at the gate and the corners are tall', () => {
+    const top = (x: number): number => {
+      let t = 0;
+      for (let y = 1; y <= 14; y++) {
+        const c = compound.get(x, y, 50);
+        if (c !== -1 && blocks.isOpaque(cellId(c))) t = y;
+      }
+      return t;
+    };
+    // Between the gate towers and the corner towers (x 7 to 13 and 36 to 41) the wall is a footing, posts and a slab: four blocks at the most.
+    for (const x of [7, 8, 9, 10, 11, 12, 13, 36, 37, 38, 39, 40, 41]) expect(top(x), `front wall at ${x}`).toBeLessThanOrEqual(4);
+    // The rail is there between the posts, and the towers beside the gate are lower than the hall by far.
+    expect(cellId(compound.get(8, 2, 50))).toBe(T.VERMILION_RAIL);
+    expect(cellId(compound.get(40, 2, 50))).toBe(T.VERMILION_RAIL);
+    expect(Math.max(...[16, 17, 18, 31, 32, 33].map(top))).toBeLessThanOrEqual(14);
+    expect(compound.bounds()!.maxY).toBeGreaterThanOrEqual(38);
+  });
+
+  it('is walked from the door through all three floors of a wing to its top floor with the game\'s own collision', () => {
+    const s = registry.get('town-hall')!;
+    const door = hall.markers.find((m) => m.kind === 'door')!;
+    const { places } = reachFrom(s, door, 3);
+    let top = 0;
+    for (const p of places.values()) top = Math.max(top, p.feet);
+    // The third floor is at row 13; a walker on it has its feet at 13.5 or a little more.
+    expect(top).toBeGreaterThanOrEqual(13.5);
+    const rooms = hall.markers.filter((m) => m.kind === 'room' && /top|study/.test(m.tag ?? ''));
+    expect(rooms.length).toBeGreaterThanOrEqual(5);
+    for (const r of rooms) {
+      const ok = [0, -1, 1].some((dy) => canStandIn(places, r.x, r.y + dy, r.z));
+      expect(ok, `${r.tag} at ${r.x},${r.y},${r.z}`).toBe(true);
+    }
+  });
+});
+
+const F2_WINDOW = 9;
+const F3_WINDOW = 15;

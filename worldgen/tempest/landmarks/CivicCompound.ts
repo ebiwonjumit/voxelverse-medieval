@@ -51,9 +51,21 @@ const build = (style: StylePack, rng: Rng): Blueprint => {
   // --- The wall and the corner towers -----------------------------------------------------------------------------------------
   const H = 4;
   wallRun(b, 0, 0, 48, 0, 0, H, { spacing: 6 });
-  wallRun(b, 0, 50, 48, 50, 0, H, { spacing: 6 });
   wallRun(b, 0, 0, 0, 50, 0, H, { spacing: 6 });
   wallRun(b, 48, 0, 48, 50, 0, H, { spacing: 6 });
+  // The front is open to the avenue: a low plastered footing with a lacquered rail between timber posts, a lantern on every other post,
+  // so the hall stands in view from the street and the gate towers frame the way in.
+  for (let x = 0; x <= 48; x++) {
+    b.set(x, 1, 50, 'wallBase');
+    const post = x % 6 === 0 || x === 48;
+    if (post) {
+      b.column(x, 50, 2, 3, 'post');
+      b.set(x, 4, 50, 'roofSlab', 0);
+      if (x % 12 === 0) b.set(x, 5, 50, 'lightAlt');
+    } else {
+      b.set(x, 2, 50, 'rail');
+    }
+  }
   // The gate: the wall is opened between the towers, nine wide, the avenue's width less a block each side.
   for (let x = 20; x <= 28; x++) for (let y = 1; y <= H + 1; y++) b.carve(x, y, 50);
   b.floor(rect(20, 50, 28, 50), 0, 'path');
@@ -81,31 +93,30 @@ const build = (style: StylePack, rng: Rng): Blueprint => {
   // --- The gate towers ---------------------------------------------------------------------------------------------------------
   const civicB = new BlueprintBuilder(civic, rng, 'gate');
   const gateTower = (x0: number): void => {
-    // The roof overhangs the walls by a block, so the walls stop one cell short of the compound's edge.
+    // The roof overhangs the walls by a block, so the walls stop one cell short of the compound's edge. The towers are low, so the hall
+    // behind them is seen over their roofs.
     const w = rect(x0, 45, x0 + 4, 49);
     civicB.floor(rect(x0, 45, x0 + 4, 50), 0, 'wallBase');
     civicB.floor(rect(x0, 45, x0 + 4, 50), 1, 'wallBase');
-    civicB.ring(w, 2, 9, 'wall');
-    civicB.ring(w, 6, 6, 'wallBase');
-    civicB.ring(w, 10, 10, 'wallBase');
-    for (const [qx, qz] of [[w.x0, w.z0], [w.x1, w.z0], [w.x0, w.z1], [w.x1, w.z1]]) civicB.column(qx, qz, 2, 10, 'column');
-    for (const [qx, qz] of [[w.x0 + 2, w.z0], [w.x0 + 2, w.z1]]) { civicB.set(qx, 4, qz, 'glassPane'); civicB.set(qx, 8, qz, 'glassPane'); }
-    // Towards the gate a small arched window, and a lantern on a bracket at the corner of the opening.
-    civicB.hip(w, 10, { profile: STEEP, ridgeCap: false });
+    civicB.ring(w, 2, 7, 'wall');
+    civicB.ring(w, 5, 5, 'wallBase');
+    civicB.ring(w, 8, 8, 'wallBase');
+    for (const [qx, qz] of [[w.x0, w.z0], [w.x1, w.z0], [w.x0, w.z1], [w.x1, w.z1]]) civicB.column(qx, qz, 2, 8, 'column');
+    for (const [qx, qz] of [[w.x0 + 2, w.z0], [w.x0 + 2, w.z1]]) { civicB.set(qx, 3, qz, 'glassPane'); civicB.set(qx, 4, qz, 'glassPane'); civicB.set(qx, 6, qz, 'shojiLit'); civicB.set(qx, 7, qz, 'shojiLit'); }
+    civicB.hip(w, 8, { profile: STEEP, ridgeCap: false });
   };
   gateTower(15);
   gateTower(30);
   b.bp.merge(civicB.build(), 0, 0, 0);
-  // A lintel across the gate at the height of the towers' first string course, with banners and lanterns hanging from it.
+  // A lintel across the gate at the height of the towers' string course, with banners and lanterns hanging from it.
   for (let x = 20; x <= 28; x++) {
-    b.set(x, 7, 50, 'beam');
-    b.set(x, 7, 49, 'beam');
-    b.set(x, 8, 50, 'wall');
-    b.set(x, 9, 50, 'wall');
-    b.set(x, 10, 50, 'roofSlab', 0);
+    b.set(x, 6, 50, 'beam');
+    b.set(x, 6, 49, 'beam');
+    b.set(x, 7, 50, 'wall');
+    b.set(x, 8, 50, 'roofSlab', 0);
   }
-  for (const x of [21, 27]) banner(b, x, 6, 49, 3, 'x', T.NOREN_RED);
-  for (const x of [22, 24, 26]) b.set(x, 6, 49, 'lightAlt');
+  for (const x of [21, 27]) banner(b, x, 5, 49, 3, 'x', T.NOREN_RED);
+  for (const x of [22, 24, 26]) b.set(x, 5, 49, 'lightAlt');
   b.mark({ kind: 'door', x: CX, y: 1, z: 50, facing: SOUTH });
 
   // --- Forecourt furniture -----------------------------------------------------------------------------------------------------

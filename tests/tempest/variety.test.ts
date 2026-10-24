@@ -9,6 +9,8 @@ import { createTempestCityKits } from '../../worldgen/tempest/cityKits';
 
 const zone = new TempestCityZone({ seed: WORLD_SEED });
 const buildings = zone.planner.lots.filter((p) => p.kind === 'building');
+/** The buildings proper: a plot the garden kit lays out has no house on it. */
+const houses = buildings.filter((p) => zone.choiceOf(p)!.kit.name !== 'garden-plot');
 const choice = (id: string) => zone.choiceOf(zone.planner.lotById(id)!)!;
 
 describe('a street of different houses', () => {
@@ -45,8 +47,9 @@ describe('a street of different houses', () => {
   });
 
   it('builds at least fourteen different buildings in the town itself, gardens and fillers not counted, and uses every kit it has', () => {
-    const pairs = new Set(buildings.map((p) => pairKeyOf(zone.choiceOf(p)!)));
+    const pairs = new Set(houses.map((p) => pairKeyOf(zone.choiceOf(p)!)));
     expect(pairs.size).toBeGreaterThanOrEqual(14);
+    expect(houses.length).toBeGreaterThanOrEqual(200);
     // A kit that is registered is built somewhere in the town (the plain gardens and the bridge are fillers; the market stalls stand on the boundary road).
     const used = new Set(buildings.map((p) => zone.choiceOf(p)!.kit.name));
     for (const kit of zone.kits.kits) {

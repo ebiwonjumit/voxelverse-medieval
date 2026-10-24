@@ -21,5 +21,20 @@
   { "name": "aerial", "shot": "1500,230,330,0,-38", "query": "&rd=16" },
   { "name": "aerial-top", "shot": "1500,400,0,0,-90", "query": "&rd=18" },
   { "name": "forest-edge", "shot": "1240,10.6,-100,90,5" },
-  { "name": "north-gate", "shot": "1500,12,-300,180,-2" }
+  { "name": "north-gate", "shot": "1500,12,-300,180,-2" },
+  { "name": "roundabout-aerial", "shot": "1500,45,0,0,-90", "query": "&rd=6" },
+  { "name": "roundabout-eye", "shot": "1500,10.4,13,0,-3" },
+  { "name": "roundabout-night", "shot": "1500,10.4,13,0,-3", "query": "&sky=night" },
+  { "name": "avenue-hall", "shot": "1496,10.8,-60,0,0" },
+  { "name": "hall-forecourt", "shot": "1500,10.8,-146,0,10" },
+  { "name": "hall-forecourt-night", "shot": "1500,10.8,-146,0,10", "query": "&sky=night" },
+  { "name": "hall-aerial-night", "shot": "1535,40,-120,20,-14", "query": "&sky=night" },
+  { "name": "production-forge", "shot": "1334,10.8,44,180,2" },
+  { "name": "production-forge-night", "shot": "1334,10.8,44,180,2", "query": "&sky=night" },
+  { "name": "production-street-night", "shot": "1400,10.8,47,90,0", "query": "&sky=night" },
+  { "name": "public-school", "shot": "1562,10.8,-188,180,3" },
+  { "name": "public-clinic", "shot": "1575,10.8,-130,0,3" },
+  { "name": "watchtower", "shot": "1536,11,-145,180,8" },
+  { "name": "shrine-park", "shot": "1655,16,120,180,-6" },
+  { "name": "north-aerial", "shot": "1500,260,-80,0,-60", "query": "&rd=14" }
 ]

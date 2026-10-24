@@ -227,6 +227,71 @@ const ringOf = (b: Block, ax0: number, ax1: number, az0: number, az1: number, id
   };
 };
 
+/** The districts whose blocks are filled out with small houses wherever a street has free ground beside it (the others keep their parks). */
+const INFILL = new Set(['residential', 'commercial', 'production', 'storage', 'government']);
+/** The footprints the infill tries, biggest first: a house on a small lot. */
+const INFILL_SIZES: ReadonlyArray<readonly [number, number]> = [[13, 12], [12, 13], [12, 12], [11, 12], [12, 11], [11, 11], [10, 11], [11, 10], [10, 10], [9, 10], [10, 9], [9, 9]];
+
+/**
+ * Small houses in the ground the block's cut leaves beside a street: the wedges between a diagonal and the block's own rows, the ends
+ * of rows, the corners, the strips beside the compound. A block is cut into rows and rings of lots with whole frontages, and what does
+ * not make a whole frontage (a diagonal's corner, a short end) used to stay lawn. Here every spot a 9 to 13 cell house fits, with a verge
+ * round it, and a street within three cells to face, gets one: tried row by row from the north west, so the same seed gives the same
+ * houses. Nothing is added to a spot that is not beside a street, so the courtyards of the rings stay courtyards.
+ */
+const infillPlots = (b: Block, plots: readonly Plot[]): Plot[] => {
+  const x0 = b.rect.x0, z0 = b.rect.z0;
+  const W = b.rect.x1 - x0 + 1, H = b.rect.z1 - z0 + 1;
+  // A cell is taken when it is outside the block (a clipped corner), on a road, in the verge at the block's edge, or in a lot or its verge.
+  const taken = new Uint8Array(W * H);
+  for (let z = 0; z < H; z++) for (let x = 0; x < W; x++) {
+    const wx = x0 + x, wz = z0 + z;
+    if (!inBlock(b, wx, wz) || roadAt(wx, wz) || x < VERGE || z < VERGE || x >= W - VERGE || z >= H - VERGE) taken[z * W + x] = 1;
+  }
+  const mark = (p: Plot): void => {
+    for (let z = Math.max(0, p.z - VERGE - z0); z <= Math.min(H - 1, p.z + p.d + VERGE - 1 - z0); z++) {
+      for (let x = Math.max(0, p.x - VERGE - x0); x <= Math.min(W - 1, p.x + p.w + VERGE - 1 - x0); x++) taken[z * W + x] = 1;
+    }
+  };
+  for (const p of plots) mark(p);
+  const freeRect = (x: number, z: number, w: number, d: number): boolean => {
+    for (let zz = z - z0; zz < z - z0 + d; zz++) for (let xx = x - x0; xx < x - x0 + w; xx++) if (taken[zz * W + xx]) return false;
+    return true;
+  };
+  // The side whose street is nearest (two or three cells off the rectangle: the verge, then the road), by cells to the road along the middle of the side.
+  const facingOf = (x: number, z: number, w: number, d: number): Facing | null => {
+    const cx = x + (w >> 1), cz = z + (d >> 1);
+    let best: Facing | null = null;
+    let bestK = 99;
+    const sides: Array<[Facing, (k: number, o: number) => [number, number]]> = [
+      [0, (k, o) => [cx + o, z - k]], [1, (k, o) => [x + w - 1 + k, cz + o]], [2, (k, o) => [cx + o, z + d - 1 + k]], [3, (k, o) => [x - k, cz + o]],
+    ];
+    for (const [f, at] of sides) {
+      for (let k = 2; k <= 3 && k < bestK; k++) {
+        for (let o = -2; o <= 2; o++) { const [rx, rz] = at(k, o); if (roadAt(rx, rz)) { best = f; bestK = k; break; } }
+      }
+    }
+    return best;
+  };
+  const out: Plot[] = [];
+  for (let z = z0 + VERGE; z < z0 + H - VERGE; z++) {
+    for (let x = x0 + VERGE; x < x0 + W - VERGE; x++) {
+      if (taken[(z - z0) * W + (x - x0)]) continue;
+      for (const [w, d] of INFILL_SIZES) {
+        if (x - x0 + w > W - VERGE || z - z0 + d > H - VERGE || !freeRect(x, z, w, d)) continue;
+        const facing = facingOf(x, z, w, d);
+        if (facing === null) continue;
+        // A house looks along its short side's street if it can: a spot beside a street along its length faces it.
+        const plot: Plot = { x, z, w, d, facing, row: `${b.id}:f${out.length}` };
+        out.push(plot);
+        mark(plot);
+        break;
+      }
+    }
+  }
+  return out;
+};
+
 const planBlock = (b: Block, rng: Rng, crossed: boolean): BlockPlan => {
   const ax0 = b.rect.x0 + VERGE, ax1 = b.rect.x1 - VERGE, az0 = b.rect.z0 + VERGE, az1 = b.rect.z1 - VERGE;
   const w = ax1 - ax0 + 1;
@@ -516,6 +581,7 @@ export class DistrictPlanner {
         const fitted = p.w >= MIN_LOT && p.d >= MIN_LOT ? fitPlot(b, p) : null;
         if (fitted && fitted.w >= MIN_LOT && fitted.d >= MIN_LOT) plots.push(fitted);
       }
+      if (INFILL.has(b.district) && !SET_PIECE_BLOCKS[b.id]) plots.push(...infillPlots(b, plots));
       // What each plot becomes: a seed of its own, a kind, storeys, and a palette family that differs from the lot before it in its row.
       const lastFamily = new Map<string, string>();
       const drafts = plots.map((p, n) => {

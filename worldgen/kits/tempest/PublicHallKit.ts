@@ -22,7 +22,7 @@ export class PublicHallKit extends BuildingKit {
   readonly name = 'public-hall';
   readonly frontage: KitSize = { min: 14, max: 34 };
   readonly depth: KitSize = { min: 15, max: 24 };
-  readonly floors: KitSize = { min: 1, max: 2 };
+  readonly floors: KitSize = { min: 2, max: 3 };
   readonly variants = 3;
 
   preferredSize(variant = 0): { frontage: number; depth: number; floors: number } {

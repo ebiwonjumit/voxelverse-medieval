@@ -122,16 +122,18 @@ const forge = (b: BlueprintBuilder, lot: Lot, flip: boolean, lanterns: boolean):
   const info = roofOver(b, walls, PLATE, { kind: 'gable-x', profile: FLARED, tips: 2, gableWall: 'wallFrame' });
   eaveBrackets(b, walls, PLATE, [NORTH], spacing);
   // The lean-to over the yard, on posts, with lanterns under its lip.
-  pent(b, walls, SOUTH, walls.x0, walls.x1, PLATE, 3, { postFrom: 1, postEvery: spacing, lanterns });
+  pent(b, walls, SOUTH, walls.x0, walls.x1, PLATE, 3, { postFrom: 1, postEvery: spacing, lanterns: true });
   b.floor(rect(walls.x0, z1 + 1, walls.x1, z1 + 3), 0, 'path');
   hangingSign(b, doorX + 1, PLATE - 2, z1 + 3, WEST);
+  // The forge is a lit house: red lanterns hang just inside the open bay, so the light is in the doorway as well as at the back.
+  for (const x of [doorX - 1, doorX + 1]) if (lanterns || x === doorX - 1) b.set(x, 3, z1 - 1, 'light');
 
   // The furnace in the middle of the back wall, and its chimney through the roof.
   const cx = (inner.x0 + inner.x1) >> 1;
   const keep = furnace(b, inner, 0, cx - 1);
   chimneyStack(b, cx, inner.z0, 4, info.crestTop + 1);
   const room = b.room(inner, 0, { floor: 'path', doors: [{ x: doorX, z: z1 - 1, inward: NORTH }] });
-  furnishRoom(b, room, 'store', { keepClear: [keep] });
+  furnishRoom(b, room, 'forge', { keepClear: [keep] });
   // The yard: a quenching basin, an anvil on a block, a barrel and a heap of coal against the wall.
   const dir = flip ? -1 : 1;
   const bx = flip ? walls.x1 - 1 : walls.x0 + 1;
@@ -216,7 +218,7 @@ const smithy = (b: BlueprintBuilder, lot: Lot, flip: boolean, lanterns: boolean)
   const stairZ = inner.z0 + 4;
   const run = stairDoors(stairX, stairZ, NORTH, 4);
   const room = b.room(inner, FLOOR, { floor: 'path', doors: [{ x: doorX, z: z1 - 1, inward: NORTH }, ...(storeys === 2 ? run : [])] });
-  furnishRoom(b, room, 'store', { keepClear: [keep] });
+  furnishRoom(b, room, 'forge', { keepClear: [keep] });
   if (storeys === 2) {
     const loft = b.room(inner, PLATE1, { doors: run });
     b.tatami(loft);
