@@ -106,8 +106,8 @@ export class WatchtowerKit extends BuildingKit {
     b.set(cx, BASE_TOP - 1, cz, 'light');
     stairPath(b, flight1, 1);
     if (floorsAbove.length > 0) stairPath(b, flight2, BASE_TOP);
-    b.treeSpot(1, D - 2, 'cedar');
-    b.treeSpot(W - 2, D - 2, 'cedar');
+    b.treeSpot(1, 1, 'cedar');
+    b.treeSpot(W - 2, 1, 'cedar');
     void WEST;
     const bp = b.build();
     return mirror ? mirrorX(bp, W) : bp;

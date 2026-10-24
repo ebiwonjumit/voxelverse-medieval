@@ -47,12 +47,12 @@ export class GardenPlotKit extends BuildingKit {
       // The crops.
       const field = rect(2, hut.z1 + 3, W - 3, D - 3);
       if (field.z1 - field.z0 >= 3) layKitchenGarden(b, field, rng);
-      b.fenceRect(rect(1, hut.z1 + 2, W - 2, D - 2), 1, [[Math.floor(W / 2), D - 2], [Math.floor(W / 2) + 1, D - 2]]);
+      b.fenceRect(rect(1, hut.z1 + 2, W - 2, D - 2), 1, [[Math.floor(W / 2) - 1, D - 2], [Math.floor(W / 2), D - 2], [Math.floor(W / 2) + 1, D - 2]]);
       // A scarecrow: a post with a crossbar and a barrel for a head.
       const sx = Math.floor(W / 2) + 3;
       const sz = Math.floor((field.z0 + field.z1) / 2);
-      b.column(sx, sz, 1, 3, 'post');
-      b.beam(sx - 1, sz, sx + 1, sz, 3, 'beam');
+      b.column(sx, sz, 1, 3, T.BAMBOO_POLE);
+      b.beam(sx - 1, sz, sx + 1, sz, 3, T.BAMBOO_POLE);
       b.set(sx, 4, sz, T.VASE);
       b.stoneLantern(1, 1, D - 1);
       b.treeSpot(1, 1, 'sakura');

@@ -6,7 +6,7 @@ import { Lot } from '../../structures/Lot';
 import { StylePack } from '../../structures/StylePack';
 import { FLARED } from '../../structures/roofProfile';
 import {
-  RoofKind, bays, chimneyStack, furnishRoom, goodsAt, hangingSign, mirrorX, pent, planter, postCoords, roofOver, setOnWall, stairDoors, staircase, windowRow,
+  RoofKind, bays, chimneyStack, eaveBrackets, furnishRoom, goodsAt, hangingSign, mirrorX, pent, planter, postCoords, roofOver, setOnWall, stairDoors, staircase, windowRow,
 } from './parts';
 
 // The shop: a trade on the ground floor and the family's rooms above, its front open to the street.
@@ -139,6 +139,7 @@ export class ShopKit extends BuildingKit {
       }
     }
     const info = roofOver(b, roofWalls, top, { kind, profile: FLARED, tips: 2, gableWall: 'wallFrame' });
+    eaveBrackets(b, roofWalls, top, kind === 'gable-x' ? [NORTH] : variant === 2 ? [NORTH, EAST, WEST, SOUTH] : [NORTH, EAST, WEST, SOUTH], spacing);
     if (chimney) chimneyStack(b, walls.x0 + 1, walls.z0 + 1, 1, info.crestTop + 1);
 
     // Inside: stock along the walls on the shop floor, a bedroom above; the stair in the east corner climbing north.
@@ -157,7 +158,7 @@ export class ShopKit extends BuildingKit {
 
     // Street life.
     if (planterAt) planter(b, walls.x0, 1, z1 + front - 1, 1, 'x');
-    b.treeSpot(0, 0, 'any');
+    b.treeSpot(1, 1, 'any');
     const bp = b.build();
     return mirror ? mirrorX(bp, W) : bp;
   }

@@ -160,17 +160,21 @@ export class ShrineKit extends BuildingKit {
     return mirror ? mirrorX(bp, W) : bp;
   }
 
-  /** A torii: two lacquered posts on stone feet, a tie beam between them and a top beam with its ends turned up. */
+  /**
+   * A torii: two lacquered posts on stone feet, a tie beam between them, a top beam of planks that reaches past the posts with a
+   * dark cap over it whose ends turn up, and a plaque in the middle.
+   */
   private torii(b: BlueprintBuilder, cx: number, z: number, height: number, width: number): void {
     const half = Math.floor(width / 2);
     for (const x of [cx - half, cx + half]) {
       b.set(x, 0, z, 'stone');
       b.column(x, z, 1, height, 'accent');
     }
-    b.beam(cx - half, z, cx + half, z, height - 1, 'accent');
-    b.beam(cx - half - 1, z, cx + half + 1, z, height + 1, 'accent');
-    b.set(cx - half - 1, height + 2, z, 'accent');
-    b.set(cx + half + 1, height + 2, z, 'accent');
-    b.set(cx, height, z, 'accent');
+    b.beam(cx - half, z, cx + half, z, height - 1, T.VERMILION_PLANKS);
+    b.beam(cx - half - 1, z, cx + half + 1, z, height + 1, T.VERMILION_PLANKS);
+    b.beam(cx - half - 1, z, cx + half + 1, z, height + 2, 'roofSlab');
+    b.set(cx - half - 2, height + 2, z, 'roofSlab', 1);
+    b.set(cx + half + 2, height + 2, z, 'roofSlab', 1);
+    b.signboard(cx, height, z, 'x');
   }
 }

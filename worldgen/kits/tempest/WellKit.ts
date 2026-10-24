@@ -6,13 +6,13 @@ import { BlueprintBuilder, rect } from '../../structures/BlueprintBuilder';
 import { BuildingKit, KitSize } from '../../structures/BuildingKit';
 import { Lot } from '../../structures/Lot';
 import { StylePack } from '../../structures/StylePack';
-import { FLARED_TIGHT } from '../../structures/roofProfile';
-import { mirrorX } from './parts';
+import { STEEP } from '../../structures/roofProfile';
+import { bench, mirrorX, planter } from './parts';
 
 // A well in a little paved square: a ring of mossy stone round the water, two posts and a cross beam with the bucket
-// hanging from it, a hood over the top.
-//   variant 0  a hood of tile with a ridge cap, fan paving round it, a stone lantern
-//   variant 1  a plain rope well: posts and a beam, no roof, a bucket on the rim, planters and a bench
+// hanging from it.
+//   variant 0  a small gabled roof over the beam with a ridge cap, fan paving round it, stone lanterns at the corners
+//   variant 1  a plain rope well with no roof, barrels, crates and a bench on a square of ordinary paving, planters
 export class WellKit extends BuildingKit {
   readonly name = 'well';
   readonly frontage: KitSize = { min: 5, max: 9 };
@@ -29,37 +29,31 @@ export class WellKit extends BuildingKit {
     const mirror = rng.chance(0.5);
     const W = lot.frontage;
     const D = lot.depth;
-    const cx = Math.floor(W / 2);
-    const cz = Math.floor(D / 2);
+    const cx = Math.floor((W - 1) / 2);
+    const cz = Math.floor((D - 1) / 2);
+    const ring = rect(cx - 1, cz - 1, cx + 1, cz + 1);
     b.floor(rect(0, 0, W - 1, D - 1), 0, variant === 0 ? 'pathAlt' : 'path');
-    // The shaft: water two blocks deep under a ring of stone.
+    // The shaft: water under a ring of mossy stone, a slab rim on its north and south sides.
+    b.floor(ring, 0, 'stone');
     b.set(cx, 0, cz, BlockType.WATER);
-    b.floor(rect(cx - 1, cz - 1, cx + 1, cz + 1), 0, 'stone');
-    b.set(cx, 0, cz, BlockType.WATER);
-    b.ring(rect(cx - 1, cz - 1, cx + 1, cz + 1), 1, 1, 'stone');
-    b.ring(rect(cx - 1, cz - 1, cx + 1, cz + 1), 2, 2, 'stoneSlab', 0);
-    // The posts at the east and west of the ring, a beam across, the bucket hanging in the middle.
+    b.ring(ring, 1, 1, 'stone');
+    for (let x = cx - 1; x <= cx + 1; x++) { b.set(x, 2, cz - 1, 'stoneSlab', 0); b.set(x, 2, cz + 1, 'stoneSlab', 0); }
+    // Two posts on the east and west of the ring, a beam across, the bucket hanging from its middle.
     b.column(cx - 1, cz, 2, 4, 'post');
     b.column(cx + 1, cz, 2, 4, 'post');
-    b.set(cx - 1, 2, cz, 'post');
     b.beam(cx - 1, cz, cx + 1, cz, 5, 'beam');
     b.set(cx, 4, cz, T.BUCKET);
-    b.set(cx, 3, cz, 'fence');
     if (variant === 0) {
-      // A hood over the well: a small hip roof on the two posts' beam, the eaves one block out.
-      b.beam(cx - 1, cz - 1, cx + 1, cz - 1, 5, 'beam');
-      b.beam(cx - 1, cz + 1, cx + 1, cz + 1, 5, 'beam');
-      b.column(cx - 1, cz - 1, 3, 4, 'post');
-      b.column(cx + 1, cz - 1, 3, 4, 'post');
-      b.column(cx - 1, cz + 1, 3, 4, 'post');
-      b.column(cx + 1, cz + 1, 3, 4, 'post');
-      b.hip(rect(cx - 1, cz - 1, cx + 1, cz + 1), 5, { profile: FLARED_TIGHT, tips: 1 });
-      b.stoneLantern(1, 1, 1);
-      b.stoneLantern(W - 2, 1, D - 2);
+      b.gable(rect(cx - 1, cz, cx + 1, cz), 5, { profile: STEEP, axis: 'x', tips: 0 });
+      const lanterns: Array<[number, number]> = [[1, 1], [W - 2, D - 2]];
+      if (rng.chance(0.5)) lanterns.push([W - 2, 1], [1, D - 2]);
+      for (const [x, z] of lanterns) b.stoneLantern(x, 1, z);
     } else {
       b.set(cx + 2, 1, cz + 1, T.BARREL);
       b.set(cx - 2, 1, cz - 1, T.CRATE);
       b.set(cx + 2, 1, cz - 2, T.BUCKET);
+      if (W >= 7 && D >= 7) bench(b, 1, D - 2, 'x');
+      if (rng.chance(0.6)) planter(b, W - 3, 1, D - 2, 2, 'x');
     }
     const bp = b.build();
     return mirror ? mirrorX(bp, W) : bp;

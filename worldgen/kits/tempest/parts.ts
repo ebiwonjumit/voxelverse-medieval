@@ -304,10 +304,34 @@ export const hangingSign = (b: BlueprintBuilder, x: number, y: number, z: number
   b.signboard(sx, y - 1, sz, side === NORTH || side === SOUTH ? 'z' : 'x');
 };
 
-/** A chimney stack of the footing's stone running through a roof: stands on `y0` and ends above `top`. */
+/** A chimney stack of mossy stone running through a roof: stands on `y0`, ends above `top` under a slab cap. */
 export const chimneyStack = (b: BlueprintBuilder, x: number, z: number, y0: number, top: number): void => {
-  b.column(x, z, y0, top, 'wallBase');
+  b.column(x, z, y0, top, 'stone');
   b.set(x, top + 1, z, 'stoneSlab', 0);
+};
+
+/** A lantern hung on a short fence-post bracket from the wall cell next to (x, y, z): the post at (x, y, z), the lantern under it. */
+export const lanternBracket = (b: BlueprintBuilder, x: number, y: number, z: number, lantern: BlockRef = 'light'): void => {
+  b.set(x, y, z, 'fence');
+  b.set(x, y - 1, z, lantern);
+};
+
+/**
+ * Timber brackets under the eave: a short beam outside the wall at the plate row at every post, the stubs of the beams
+ * that carry the roof. They stand under the first ring of the roof, so only walls whose eave comes down to the plate row
+ * (the long sides of a gable, every side of a hip) should be given any.
+ */
+export const eaveBrackets = (b: BlueprintBuilder, r: Rect, plateY: number, sides: readonly Dir[], spacing: number): void => {
+  for (const side of sides) {
+    const horizontal = side === NORTH || side === SOUTH;
+    const [a, z] = horizontal ? [r.x0, r.x1] : [r.z0, r.z1];
+    const edge = side === NORTH ? r.z0 : side === SOUTH ? r.z1 : side === WEST ? r.x0 : r.x1;
+    for (const p of postCoords(a, z, spacing)) {
+      const x = horizontal ? p : edge + DX[side];
+      const zz = horizontal ? edge + DZ[side] : p;
+      b.setIfEmpty(x, plateY, zz, 'beam');
+    }
+  }
 };
 
 // --- Garden pieces -----------------------------------------------------------------------------------------------------

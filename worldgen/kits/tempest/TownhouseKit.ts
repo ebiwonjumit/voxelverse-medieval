@@ -7,7 +7,7 @@ import { BuildingKit, KitSize } from '../../structures/BuildingKit';
 import { Lot } from '../../structures/Lot';
 import { StylePack } from '../../structures/StylePack';
 import { FLARED, FLARED_TIGHT, STEEP } from '../../structures/roofProfile';
-import { RoofKind, bays, furnishRoom, mirrorX, planter, roofOver, setOnWall, stairDoors, staircase, windowRow } from './parts';
+import { RoofKind, bays, chimneyStack, eaveBrackets, furnishRoom, lanternBracket, mirrorX, planter, roofOver, setOnWall, stairDoors, staircase, windowRow } from './parts';
 
 // The townhouse: the ordinary house of the town, one or two storeys, its front to the street. What makes two of them differ
 // comes from the lot's seed (which bay the door is in, whether it is mirrored, the wall of the upper storey, a chimney,
@@ -108,6 +108,10 @@ export class TownhouseKit extends BuildingKit {
       }
     }
     const roofInfo = roofOver(b, upper, plate, { kind, profile, tips: variant === 1 ? 0 : 2, gableWall: 'wallFrame' });
+    // Brackets under the eaves: the stubs of the beams that carry the roof (a steep gable has no deep eave to hold them).
+    const eaveSides: Dir[] = kind === 'gable-x' ? [NORTH, SOUTH] : kind === 'gable-z' ? [] : [NORTH, SOUTH, EAST, WEST];
+    eaveBrackets(b, upper, plate, eaveSides, tiered ? 4 : spacing);
+    if (tiered) eaveBrackets(b, walls, PLATE1, [NORTH, SOUTH, EAST, WEST], spacing);
 
     // The front, by variant.
     const gap = Array.from({ length: doorWidth }, (_, i) => doorX + i);
@@ -146,15 +150,13 @@ export class TownhouseKit extends BuildingKit {
       b.steppingPath(doorX, doorZ + 3, doorX, fenceZ - 1, 1, 1);
       b.stoneLantern(walls.x1 - 1, 1, doorZ + 3);
     }
-    // Lanterns beside the door, hung from the eave.
-    const lx0 = Math.max(walls.x0 + 1, doorX - 2);
-    const lx1 = Math.min(walls.x1 - 1, doorX + doorWidth + 1);
-    if (variant === 3) {
-      b.set(lx0, PLATE1 - 1, doorZ + 1, 'light');
-      b.set(lx1, PLATE1 - 1, doorZ + 1, 'light');
-    } else if (variant !== 0) {
-      b.lanternHanger(lx0, 4, doorZ + 1, SOUTH, 'light');
-      b.lanternHanger(lx1, 4, doorZ + 1, SOUTH, 'light');
+    // Lanterns either side of the door (never in front of it), hung from the eave.
+    const lx0 = doorX - 1;
+    const lx1 = doorX + doorWidth;
+    for (const lx of [lx0, lx1]) {
+      if (lx <= walls.x0 || lx >= walls.x1) continue;
+      if (variant === 3) b.set(lx, PLATE1 - 1, doorZ + 1, 'light');
+      else if (variant !== 0) lanternBracket(b, lx, 4, doorZ + 1, 'light');
     }
 
     // Rooms: tatami, a table, a hearth below; a bedroom above. The stair stands in the east corner of the rooms, climbing north;
@@ -178,11 +180,11 @@ export class TownhouseKit extends BuildingKit {
     if (chimney) {
       const cx = walls.x0 + 1;
       const cz = walls.z0 + 1;
-      b.column(cx, cz, FLOOR + 1, roofInfo.crestTop + 1, 'wallBase');
-      b.set(cx, roofInfo.crestTop + 2, cz, 'stoneSlab', 0);
+      chimneyStack(b, cx, cz, FLOOR + 1, roofInfo.crestTop + 1);
     }
     if (planterAt && variant !== 0) planter(b, walls.x0 + 1, 1, doorZ + 1 + (variant === 3 ? 1 : 0), 1, 'x');
     b.treeSpot(1, 1, 'any');
+    b.treeSpot(W - 2, 1, 'any');
 
     const bp = b.build();
     return mirror ? mirrorX(bp, W) : bp;

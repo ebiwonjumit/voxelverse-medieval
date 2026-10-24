@@ -20,15 +20,20 @@ export class Grid {
   readonly sz: number;
   private readonly data: Int32Array;
 
-  constructor(readonly bp: Blueprint, margin = 2) {
+  /** `cover` widens the box to a lot's footprint (x 0 to frontage - 1, z 0 to depth - 1) when the building does not fill it. */
+  constructor(readonly bp: Blueprint, margin = 2, cover?: { frontage: number; depth: number }) {
     const b = bp.bounds();
     if (!b) throw new Error('empty blueprint');
-    this.x0 = b.minX - margin;
+    const minX = Math.min(b.minX, 0);
+    const minZ = Math.min(b.minZ, 0);
+    const maxX = Math.max(b.maxX, cover ? cover.frontage - 1 : b.maxX);
+    const maxZ = Math.max(b.maxZ, cover ? cover.depth - 1 : b.maxZ);
+    this.x0 = minX - margin;
     this.y0 = b.minY - 1;
-    this.z0 = b.minZ - margin;
-    this.sx = b.maxX - b.minX + 1 + margin * 2;
+    this.z0 = minZ - margin;
+    this.sx = maxX - minX + 1 + margin * 2;
     this.sy = b.maxY - b.minY + 4;
-    this.sz = b.maxZ - b.minZ + 1 + margin * 2;
+    this.sz = maxZ - minZ + 1 + margin * 2;
     this.data = new Int32Array(this.sx * this.sy * this.sz).fill(NO_CELL);
     bp.forEach((x, y, z, c) => { this.data[this.index(x, y, z)] = c; });
   }
@@ -160,7 +165,7 @@ const stands = (g: Grid, x: number, y: number, z: number): boolean => open(g, x,
  * of ground just outside the front, `z = frontZ`) and returns everything reached inside the margin.
  */
 export const walkFrom = (bp: Blueprint, frontage: number, depth: number): Walk => {
-  const g = new Grid(bp, 3);
+  const g = new Grid(bp, 3, { frontage, depth });
   const reached = new Set<string>();
   const stack: Array<[number, number, number]> = [];
   const push = (x: number, y: number, z: number): void => {

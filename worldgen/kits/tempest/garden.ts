@@ -39,15 +39,17 @@ export const layGarden = (b: BlueprintBuilder, g: Rect, rng: Rng, o: GardenOptio
       else if (n % 9 === 0) b.set(x, 0, z, NatureBlock.MOSS);
     }
   }
-  const gate = o.gate === undefined ? Math.floor((g.x0 + g.x1) / 2) : o.gate;
+  // The gate is three wide: `gate` is its west cell, the path starts at its middle.
+  const gate = o.gate === undefined ? Math.floor((g.x0 + g.x1) / 2) - 1 : o.gate;
   if (o.fence !== false) {
-    b.fenceRect(g, 1, gate !== null ? [[gate, g.z1], [gate + 1, g.z1]] : []);
+    b.fenceRect(g, 1, gate !== null ? [[gate, g.z1], [gate + 1, g.z1], [gate + 2, g.z1]] : []);
     if (gate !== null) {
-      // Gate posts either side of the gap.
-      b.column(gate - 1, g.z1, 1, 2, 'post');
-      b.column(gate + 2, g.z1, 1, 2, 'post');
-      b.beam(gate - 1, g.z1, gate + 2, g.z1, 3, 'beam');
-      b.set(gate, 2, g.z1, 'light');
+      // Gate posts either side of the gap, a lintel on them and a tile cap over it, a lantern hanging in the opening.
+      b.column(gate - 1, g.z1, 1, 3, 'post');
+      b.column(gate + 3, g.z1, 1, 3, 'post');
+      b.beam(gate - 1, g.z1, gate + 3, g.z1, 4, 'beam');
+      b.beam(gate - 2, g.z1, gate + 4, g.z1, 5, 'roofSlab');
+      b.set(gate + 1, 3, g.z1, 'light');
     }
   }
   // The pond sits on the side away from the gate's path so a path of stones passes beside it.
@@ -55,7 +57,7 @@ export const layGarden = (b: BlueprintBuilder, g: Rect, rng: Rng, o: GardenOptio
   if (o.pond !== false && w >= 9 && d >= 7) {
     const pw = Math.min(w - 6, 5 + rng.int(3));
     const ph = Math.min(d - 5, 3 + rng.int(2));
-    const leftSide = gate === null ? rng.chance(0.5) : gate - g.x0 > g.x1 - gate;
+    const leftSide = gate === null ? rng.chance(0.5) : gate + 1 - g.x0 > g.x1 - gate - 1;
     const px0 = leftSide ? g.x0 + 2 : g.x1 - 2 - pw + 1;
     const pz0 = g.z0 + 2 + rng.int(Math.max(1, d - ph - 5));
     const pond = rect(px0, pz0, px0 + pw - 1, pz0 + ph - 1);
@@ -70,11 +72,12 @@ export const layGarden = (b: BlueprintBuilder, g: Rect, rng: Rng, o: GardenOptio
   }
   // A line of stepping stones from the gate towards the middle of the garden (or the bridge).
   if (gate !== null) {
+    const gx = gate + 1;
     const tz = bridgeStart ? bridgeStart[1] : Math.max(g.z0 + 2, g.z1 - 6);
-    const tx = bridgeStart ? bridgeStart[0] : gate;
-    const n = Math.max(Math.abs(g.z1 - 1 - tz), Math.abs(gate - tx), 1);
+    const tx = bridgeStart ? bridgeStart[0] : gx;
+    const n = Math.max(Math.abs(g.z1 - 1 - tz), Math.abs(gx - tx), 1);
     for (let i = 0; i <= n; i++) {
-      const sx = Math.round(gate + ((tx - gate) * i) / n);
+      const sx = Math.round(gx + ((tx - gx) * i) / n);
       const sz = Math.round(g.z1 - 1 + ((tz - (g.z1 - 1)) * i) / n);
       b.steppingStones([[sx, sz]], 1);
       result.path.push([sx, sz]);

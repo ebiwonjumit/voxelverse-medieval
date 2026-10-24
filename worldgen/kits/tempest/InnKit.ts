@@ -61,9 +61,9 @@ export class InnKit extends BuildingKit {
     // The veranda: all round the front and both sides, posts at its outer edge up to the plate, a beam on them, lanterns below it.
     const gap = Array.from({ length: doorWidth }, (_, i) => doorX + i);
     const vz = M.z1 + veranda;
-    b.engawa(M, FLOOR, SOUTH, veranda, { from: M.x0 - veranda, to: M.x1 + veranda, gap, posts: 4, postTop: PLATE1 });
-    b.engawa(M, FLOOR, EAST, veranda, { from: M.z0, to: M.z1, posts: 4, postTop: PLATE1 });
-    b.engawa(M, FLOOR, WEST, veranda, { from: M.z0, to: M.z1, posts: 4, postTop: PLATE1 });
+    b.engawa(M, FLOOR, SOUTH, veranda, { from: M.x0 - veranda, to: M.x1 + veranda, gap, posts: 4, postTop: PLATE1, post: 'accent' });
+    b.engawa(M, FLOOR, EAST, veranda, { from: M.z0, to: M.z1, posts: 4, postTop: PLATE1, post: 'accent' });
+    b.engawa(M, FLOOR, WEST, veranda, { from: M.z0, to: M.z1, posts: 4, postTop: PLATE1, post: 'accent' });
     b.beam(M.x0 - veranda, vz, M.x1 + veranda, vz, PLATE1, 'beam');
     b.beam(M.x0 - veranda, M.z0, M.x0 - veranda, vz, PLATE1, 'beam');
     b.beam(M.x1 + veranda, M.z0, M.x1 + veranda, vz, PLATE1, 'beam');
