@@ -203,7 +203,7 @@ A **`Lot`** is a plot a building stands on: `id`, a world rectangle (`x`, `z`, `
 
 A **`BuildingKit`** has a `name`, `frontage` and `depth` limits (`KitSize`), `floors`, `variants`, `preferredSize(variant)` (for the viewer and tests), `fits(lot)` and `build(lot, style, rng, variant)`. `buildWithKit(kit, lot, style, variant)` does it the standard way: the generator is the lot's seed forked by the kit's name and the variant (`kitRng`), and the family is the lot's or the style's pick for its district. Same lot, same building.
 
-A **`KitRegistry`** holds kits with weights by district (`register(kit, { residential: 3, commercial: 1 }, fallback)`), `candidates(lot)` (those that fit its size and storeys with a weight above zero), and `pick(lot, rng?)`, which chooses by weight with the lot's own seed and returns null when nothing fits. `createTempestKits()` (`worldgen/tempest/kits/index.ts`) is Tempest's registry: for now the placeholder box house for every district and the demonstration kits with no district weight (a planner places them by name).
+A **`KitRegistry`** holds kits with weights by district (`register(kit, { residential: 3, commercial: 1 }, fallback)`), `candidates(lot)` (those that fit its size and storeys with a weight above zero), and `pick(lot, rng?)`, which chooses by weight with the lot's own seed and returns null when nothing fits. `createTempestKits()` (`worldgen/tempest/kits/index.ts`) is Tempest's registry: the placeholder box house for every district and the demonstration kits with no district weight (a planner places them by name). The district kits of step 7.2b have their own registry, `createTempestKitRegistry(style)` in `worldgen/kits/tempest/index.ts` (see [The district kits](#the-district-kits)).
 
 The **`BoxHouseKit`** is the placeholder: a walled box with a door, windows and a plain hip roof in whatever style it is given, any size from 5 by 5, one to three storeys. It exists so the zone works before the real kits arrive, and to try a new style pack on a building.
 
@@ -266,7 +266,7 @@ node bench/run.mjs --width 1600 --height 900 --url "http://localhost:3105/?sandb
 
 ## The demonstration kits
 
-They prove the builder and are what the viewer shows. None is a district kit: the real kits come in the next steps.
+They prove the builder and are what the viewer shows. None is a district kit: the district kits are in the next section.
 
 - **`timber-house`** (13 by 14, three variants): a raised floor on a stone footing, plaster walls in a dark frame, lit shoji screens either side of a door with a noren, lattice windows on the other walls, a veranda with posts to the eave and a rail, steps to a yard with stepping stones, a stone lantern, a bamboo fence and a sakura marker, red lanterns hung from the eave, and inside a tatami room with a low table, cushions, futons, a bookshelf, a hearth and a vase. Variant 0 has a gable roof with a king post in each plaster gable, 1 a hip and gable, 2 a hip, all `FLARED` with raised corners and horned ridge ends.
 - **`gate`** (17 by 7, two variants): a roofed gate with four lacquered posts, a tie beam and lintels, a low flared gable roof with horned ends, lanterns hanging in the passage, plaster walls with tile caps on either side, stone lanterns outside. Variant 1 has dark timber posts and a signboard.
@@ -288,6 +288,87 @@ Honestly, comparing the viewer with Tempest-3, -4, -5 and -7:
 - **Street life:** noren, awnings, signs, barrels and laundry exist as helpers and are used on the demonstration house and gate, but the town's streets will only look lived in when the district kits use them all.
 - **Plaster is greyer** than the pictures' white at noon; that is the tile, not the builder.
 
+## The district kits
+
+Step 7.2b: the buildings the planner puts on the lots, in `worldgen/kits/tempest/`, one file per kit, `parts.ts` (bays, windows, roofs over a wall, stairs, furniture, props) and `garden.ts` (ponds, paths, stones and trees) shared between them. They are pure `BuildingKit` classes: no Three.js, no block ids that a style pack supplies, and everything that varies comes from the lot's seed, the variant and the palette family, so a lot always gets the same house and two lots never get the same one. `createTempestKitRegistry(style)` registers them all with district weights and fails at start-up (not on a worker's first lot) if the pack has no families.
+
+Every kit is built in the kit frame (front south, footprint from the corner at 0, 0, `y = 0` the ground), is **mirrored** left to right on a coin toss of its seed, and shows these things: wall detail (a stone or plaster footing, posts every four or five blocks, plaster or half-timber panels, beams at each floor), windows (lit shoji at the front, lattice, glass or blinds at the sides and back), a roof with flared eaves, raised corners and ridge caps, and a few props at the door. Houses have a floor, tatami, a few furnishings and a stair to the upper storeys (`furnishRoom`); the richer interiors come from the landmark step. Roofs are never plain boxes: the profile (`FLARED`, `FLARED_TIGHT`, `STEEP`) and the roof shape (hip, gable, hip and gable, tiers of skirt roofs) change with the variant and the lot.
+
+### The kits
+
+| Kit | Variants | Lot (frontage by depth) | Storeys | What the variants are |
+| --- | ---: | --- | ---: | --- |
+| `townhouse` | 4 | 9 to 17 by 10 to 18 | 1 to 2 | 0: two storeys, a porch under a balcony on posts, an irimoya roof (hip and gable). 1: two storeys under a steep half-timbered gable to the street, a canopy over the door (the Western gable of Tempest-5). 2: tiers, a skirt roof round the ground floor and a smaller storey above under a hip with raised corners. 3: one storey, a veranda along the front, a long gable roof, a yard with a fence, stepping stones and a stone lantern |
+| `shop` | 3 | 9 to 17 by 10 to 17 | 1 to 2 | 0: an open timber front under a tiled lean-to eave, counter between the posts, noren, goods, a blade sign. 1: sliding screens and a door under a deep striped awning, a sign board, barrels and crates outside. 2: an arcade, the upper floor on posts over a covered walk. A chimney and a planter on a roll |
+| `inn` | 2 | 15 to 27 by 17 to 29 | 2 to 3 | 0: tiers, each storey two blocks in from the one below under a skirt roof of its own, a hip on top, a veranda of vermilion posts all round. 1: one long gable roof over two storeys, a lean-to over the veranda, a courtyard garden behind |
+| `shrine` | 2 | 15 to 31 by 21 to 37 | 1 | 0: the full complex, a vermilion torii at the street, a long paving path between stone lanterns, a purification basin under a roof, steps to a terrace and the hall (hip and gable, shimenawa across the front), a side shrine and a sacred tree. 1: a wayside shrine with two torii one behind the other and a small gabled hall. The lacquer is vermilion in every palette family |
+| `watchtower` | 2 | 11 to 15 by 11 to 15 | 2 to 3 | 0: a stone base with arrow slits, two timber storeys with lit screens and a vermilion rail, skirt roofs, the top under a hip with a ridge cap. 1: a fire watch, one closed storey and an open lookout under a hip with a bell and a blue ore beacon. A straight flight through the base and a spiral round the narrow storeys above |
+| `storehouse` | 2 | 9 to 17 by 10 to 18 | 1 to 2 | the kura. 0: one storey under a long gable roof, a small eave over the door. 1: two storeys, a skirt roof round the stone-footed ground floor and a gable above. White plaster on a plinth, small deep windows, one big lacquered door |
+| `garden-house` | 2 | 17 to 29 by 17 to 29 | 1 to 2 | 0: a tea house at the back of a pond garden (stepping stones, a small arched bridge, lanterns, trees), a veranda on the front and one side. 1: a two storey villa at one side with a dry garden of raked gravel, boulders and bamboo |
+| `garden-plot` | 2 | 9 to 27 by 9 to 27 | 1 | a lot with no house. 0: a pond garden, a bamboo fence with a gate, koi, a bridge, a bench, lanterns, places for sakura and cedar. 1: a kitchen garden with furrows, a scarecrow, crates and a tool hut |
+| `market-stall` | 3 | 7 to 11 by 6 to 9 | 1 | four posts, a counter with stock, crates and barrels behind it, red lanterns for the evening. 0: a small tiled hip with horned ridge ends. 1: a striped cloth awning on a frame, higher at the back, a sign board. 2: a tent of roof stairs, a rack of washing |
+| `well` | 2 | 5 to 9 by 5 to 9 | 1 | a ring of mossy stone, two posts and a beam with a bucket. 0: a small gable roof, fan paving, stone lanterns. 1: a plain rope well with barrels, crates, a bench and planters |
+| `river-bridge` | 2 | 5 to 13 by 9 to 49 | 1 | the span is the lot's **depth**, the width its frontage. The deck climbs a block a block to a crown that follows the span (`RiverBridgeKit.deckHeight`: one block high on 9 cells, four on 20 or more), with abutments sunk 6 blocks below the bank and piers every twelve blocks on a long span. Nothing is carved. 0: stone, a paved deck, a vault of mossy stone, stone lanterns, optional blue and green ore lamps on the crown. 1: timber, planks on beams and trestle piers, vermilion rails and newels, paper lanterns |
+
+That is **26 buildings** (variants), and `tests/kits` counts 26 different blueprint hashes at one seed and palette family. Beside the variants, the style family changes the walls, frame and roof of a given kit (six families, see [Style packs](#style-packs)), and the seed changes the mirror, where the door is, planters, chimney, window kind, trees and goods, so one lot size and variant gives at least four different buildings over twelve seeds (a test).
+
+### Registry and district weights
+
+`createTempestKitRegistry(style)` offers, for a lot, the kits that fit its size and storeys with a weight above zero for its district, and picks by weight with the lot's own seed. The districts are the layout's, plus the lot kinds the planner may add on top of them: `market` (stalls round a square), `shrine`, `forest-edge` (where the town meets the trees) and `bridge`.
+
+| Kit | Weights (district: weight) |
+| --- | --- |
+| `townhouse` | residential 8, production 3, commercial 2, government 2, public 2, forest-edge 2, luxury 1.5, guest 1, tourism 1, storage 1 |
+| `shop` | commercial 8, market 5, tourism 3, production 2, public 1, residential 0.5, civic 0.5 |
+| `inn` | tourism 6, guest 3, commercial 1, public 1, residential 0.2 |
+| `shrine` | shrine 10, tourism 0.8, forest-edge 0.5, luxury 0.2, residential 0.05 |
+| `watchtower` | civic 2, forest-edge 2, government 1, public 1, storage 0.3 |
+| `storehouse` | storage 8, production 4, public 2, forest-edge 2, government 1, civic 1, residential 0.4 |
+| `garden-house` | luxury 8, guest 6, government 3, tourism 2, residential 0.4 |
+| `garden-plot` | luxury 3, guest 3, tourism 3, civic 2, public 1, shrine 1, forest-edge 1, residential 0.7, commercial 0.2 |
+| `market-stall` | market 6, commercial 3, tourism 3, production 0.5, residential 0.3 |
+| `well` | civic 2, residential 0.6, production 0.5, forest-edge 0.5, shrine 0.5, commercial 0.3, luxury 0.3 |
+| `river-bridge` | bridge 10 |
+
+The kits do not decide the palette family: the planner passes `lot.family` (so neighbours differ) or the style's weights for the district pick one. A district whose lots no kit fits (a three block lot) gets `null` from `pick`, and the test of the registry checks that every district of the layout gets something on a range of lot sizes and that a dense residential lot is a townhouse more than half the time.
+
+### Looking at the kits
+
+`?sandbox=kits&row=townhouse` shows every variant of a kit in a row; the kits are in the viewer's list by name. The screens below are rows at noon (palette family chosen by the lot, so rows mix terracotta, dark tile, green glaze and thatch), at dusk at eye level and at night, where the lanterns and the lit shoji glow.
+
+```bash
+node bench/run.mjs --width 1800 --height 860 --url "http://localhost:3107/?sandbox=kits&row=townhouse&el=26&zoom=1.55" --shot docs/screens/p7/kits-townhouse.png
+node bench/run.mjs --width 1800 --height 800 --url "http://localhost:3107/?sandbox=kits&row=townhouse&view=eye&fov=80&sky=dusk&family=timber-terracotta" --shot docs/screens/p7/kits-street-eye.png
+node bench/run.mjs --width 1800 --height 860 --url "http://localhost:3107/?sandbox=kits&row=shop&el=24&zoom=1.5&sky=night" --shot docs/screens/p7/kits-night-shop.png
+```
+
+![Townhouses: irimoya with balcony, steep half-timbered gable, tiers, veranda cottage](screens/p7/kits-townhouse.png)
+![Shops: lean-to eave, striped awning, arcade](screens/p7/kits-shop.png)
+![Inns: tiered pagoda roofs and the long gable with a courtyard](screens/p7/kits-inn.png)
+![Shrines](screens/p7/kits-shrine.png)
+![Watchtowers](screens/p7/kits-watchtower.png)
+![Storehouses](screens/p7/kits-storehouse.png)
+![Garden houses](screens/p7/kits-garden-house.png)
+![Garden plots](screens/p7/kits-garden-plot.png)
+![Market stalls](screens/p7/kits-market-stall.png)
+![Wells](screens/p7/kits-well.png)
+![River bridges, stone and timber, over the viewer's river](screens/p7/kits-river-bridge.png)
+![A street of townhouses at dusk, eye level](screens/p7/kits-street-eye.png)
+![A shop front at dusk, eye level](screens/p7/kits-street-eye-shop.png)
+![The market stalls at dusk](screens/p7/kits-dusk-market.png)
+![Townhouses at night](screens/p7/kits-night-townhouse.png)
+![Shops at night](screens/p7/kits-night-shop.png)
+![Inns at night](screens/p7/kits-night-inn.png)
+![Shrines at night](screens/p7/kits-night-shrine.png)
+
+### Judged against the pictures
+
+Honestly, next to Tempest-3, -4, -5 and -7:
+
+- **What is there:** a terracotta town (the heaviest weight in every ordinary district), dark timber against white plaster, half-timber gables, upswept roofs with horned ridge ends beside plain steep Western gables, deep eaves and awnings over the shop fronts, red and striped paper lanterns at doors and eaves, noren, signs, crates and barrels, shoji that glow at night, a stone footing and moss. The tiers of the inn and the watchtower read as pagoda roofs from a distance, and the dark ridged tile of `plaster-dark` and `vermilion-dark` reads as the heavy Japanese tile of Tempest-5.
+- **Still missing or weak:** the eave corners are blocky (two cubes up, see the roof section above). The big inns (27 by 29) have large, plain roof planes: no dormers, no secondary gables. The smallest lots (9 by 10) give a house that is mostly roof. Shop signs are small, since a sign is a block, and there are no shop fronts with glass display windows like the left of Tempest-3 or the lettered signs of Tempest-4 (no script in the block set, on purpose). The night lighting is modest: a lantern lights a few blocks, so a street needs lanterns every four or five blocks to read as lit (the planner's lamp posts and the zone's street furniture are for that), and nothing beats the glow of Tempest-4's hanging lanterns until a street is built. The hip and gable roofs show their gable triangle as a recess set back in the roof, which reads as a dormer from the front and as a notch from the side. Yurts, the neoclassical hall, the aqueduct and the pools are not here (landmarks).
+- **Not tried:** very narrow lots (the kits refuse a lot outside their frontage and depth limits and the registry offers them nothing else), a street where two kits of one family stand side by side with the same roof shape; the planner's `family` hint is what keeps neighbours apart.
+
 ## Tests
 
 | File | Covers |
@@ -295,8 +376,11 @@ Honestly, comparing the viewer with Tempest-3, -4, -5 and -7:
 | `tests/structures/blueprint.test.ts` | cells, negative coordinates and growth, tight bounds, set order, hash, turning and mirroring (states of stairs, horns, awnings, markers), merge, the orientation table against the registry, `Placement` (every turn and mirror against the turned blueprint, markers, a million lookups) |
 | `tests/structures/builder.test.ts` | boxes, shells, floors; roles, ids and states; door openings carved and marked, windows filled; frames; steps, awnings, signs, ponds, lanterns, tree markers, the engawa; roof profiles; **roofs closed, no floating blocks, outside the wall volume, symmetric, ridge and horns, raised corners** for every roof kind, profile and several sizes; furniture and the door path; every role of every family is a registered block |
 | `tests/structures/kits.test.ts` | `Lot` turned to every facing, the registry, the Tempest style pack and its weights, and every kit, variant and palette family: deterministic, inside the lot, no floating blocks, clear doors, the box house without a gap |
+| `tests/kits/tempestKits.test.ts`, `tests/kits/analysis.ts` | every district kit, variant, palette family and seed: deterministic, every cell a real block in a legal state, **inside the lot** at the smallest and largest lots and storeys, turned to every facing with the footprint on the lot, **no floating blocks** (a flood from the ground over support, `floatingCells`), **no unsupported roofs** (`unsupportedRoof`), **an entrance reachable from the street and room to stand inside** (`walkFrom`: a walk over the blueprint with the player's height, steps, stairs and slabs), a way up to every upper floor, **windows that let the light through** and lit ones that glow, every palette family gives a different building, **seeds and variants never look the same twice**, **at least 14 different blueprint hashes** (26), markers inside the footprint, the bridge at every span and width, the registry by district, and the build time |
 | `tests/tempest/layout.test.ts` | the grid, blocks apart from each other and the roads, zoning against the plan, diagonals, landmarks (unique, in the footprint, not overlapping, off blocks and roads unless built on one), the Town Hall at the head of the avenue, the arena, cave and cairn, **the gates equal the RoadNetwork's and its roads (built from the seed) start there**, the river, farms and forest |
 | `tests/worldgen/structures-purity.test.ts` | the new layers import no Three.js, React or DOM, and the engine and content do not import them |
 | `tests/kitSandbox.test.ts` | the viewer's options, stage, camera and light, meshed with the real mesher |
 
 Measured on the development machine: the 97 tests of the structures, the layout, the viewer and the purity check run in about a second and a half (the whole suite, 1,785 tests, in 17 seconds); building a house blueprint takes under a millisecond, and `blockAt` is arithmetic.
+
+Blueprint build time of the district kits at their preferred size (average of ten seeds, milliseconds, measured with the whole suite running beside two other jobs): townhouse 0.89, 0.30, 0.33, 0.18; shop 0.31, 0.28, 0.33; inn 0.87, 0.47; shrine 0.28, 0.09; watchtower 0.29, 0.22; storehouse 0.18, 0.21; garden house 0.20, 0.31; garden plot 0.04, 0.10; market stall 0.04, 0.01, 0.02; well 0.02, 0.01; river bridge 0.26, 0.05. The test bounds the worst of them at 60 ms (scaled for a busy machine), a hundred times the worst measured, so a slow machine does not fail it but a quadratic kit would.
