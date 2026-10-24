@@ -265,7 +265,7 @@ export const buildTownHall = (style: StylePack, rng: Rng): Blueprint => {
 
   // --- The portico, the balcony, the steps --------------------------------------------------------------------------------------
   // Four columns two storeys high carry the entablature; the balcony floor and its balusters stand between them.
-  // The entablature: a course of stone over the columns, a cornice, and the flat pediment of the portico with a lit round window.
+  // The entablature: a course of stone over the columns, a cornice, and the flat pediment of the portico with a lit round opening in it.
   b.floor(rect(10, 21, 20, 23), F3, 'wallBase');
   for (let x = 10; x <= 20; x++) b.set(x, F3, 23, 'trim');
   b.floor(rect(10, 21, 20, 23), F3 + 1, 'wallBase');
