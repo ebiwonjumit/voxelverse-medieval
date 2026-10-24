@@ -21,7 +21,7 @@
 //
 // Chrome is driven over --remote-debugging-pipe, so there are no extra dependencies.
 import { spawn } from 'node:child_process';
-import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -58,6 +58,8 @@ const chrome = spawn(
     '--disable-renderer-backgrounding',
     '--disable-backgrounding-occluded-windows',
     '--no-first-run',
+    '--disable-gpu-shader-disk-cache',
+    '--disk-cache-size=1',
     'about:blank',
   ],
   { stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'] },
@@ -112,6 +114,8 @@ const printSoak = (samples) => {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const shutdown = (code) => {
   chrome.kill('SIGKILL');
+  // Every run's Chrome profile is up to 160 MB; left behind they add up to tens of gigabytes after a few hundred shots.
+  try { rmSync(profile, { recursive: true, force: true, maxRetries: 3 }); } catch { /* the temp folder gets cleaned eventually */ }
   process.exit(code);
 };
 chrome.on('exit', () => {});

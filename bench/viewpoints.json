@@ -14,5 +14,9 @@
   { "name": "east-mountains", "shot": "11150,85,0,-90,-3" },
   { "name": "bridge-small", "shot": "-84,22,538,127,-12" },
   { "name": "town-gate", "shot": "170,13,0,-90,-3" },
-  { "name": "tempest-gate", "shot": "880,14,0,-90,-3" }
+  { "name": "tempest-gate", "shot": "880,14,0,-90,-3" },
+  { "name": "tempest-square", "shot": "1500,11,24,0,-4" },
+  { "name": "tempest-avenue", "shot": "1385,10.8,-1,-90,0" },
+  { "name": "tempest-hall", "shot": "1500,12,-100,0,3" },
+  { "name": "tempest-arena", "shot": "1676,20,-176,0,-6" }
 ]

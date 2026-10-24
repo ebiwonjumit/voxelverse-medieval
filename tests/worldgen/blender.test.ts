@@ -4,6 +4,9 @@ import { Chunk } from '../../engine/Chunk';
 import { cellId } from '../../engine/cell';
 import { CHUNK_SIZE, TERRAIN_MAX_Y, TERRAIN_MIN_Y, WORLD_MAX_Y, WORLD_MIN_Y } from '../../engine/coords';
 import { LegacyZoneAdapter } from '../../worldgen/LegacyZoneAdapter';
+import { getZone } from '../../zones';
+import { TempestCityZone } from '../../worldgen/tempest/TempestCityZone';
+import { zoneGround } from '../../worldgen/tempest/zoneChunk';
 import { createVoxelverseGenerator } from '../../worldgen/VoxelverseGenerator';
 import { ZONE_INFOS, ZoneInfo, insetFromEdge } from '../../worldgen/zones/ZoneInfo';
 import { getTerrainHeight } from '../../utils/terrain';
@@ -147,8 +150,9 @@ describe('zone cores', () => {
 
   it('match LegacyZoneAdapter at 3,000 random points', () => {
     const rng = mulberry32(2024);
-    const cores = ZONE_INFOS.filter((i) => ['Town of Beginnings', 'Greensom Village', 'Federation of Tempest', 'Amestris District'].includes(i.name));
-    expect(cores.map((c) => c.core)).toEqual([140, 45, 550, 550]);
+    // Tempest is no longer a legacy zone: the city zone has its own tests (tests/tempest) and the one below.
+    const cores = ZONE_INFOS.filter((i) => ['Town of Beginnings', 'Greensom Village', 'Amestris District'].includes(i.name));
+    expect(cores.map((c) => c.core)).toEqual([140, 45, 550]);
     let compared = 0;
     for (let i = 0; i < 3000; i++) {
       const info = cores[i % cores.length];
@@ -165,7 +169,7 @@ describe('zone cores', () => {
   });
 
   it('match LegacyZoneAdapter cell for cell in whole chunks with landmarks', () => {
-    const chunks: Pt[] = [[0, 0], [-1, -1], [46, -4], [53, 0], [-47, 2], [0, 8], [-1, 9]];
+    const chunks: Pt[] = [[0, 0], [-1, -1], [-47, 2], [0, 8], [-1, 9]];
     let structure = 0;
     for (const [cx, cz] of chunks) {
       const a = new Chunk(cx, cz);
@@ -184,6 +188,43 @@ describe('zone cores', () => {
       }
     }
     expect(structure).toBeGreaterThan(10000);
+  });
+});
+
+describe('the Tempest core is the city zone', () => {
+  const zone = getZone(1500, 0) as TempestCityZone;
+
+  it('is owned by the city zone, which gives the ground height and the blocks', () => {
+    expect(zone).toBeInstanceOf(TempestCityZone);
+    const rng = mulberry32(31);
+    const info = ZONE_INFOS.find((i) => i.name === 'Federation of Tempest')!;
+    for (let i = 0; i < 1500; i++) {
+      const a = rng() * Math.PI * 2;
+      const d = Math.sqrt(rng()) * (info.core - 1);
+      const x = Math.round(info.shape.cx + Math.cos(a) * d), z = Math.round(info.shape.cz + Math.sin(a) * d);
+      expect(gen.zoneNameAt(x, z)).toBe(info.name);
+      // The generator's own base height is the wilderness field's, which is what the zone blends towards.
+      const h = zoneGround(zone, x, z);
+      expect(gen.terrainHeight(x, z), `height at ${x},${z}`).toBe(h);
+    }
+  });
+
+  it('puts the zone\'s cells into chunks, stairs and awnings with their states, and sampleCell reads the same', () => {
+    let states = 0, compared = 0;
+    for (const [cx, cz] of [[46, -4], [46, -3], [47, -3], [45, 1], [50, 4], [54, 2]] as Pt[]) {
+      const chunk = new Chunk(cx, cz);
+      gen.generateChunk(chunk);
+      for (let lz = 0; lz < CHUNK_SIZE; lz += 3) for (let lx = 0; lx < CHUNK_SIZE; lx += 3) {
+        for (let y = 5; y < 40; y++) {
+          const cell = chunk.getCell(lx, y, lz);
+          expect(gen.sampleCell(cx * CHUNK_SIZE + lx, y, cz * CHUNK_SIZE + lz), `${cx},${cz} ${lx},${y},${lz}`).toBe(cell);
+          if (cell >> 12) states++;
+          compared++;
+        }
+      }
+    }
+    expect(compared).toBeGreaterThan(5000);
+    expect(states).toBeGreaterThan(20);
   });
 });
 

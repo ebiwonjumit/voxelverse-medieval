@@ -251,8 +251,9 @@ describe('where roads meet zone roads', () => {
     { name: 'Town south', along: [0, 1], across: [1, 0], legacyAt: [0, 199], ours: [0, 200], half: 11, legacyId: BlockType.COBBLESTONE },
     { name: 'Greensom north', along: [0, -1], across: [1, 0], legacyAt: [0, 231], ours: [0, 230], half: 2, legacyId: BlockType.COBBLESTONE },
     { name: 'Greensom south', along: [0, 1], across: [1, 0], legacyAt: [0, 369], ours: [0, 370], half: 2, legacyId: BlockType.PATH },
-    { name: 'Tempest west avenue', along: [-1, 0], across: [0, 1], legacyAt: [901, 0], ours: [900, 0], half: 4, legacyId: BlockType.STONE_BRICK },
-    { name: 'Tempest north avenue', along: [0, -1], across: [1, 0], legacyAt: [1500, -599], ours: [1500, -600], half: 4, legacyId: BlockType.STONE_BRICK },
+    // Tempest's roads out are the city zone's now: 9 wide, earth this far from the town (the `legacy` side is the zone's road).
+    { name: 'Tempest west avenue', along: [-1, 0], across: [0, 1], legacyAt: [901, 0], ours: [900, 0], half: 4, legacyId: BlockType.PATH },
+    { name: 'Tempest north avenue', along: [0, -1], across: [1, 0], legacyAt: [1500, -599], ours: [1500, -600], half: 4, legacyId: BlockType.PATH },
   ];
 
   for (const j of joins) {
@@ -263,7 +264,8 @@ describe('where roads meet zone roads', () => {
         const inside = Math.abs(k) <= j.half;
         const l = surface(lx, lz), o = surface(ox, oz);
         if (inside) {
-          expect(l.id, `legacy ${lx},${lz}`).toBe(j.legacyId);
+          if (j.name.startsWith('Tempest')) expect(PAVING.has(l.id), `zone road ${lx},${lz} is ${l.id}`).toBe(true);
+          else expect(l.id, `legacy ${lx},${lz}`).toBe(j.legacyId);
           expect(PAVING.has(o.id), `ours ${ox},${oz} is ${o.id}`).toBe(true);
           expect(Math.abs(l.y - o.y), `step at ${ox},${oz}`).toBeLessThanOrEqual(1);
         } else {
@@ -316,7 +318,8 @@ describe('where roads meet zone roads', () => {
       for (let k = 0; k < 400; k++) {
         const x = Math.round(g.x + (rng() - 0.5) * 120), z = Math.round(g.z + (rng() - 0.5) * 120);
         const info = zoneInfoByName(gen.zoneNameAt(x, z));
-        if (!info || !insideCore(info, x, z)) continue;
+        // (Tempest's core is the city zone's, not the legacy zone's: see the blender tests.)
+        if (!info || info.name === 'Federation of Tempest' || !insideCore(info, x, z)) continue;
         const h = legacy.terrainHeight(x, z);
         expect(gen.terrainHeight(x, z)).toBe(h);
         for (const y of [h - 1, h, h + 1, h + 4]) expect(gen.sampleBlock(x, y, z), `${x},${y},${z}`).toBe(legacy.sampleBlock(x, y, z));
