@@ -421,6 +421,8 @@ export const isClearing = (x: number, z: number): boolean => {
     if (l.kind === 'arena' && inShape({ kind: 'circle', cx: (l.shape as { cx: number }).cx, cz: (l.shape as { cz: number }).cz, r: 46 }, x, z)) return true;
     if (l.kind === 'clearing' && inShape(l.shape, x, z)) return true;
     if (l.kind === 'portal' && inShape({ kind: 'circle', cx: (l.shape as { cx: number }).cx, cz: (l.shape as { cz: number }).cz, r: 22 }, x, z)) return true;
+    // The bridge stands in the open, so the arch and the river are seen from the banks and not through the trees.
+    if (l.kind === 'bridge' && l.shape.kind === 'rect' && x >= l.shape.x0 - 24 && x <= l.shape.x1 + 24 && z >= l.shape.z0 - 24 && z <= l.shape.z1 + 24) return true;
   }
   return false;
 };

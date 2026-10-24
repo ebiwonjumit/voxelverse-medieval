@@ -16,11 +16,11 @@ const OUTER_PAVED = 215;
 
 const FAN = T.FAN_PAVING;
 const STONE = T.STONE_PAVING;
-// Packed earth is worn: nearly all the pale path block, with a little gravel and dark soil showing through in small patches
-// (a third of the cells in dark patches read as holes in the road).
+// Packed earth is worn: nearly all the pale path block, with single cells of soil and a few pebbles showing through. They
+// are one cell each, because the gravel and dirt tiles are dark and clumps of them read as holes in the road.
 const earth = (x: number, z: number): number => {
-  const h = hash2(x >> 1, z >> 1, 0xea57) % 100;
-  return h < 90 ? BlockType.PATH : h < 96 ? NatureBlock.GRAVEL : BlockType.DIRT;
+  const h = hash2(x, z, 0xea57) % 1000;
+  return h < 990 ? BlockType.PATH : h < 995 ? NatureBlock.GRAVEL : BlockType.DIRT;
 };
 
 /** Position across a road (0 at its first edge, width - 1 at the other) and along it, in cells. */

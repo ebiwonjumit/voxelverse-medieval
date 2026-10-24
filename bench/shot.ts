@@ -25,3 +25,12 @@ export const parseDaylight = (search: string): number | null => {
   const n = Number(value);
   return Number.isFinite(n) ? Math.min(Math.max(n, 0), 1) : null;
 };
+
+// Reads ?rd=chunks, a render distance for a screenshot (an aerial of a whole city needs more than the game's 8). Only the
+// ?shot pages use it. Returns null when absent or not a whole number from 3 to 24.
+export const parseRenderDistance = (search: string): number | null => {
+  const value = new URLSearchParams(search).get('rd');
+  if (value === null || value.trim() === '') return null;
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 3 && n <= 24 ? n : null;
+};

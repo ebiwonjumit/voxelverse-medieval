@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { ChunkRenderer } from '../render/ChunkRenderer';
-import { parseDaylight } from '../bench/shot';
+import { parseDaylight, parseRenderDistance } from '../bench/shot';
 import { SkySystem } from '../render/SkySystem';
 
 // The world is drawn by a ChunkRenderer that builds chunk meshes in workers. This component only owns its
@@ -13,7 +13,10 @@ const World: React.FC<{ sky: SkySystem }> = ({ sky }) => {
   const daylightOverride = useMemo(() => parseDaylight(window.location.search), []);
 
   useEffect(() => {
-    const created = new ChunkRenderer();
+    // Only screenshots (?shot=...&rd=14) change the render distance; the game and the benchmark keep the constant.
+    const search = window.location.search;
+    const rd = new URLSearchParams(search).has('shot') ? parseRenderDistance(search) : null;
+    const created = new ChunkRenderer(rd === null ? {} : { renderDistance: rd });
     renderer.current = created;
     scene.add(created.group);
     return () => {

@@ -13,7 +13,7 @@ import Benchmark, { BenchMode, BenchResult } from '../bench/Benchmark';
 import BenchResults from '../bench/BenchResults';
 import ShotCamera from '../bench/ShotCamera';
 import { getWorldProbe } from '../bench/worldProbe';
-import { parseShot } from '../bench/shot';
+import { parseRenderDistance, parseShot } from '../bench/shot';
 
 // How often the HUD and the atmosphere look at playerState. The player moves every frame, but nothing
 // on screen needs React to hear about it that often.
@@ -44,6 +44,7 @@ const Game: React.FC = () => {
       clock: new SkyClock(parseSkyOptions(window.location.search, shot !== null)),
       // In the wilderness the fog and sky lean a little toward the biome, the same one the HUD shows.
       biomeAt: (x, z) => worldGenerator.biomeAt(x, z),
+      renderDistance: (shot !== null ? parseRenderDistance(window.location.search) : null) ?? undefined,
     }),
     [shot],
   );

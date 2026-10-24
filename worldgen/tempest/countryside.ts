@@ -70,17 +70,17 @@ export class Countryside {
       return;
     }
     if (ground < 8 && ground >= POND_WATER_Y - 1 && lx > 150 && lx < 260) {
-      out.surface = ground <= POND_WATER_Y ? NatureBlock.MUD : NatureBlock.GRAVEL;
+      out.surface = ground <= POND_WATER_Y ? NatureBlock.MUD : BlockType.SAND;
       return;
     }
 
-    // The river: sand and gravel in the channel and on its shelves, moss and grass up the bank, reeds at the water's edge.
+    // The river: sand with a little gravel (the tile is dark, so a half-and-half bank reads as a checkerboard) in the channel and on its shelves, moss and grass up the bank, reeds at the water's edge.
     if (lx > 100 && lx < 400) {
       const rd = riverDistance(x, z);
       if (rd < 18) {
         const q = this.f(x, z, 0x71e1);
-        if (ground <= 3) out.surface = q > 0.45 ? NatureBlock.GRAVEL : BlockType.SAND;
-        else if (ground <= 5) { out.surface = q > 0.5 ? NatureBlock.GRAVEL : BlockType.SAND; if (high && ground === 4 && q < 0.14) out.prop = NatureBlock.REEDS; }
+        if (ground <= 3) out.surface = q > 0.8 ? NatureBlock.GRAVEL : BlockType.SAND;
+        else if (ground <= 5) { out.surface = q > 0.9 ? NatureBlock.GRAVEL : BlockType.SAND; if (high && ground === 4 && q < 0.14) out.prop = NatureBlock.REEDS; }
         else if (rd < RIVER_WATER_HALF + 12) { out.surface = q < 0.3 ? NatureBlock.MOSS : BlockType.GRASS; if (high && q > 0.93) out.prop = NatureBlock.FERN; }
         if (rd < 14) return;
       }
