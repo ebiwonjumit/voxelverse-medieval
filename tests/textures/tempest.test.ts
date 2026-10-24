@@ -320,7 +320,7 @@ describe('Tempest shapes', () => {
   });
 
   it('keep every model inside its cell, give solid ones something to bump into and walk-through ones nothing', () => {
-    const NON_SOLID = new Set(['stepping_stones', 'koi_pond', 'water_jet', 'signboard', 'noren_indigo', 'noren_red', 'noren_white', 'laundry_pole']);
+    const NON_SOLID = new Set(['stepping_stones', 'koi_pond', 'water_jet', 'signboard', 'noren_indigo', 'noren_red', 'noren_white', 'laundry_pole', 'paper_lantern_red', 'paper_lantern_striped']);
     for (const id of ids) {
       const def = defOf(id);
       const model = registry.model(id);

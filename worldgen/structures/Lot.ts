@@ -100,6 +100,26 @@ export class Lot {
     return this.facing === 0 || this.facing === 2 ? this.d : this.w;
   }
 
+  /**
+   * A smaller lot inside this one with the same facing, seed and district: `frontage` along the front, centred, and `depth` from
+   * the front line back, so the building stands at the street and the yard is behind it.
+   */
+  within(frontage: number, depth: number): Lot {
+    const along = this.facing === 0 || this.facing === 2;
+    const w = along ? frontage : depth;
+    const d = along ? depth : frontage;
+    const lateral = (this.frontage - frontage) >> 1;
+    let x = this.x, z = this.z;
+    if (along) x += lateral; else z += lateral;
+    // The front is the side the lot faces: north is the low z end, south the high one, east the high x end, west the low.
+    if (this.facing === 2) z += this.d - d;
+    else if (this.facing === 1) x += this.w - w;
+    return new Lot({
+      id: this.id, x, z, w, d, facing: this.facing, district: this.district, seed: this.seed, floors: this.floors, family: this.family,
+      neighbours: this.neighbours, groundY: this.groundY,
+    });
+  }
+
   /** Stands a finished blueprint (front south, corner at 0, 0) on this lot: turned to the street, the footprint on the rectangle. */
   place(blueprint: Blueprint): Placement {
     const turns = this.turns;

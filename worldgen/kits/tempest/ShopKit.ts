@@ -17,12 +17,12 @@ import {
 export class ShopKit extends BuildingKit {
   readonly name = 'shop';
   readonly frontage: KitSize = { min: 9, max: 17 };
-  readonly depth: KitSize = { min: 10, max: 17 };
+  readonly depth: KitSize = { min: 9, max: 22 };
   readonly floors: KitSize = { min: 1, max: 2 };
   readonly variants = 3;
 
   preferredSize(variant = 0): { frontage: number; depth: number; floors: number } {
-    return variant === 2 ? { frontage: 13, depth: 16, floors: 2 } : variant === 1 ? { frontage: 11, depth: 14, floors: 2 } : { frontage: 13, depth: 14, floors: 2 };
+    return variant === 2 ? { frontage: 13, depth: 16, floors: 2 } : variant === 1 ? { frontage: 11, depth: 14, floors: 2 } : { frontage: 13, depth: 15, floors: 2 };
   }
 
   build(lot: Lot, style: StylePack, rng: Rng, variant: number): Blueprint {
@@ -47,7 +47,8 @@ export class ShopKit extends BuildingKit {
     const ww = walls.x1 - walls.x0;
     const spacing = ww % 4 === 0 ? 4 : ww % 3 === 0 ? 3 : 4;
     const z1 = walls.z1;
-    const storeys = lot.floors >= 2 && inner.z1 - inner.z0 >= 4 ? 2 : 1;
+    // The stair is five cells long and needs a landing in front of its foot: a shop with less room behind the counter keeps one storey.
+    const storeys = lot.floors >= 2 && inner.z1 - inner.z0 >= 7 ? 2 : 1;
 
     // The ground floor is at street level: paving behind the counter, planks in a shop with screens.
     const floorRole = variant === 1 ? 'interiorFloor' : 'path';

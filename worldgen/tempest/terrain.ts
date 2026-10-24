@@ -73,7 +73,7 @@ export class TempestTerrain {
     // The river and its banks: the lower of the land and the channel's profile, so it cuts down and never builds up.
     if (lx > RIVER_BOUNDS.x0 && lx < RIVER_BOUNDS.x1 && lz > RIVER_BOUNDS.z0 && lz < RIVER_BOUNDS.z1) {
       const rd = riverDistance(x, z);
-      if (rd < 30) h = Math.min(h, riverProfile(rd));
+      if (rd < 30) h = Math.min(h, riverProfile(rd, bridgeApproach(lx, lz)));
     }
 
     // Ponds: shallow bowls, a block or two under the street.
@@ -123,10 +123,21 @@ export class TempestTerrain {
   }
 }
 
-/** The channel: a deep bed in the middle, shallow shelves where the water ends, then a bank rising 0.75 a cell. */
-export const riverProfile = (distance: number): number => {
+/**
+ * How much the bank is steepened at a column, 0 to 1: where the east road meets the river its bank rises a whole block a cell
+ * (the most a walker's ground may change) and not 0.75, so the ground is back at the street's height at the foot of the bridge
+ * (the bridge's ramps are 8 cells long on the east side), and the player walks off it without a drop. It fades over the 12
+ * cells beside the road.
+ */
+export const bridgeApproach = (lx: number, lz: number): number => {
+  if (lx < 316 || lx > 364) return 0;
+  return 1 - smoothstep((Math.abs(lz) - OUTER_ROAD_HALF - 1) / CORRIDOR_FADE);
+};
+
+/** The channel: a deep bed in the middle, shallow shelves where the water ends, then a bank rising 0.75 a cell (1 at the bridge). */
+export const riverProfile = (distance: number, steep = 0): number => {
   if (distance <= RIVER_WATER_HALF) return 2.5 * Math.pow(distance / RIVER_WATER_HALF, 1.4);
-  return 2.5 + BANK_SLOPE * (distance - RIVER_WATER_HALF);
+  return 2.5 + (BANK_SLOPE + (1 - BANK_SLOPE) * steep) * (distance - RIVER_WATER_HALF);
 };
 
 /** A pond is a shallow bowl: its bed two blocks under the street, rising to the street over the last 2.5 cells of the circle. */

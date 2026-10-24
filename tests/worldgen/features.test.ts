@@ -193,7 +193,8 @@ describe('where features may grow', () => {
             const id = cellId(chunk.getCell(lx, y, lz));
             if (owner === 'Wilderness') { if (id !== 0 && id !== BlockType.WATER) wildernessFeatures++; continue; }
             // Nothing the legacy zones build uses the nature blocks, and the zone's own blocks are what sampleBlock says.
-            if (id >= NatureBlock.CEDAR_LOG && id <= NatureBlock.PODZOL) inside++;
+            // (Tempest builds with them on purpose: its trees, moss and farms are the nature blocks.)
+            if (name !== 'Federation of Tempest' && id >= NatureBlock.CEDAR_LOG && id <= NatureBlock.PODZOL) inside++;
             if (id !== gen.sampleBlock(wx, y, wz)) inside++;
           }
           if (owner === name && wx === 12345678) inside++;

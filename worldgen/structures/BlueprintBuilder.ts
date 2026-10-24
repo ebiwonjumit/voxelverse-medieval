@@ -76,7 +76,8 @@ export interface Room {
   rect: Rect;
   /** The floor row. Things stand on it at floorY + 1. */
   floorY: number;
-  doors: Array<{ x: number; z: number; inward: Dir }>;
+  /** The cell just inside each door and the way in; `stair` marks the ends of a stair, which are not entrances. */
+  doors: Array<{ x: number; z: number; inward: Dir; stair?: boolean }>;
 }
 
 export interface Placed { x: number; y: number; z: number }
@@ -544,15 +545,23 @@ export class BlueprintBuilder implements RoofSink {
   // --- Interiors -------------------------------------------------------------------------------------------------------
 
   /** A floored room: lays the floor row and notes the doors, so furniture keeps them clear. */
-  room(interior: Rect, floorY: number, options: { floor?: BlockRef; doors?: ReadonlyArray<{ x: number; z: number; inward: Dir }> } = {}): Room {
+  room(interior: Rect, floorY: number, options: { floor?: BlockRef; doors?: ReadonlyArray<{ x: number; z: number; inward: Dir; stair?: boolean }> } = {}): Room {
     this.floor(interior, floorY, options.floor ?? 'interiorFloor');
     return { rect: interior, floorY, doors: [...(options.doors ?? [])] };
   }
 
-  /** Tatami over the room's floor, a mat a cell. */
+  /**
+   * Tatami over the room's floor, a mat a cell, except on the cell just inside each door: the entry (genkan) is bare floor. A
+   * door is two blocks high and a person 1.92, so a mat a quarter block high at the threshold would be a step the lintel does
+   * not leave room to climb; the step is taken one cell further in, where the room is open above.
+   */
   tatami(room: Room): this {
     const y = room.floorY + 1;
-    return this.floor(room.rect, y, TempestBlock.TATAMI);
+    const bare = new Set(room.doors.filter((d) => !d.stair).map((d) => `${d.x},${d.z}`));
+    for (let z = room.rect.z0; z <= room.rect.z1; z++) {
+      for (let x = room.rect.x0; x <= room.rect.x1; x++) if (!bare.has(`${x},${z}`)) this.set(x, y, z, TempestBlock.TATAMI);
+    }
+    return this;
   }
 
   /**

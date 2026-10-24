@@ -39,8 +39,10 @@ export interface TreeShape {
 
 export const columnKey = (dx: number, dz: number): number => (dz + 32) * 64 + (dx + 32);
 
+// A person is two blocks tall (rows 1 and 2 above the ground): no street or garden tree has a leaf lower than row 3 anywhere a
+// person can stand beside the trunk, which `tests/tempest/trees.test.ts` checks.
 const streetSakura = (out: BlockList, rng: Rng, lean: Lean, size: number): void => {
-  const h = 3 + rng.int(2);
+  const h = 5 + rng.int(2);
   const ox = LEAN_DX[lean], oz = LEAN_DZ[lean];
   trunk(out, 1, h, NatureBlock.SAKURA_LOG);
   if (lean !== 4) out.add(ox, h, oz, NatureBlock.SAKURA_LOG);
@@ -50,11 +52,11 @@ const streetSakura = (out: BlockList, rng: Rng, lean: Lean, size: number): void 
 };
 
 const streetCedar = (out: BlockList, rng: Rng, size: number): void => {
-  const h = 6 + rng.int(4);
+  const h = 7 + rng.int(4);
   trunk(out, 1, h, NatureBlock.CEDAR_LOG);
   out.add(0, h + 1, 0, NatureBlock.CEDAR_LEAVES);
   out.add(0, h + 2, 0, NatureBlock.CEDAR_LEAVES);
-  for (let tier = 0, dy = h; dy >= 3; tier++, dy -= 2) {
+  for (let tier = 0, dy = h; dy >= 4; tier++, dy -= 2) {
     const r = Math.min(size > 1 ? 3 : 2, 1 + Math.floor(tier * 0.55));
     disc(out, dy, r, NatureBlock.CEDAR_LEAVES, rng, 0.2);
     if (r > 1) disc(out, dy - 1, r - 1, NatureBlock.CEDAR_LEAVES, rng, 0.1);
@@ -62,10 +64,10 @@ const streetCedar = (out: BlockList, rng: Rng, size: number): void => {
 };
 
 const streetBirch = (out: BlockList, rng: Rng, lean: Lean): void => {
-  const h = 4 + rng.int(3);
+  const h = 5 + rng.int(3);
   const ox = LEAN_DX[lean], oz = LEAN_DZ[lean];
   trunk(out, 1, h, BlockType.BIRCH_LOG);
-  blob(out, ox * 2, h + 1, oz * 2, 2.3, 2.5, BlockType.BIRCH_LEAVES, rng);
+  blob(out, ox * 2, h + 2, oz * 2, 2.3, 2.5, BlockType.BIRCH_LEAVES, rng);
 };
 
 const FEATURES: Partial<Record<TreeKind, Feature>> = {

@@ -21,7 +21,11 @@ import { createTempestKits } from '../../worldgen/tempest/kits';
 import { ROAD_GATES, TEMPEST_CENTER_X, farmField, isWooded, landmarkById, roadAt, worldX } from '../../worldgen/tempest/layout';
 import { timeoutMs, tolerant } from '../perf';
 
-const zone = new TempestCityZone({ seed: WORLD_SEED });
+// The zone with the placeholder box house on every lot and no hand-built landmarks: these tests are about the zone's own machinery
+// (lookups, caches, the countryside); tests/tempest/city.test.ts is about the town as it is in the game.
+const isolated = (options: ConstructorParameters<typeof TempestCityZone>[0] = {}): TempestCityZone =>
+  new TempestCityZone({ seed: WORLD_SEED, kits: createTempestKits(), landmarks: null, ...options });
+const zone = isolated();
 
 const hashChunk = (z: TempestCityZone, cx: number, cz: number): number => {
   const chunk = new Chunk(cx, cz);
@@ -161,7 +165,7 @@ describe('the streets and what stands in them', () => {
 
 describe('the lots and their kits', () => {
   it('builds every planned lot with a kit, standing on its rectangle, the same building every time', () => {
-    const fresh = new TempestCityZone({ seed: WORLD_SEED });
+    const fresh = isolated();
     for (const p of zone.planner.lots.filter((_, i) => i % 3 === 0)) {
       const pl = zone.lotPlacement(p);
       expect(pl, p.lot.id).not.toBeNull();
@@ -187,7 +191,7 @@ describe('the lots and their kits', () => {
       readonly depth: KitSize = { min: 5, max: 80 };
       build(): Blueprint { throw new Error('a kit with a bug'); }
     }
-    const z = new TempestCityZone({ seed: WORLD_SEED, kits: new KitRegistry().register(new Bad(), {}, 1) });
+    const z = isolated({ kits: new KitRegistry().register(new Bad(), {}, 1) });
     const p = z.planner.lots.find((l) => l.kind === 'building')!;
     expect(() => z.lotPlacement(p)).not.toThrow();
     expect(z.lotPlacement(p)!.blueprint.size).toBeGreaterThan(50);
@@ -204,7 +208,7 @@ describe('the lots and their kits', () => {
         return b.build();
       }
     }
-    const z = new TempestCityZone({ seed: WORLD_SEED, kits: createTempestKits().register(new Hall(), {}, 0) });
+    const z = isolated({ kits: createTempestKits().register(new Hall(), {}, 0) });
     const hall = landmarkById('town-hall')!;
     const l = z.planner.landmarkLots.find((p) => p.landmark.id === 'town-hall')!.lot;
     const cx = l.x + (l.w >> 1), cz = l.z + (l.d >> 1);
@@ -240,19 +244,19 @@ describe('the lots and their kits', () => {
 
 describe('determinism and consistency', () => {
   it('builds the same chunks from the same seed, whichever order they are made in and however small the blueprint cache is', () => {
-    const a = new TempestCityZone({ seed: WORLD_SEED });
-    const b = new TempestCityZone({ seed: WORLD_SEED, lotCache: 1 });
+    const a = isolated();
+    const b = isolated({ lotCache: 1 });
     const forward = SAMPLE_CHUNKS.map(([, cx, cz]) => hashChunk(a, cx, cz));
     const backward = [...SAMPLE_CHUNKS].reverse().map(([, cx, cz]) => hashChunk(b, cx, cz)).reverse();
     expect(backward).toEqual(forward);
     expect(new Set(forward).size).toBeGreaterThan(6);
     // Another seed is another town.
-    const other = new TempestCityZone({ seed: WORLD_SEED + 1 });
+    const other = isolated({ seed: WORLD_SEED + 1 });
     expect(hashChunk(other, SAMPLE_CHUNKS[1][1], SAMPLE_CHUNKS[1][2])).not.toBe(forward[1]);
   }, timeoutMs(60000));
 
   it('answers a single cell, asked cold, exactly as chunk generation has it', () => {
-    const fresh = new TempestCityZone({ seed: WORLD_SEED });
+    const fresh = isolated();
     const rng = new Rng(31);
     for (const [name, cx, cz] of SAMPLE_CHUNKS) {
       const chunk = new Chunk(cx, cz);
@@ -369,7 +373,7 @@ describe('what the countryside builds', () => {
 
 describe('what a chunk costs', () => {
   it('generates a chunk of the town in well under a frame budget, in node', () => {
-    const z = new TempestCityZone({ seed: WORLD_SEED });
+    const z = isolated();
     // Warm the planner and the shape caches, then time chunks over the town, the farms and the forest.
     hashChunk(z, ...chunkAt(TEMPEST_CENTER_X, 0));
     const t0 = performance.now();

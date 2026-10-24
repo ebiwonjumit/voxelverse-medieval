@@ -32,6 +32,8 @@ export interface PlannedLot {
   block: string;
   /** The plan's sector (layout.ts `SECTORS`). */
   sector: string;
+  /** The free set piece (the landmarks' `bell-tower`, `market-hall`, `bath-house`) that stands on this lot, if the plan gives it one. */
+  piece?: string;
 }
 
 export interface PlannedLandmark {
@@ -71,7 +73,7 @@ const Z_BASE = TEMPEST_CENTER_Z - RADIUS;
 /** Width of the verge between a block's edge and its lots. */
 export const VERGE = 1;
 /** The smallest lot the planner makes, along either side. */
-const MIN_LOT = 8;
+const MIN_LOT = 9;
 
 const FAMILY_TRIES = 3;
 /** The ordinary house (terracotta under dark timber): it may stand beside itself, the accent palettes may not. */
@@ -99,10 +101,18 @@ export const splitLength = (len: number, avg: number, min: number, max: number, 
   return sizes;
 };
 
+/**
+ * The blocks that keep a free set piece of the landmark step: each is one plot (see `layoutStyle`) and a building, never a garden.
+ * The bell tower stands at the south east corner of the Central Square, the market hall in the tourism sector's heart and the
+ * bath house beside the south avenue.
+ */
+export const SET_PIECE_BLOCKS: Readonly<Record<string, string>> = { c1r1: 'bell-tower', c2r2: 'market-hall', c1r3: 'bath-house' };
+
 type LayoutStyle = 'ring' | 'rows' | 'single' | 'quad' | 'column';
 
 const layoutStyle = (b: Block, w: number, h: number, rng: Rng): LayoutStyle => {
   if (w < 24) return 'column';
+  if (SET_PIECE_BLOCKS[b.id]) { rng.next(); return 'single'; }
   const r = rng.next();
   switch (b.district) {
     case 'residential': return w >= 34 && h >= 34 && r < 0.6 ? 'ring' : 'rows';
@@ -274,7 +284,7 @@ const diagonalPlots = (b: Block, rng: Rng): Plot[] => {
       const nx = -uz * side, nz = ux * side;
       const faceX = (nx < 0 ? 1 : 3) as Facing, faceZ = (nz < 0 ? 2 : 0) as Facing;
       for (let t = 0, n = 0; t < len; t += 1, n++) {
-        const size = 9 + rng.int(3);
+        const size = 10 + rng.int(3);
         const half = Math.floor(size / 2);
         // Stand the square as close to the street as the verge allows: the nearest corner (the normal is at 45 degrees) is
         // 2.5 + a verge + a little rounding from the centre-line, tried in steps until no road is within a cell of it.
@@ -484,7 +494,7 @@ export class DistrictPlanner {
       const drafts = plots.map((p, n) => {
         const seed = hash2(bi * 64 + n, 0x10705, this.seed) | 0;
         const lrng = new Rng(seed);
-        const kind = chooseKind(b, lrng);
+        const kind = SET_PIECE_BLOCKS[b.id] && plots.length === 1 ? 'building' : chooseKind(b, lrng);
         const floors = kind === 'building' ? floorsOf(b, p.x, p.z, lrng) : 1;
         let family = this.style.pickFamily(lrng.fork(1), b.district);
         // The town reads as one terracotta mass: the accent palettes (dark tile, green glaze, thatch) are kept to accents.
@@ -508,7 +518,7 @@ export class DistrictPlanner {
           groundY: TEMPEST_GROUND,
           neighbours: { left: infoOf(nextIsLeft ? next : prev), right: infoOf(nextIsLeft ? prev : next), back: infoOf(behind) },
         });
-        lots.push({ index: lots.length, lot, kind: d.kind, block: b.id, sector });
+        lots.push({ index: lots.length, lot, kind: d.kind, block: b.id, sector, piece: SET_PIECE_BLOCKS[b.id] && plots.length === 1 ? SET_PIECE_BLOCKS[b.id] : undefined });
       });
     }
     return lots;

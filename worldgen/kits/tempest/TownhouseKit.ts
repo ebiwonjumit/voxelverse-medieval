@@ -20,7 +20,7 @@ import { RoofKind, bays, chimneyStack, eaveBrackets, furnishRoom, lanternBracket
 export class TownhouseKit extends BuildingKit {
   readonly name = 'townhouse';
   readonly frontage: KitSize = { min: 9, max: 17 };
-  readonly depth: KitSize = { min: 10, max: 18 };
+  readonly depth: KitSize = { min: 9, max: 22 };
   readonly floors: KitSize = { min: 1, max: 2 };
   readonly variants = 4;
 
@@ -59,7 +59,8 @@ export class TownhouseKit extends BuildingKit {
       : rect(reachX + side, reachZ, W - 1 - reachX - side, D - 1 - reachZ - yard);
     const ww = walls.x1 - walls.x0;
     const wd = walls.z1 - walls.z0;
-    const storeys = variant === 3 ? 1 : Math.min(lot.floors, 2);
+    // A second storey needs a stair of four cells inside the walls: a house on a small lot keeps to one.
+    const storeys = variant === 3 || wd < 7 || ww < 5 ? 1 : Math.min(lot.floors, 2);
     const tiered = variant === 2 && storeys === 2 && ww >= 8 && wd >= 8;
     if (variant === 2 && !tiered) walls = rect(reachX, reachZ, W - 1 - reachX, D - 1 - reachZ - yard);
     const inner = rect(walls.x0 + 1, walls.z0 + 1, walls.x1 - 1, walls.z1 - 1);
@@ -118,7 +119,7 @@ export class TownhouseKit extends BuildingKit {
     if (variant === 0 || variant === 3) {
       // A veranda along the front; the door steps down between its posts. Two storeys: a balcony on the posts above it.
       b.engawa(walls, FLOOR, SOUTH, 1, { from: walls.x0, to: walls.x1, gap, posts: 4, postTop: variant === 0 && storeys === 2 ? PLATE1 - 1 : PLATE1 });
-      for (let i = 0; i < doorWidth; i++) b.stair(doorX + i, FLOOR, doorZ + 1, SOUTH, 'stoneStairs');
+      for (let i = 0; i < doorWidth; i++) b.stair(doorX + i, FLOOR, doorZ + 1, NORTH, 'stoneStairs');
       if (variant === 0 && storeys === 2) {
         b.balcony(walls, PLATE1, SOUTH, walls.x0, walls.x1, 1, { rail: true });
         for (const bay of front) if (bay.from !== doorBay.from) b.set(bay.from + Math.floor(bay.len / 2), PLATE1 - 1, doorZ + 1, 'light');
@@ -182,7 +183,11 @@ export class TownhouseKit extends BuildingKit {
       const cz = walls.z0 + 1;
       chimneyStack(b, cx, cz, FLOOR + 1, roofInfo.crestTop + 1);
     }
-    if (planterAt && variant !== 0) planter(b, walls.x0 + 1, 1, doorZ + 1 + (variant === 3 ? 1 : 0), 1, 'x');
+    // The planter stands under a window, never in front of the door.
+    if (planterAt && variant !== 0) {
+      const px = walls.x0 + 1 >= doorX - 1 && walls.x0 + 1 <= doorX + doorWidth ? walls.x1 - 1 : walls.x0 + 1;
+      planter(b, px, 1, doorZ + 1 + (variant === 3 ? 1 : 0), 1, 'x');
+    }
     b.treeSpot(1, 1, 'any');
     b.treeSpot(W - 2, 1, 'any');
 

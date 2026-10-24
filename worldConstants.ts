@@ -29,7 +29,7 @@ export const COLORS = {
   
   // Biome Variations (Grass)
   GRASS_SAO: '#4ade80',      // Vibrant
-  GRASS_TEMPEST: '#2e7d32',  // Dark Jungle
+  GRASS_TEMPEST: '#8fc34e',  // Fresh yellow-green meadow, as in the pictures of Tempest
   GRASS_AMESTRIS: '#8d8d8d', // Dead/Desaturated
   GRASS_BOSSE: '#cddc39',    // Golden/Lime
   GRASS_FREMMEVILLA: '#81d4fa', // Cool Blue-Green

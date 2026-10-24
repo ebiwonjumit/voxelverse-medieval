@@ -48,7 +48,7 @@ export class WatchtowerKit extends BuildingKit {
     b.opening(base, { side: SOUTH, at: half, y: 2, kind: 'door', noren: true, height: 2 });
     for (const wall of [EAST, WEST, NORTH] as Dir[]) framedWindow(b, base, wall, half, 4, 1, 1, 'lattice');
     for (const t of [1, 7]) framedWindow(b, base, SOUTH, t, 4, 1, 1, 'lattice');
-    b.stair(cx, 1, base.z1 + 1, SOUTH, 'stoneStairs');
+    b.stair(cx, 1, base.z1 + 1, NORTH, 'stoneStairs');
     // Stone slabs cap the corners of the ledge.
     for (const [x, z] of [[base.x0, base.z0], [base.x1, base.z0], [base.x0, base.z1], [base.x1, base.z1]] as const) b.set(x, BASE_TOP + 1, z, 'stoneSlab', 0);
 

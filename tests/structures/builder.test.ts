@@ -335,7 +335,7 @@ describe('roofs', () => {
 });
 
 describe('furniture and rooms', () => {
-  it('lays the floor, covers it with tatami one block up, and never puts anything on or beside the door path', () => {
+  it('lays the floor, covers it with tatami one block up (the entry by each door stays bare), and never puts anything on or beside the door path', () => {
     for (let seed = 1; seed <= 25; seed++) {
       const b = new BlueprintBuilder(TEMPEST_STYLE, new Rng(seed), 'room');
       const interior = rect(1, 1, 7, 5);
@@ -348,13 +348,16 @@ describe('furniture and rooms', () => {
         { block: T.HEARTH, count: 1, where: 'corner' },
       ]);
       expect(placed.length).toBeGreaterThan(0);
-      // The door cells and the two behind each stay as tatami: the furniture never replaced them.
+      // The door cells and the two behind each stay as tatami, the furniture never replacing them, except the entry cell itself,
+      // which is bare floor so the quarter block step is taken in the room and not under the lintel.
       for (const [dx, dz, ix, iz] of [[4, 5, 0, -1], [1, 3, 1, 0]]) {
+        expect(b.bp.get(dx, 2, dz), `seed ${seed} entry ${dx},${dz}`).toBe(NO_CELL);
         for (let k = 0; k <= 2; k++) {
           for (const side of [-1, 0, 1]) {
             const x = dx + ix * k + (iz !== 0 ? side : 0);
             const z = dz + iz * k + (ix !== 0 ? side : 0);
             if (x < interior.x0 || x > interior.x1 || z < interior.z0 || z > interior.z1) continue;
+            if (x === dx && z === dz) continue;
             expect(cellId(b.bp.get(x, 2, z)), `seed ${seed} ${x},${z}`).toBe(T.TATAMI);
             expect(b.bp.get(x, 3, z)).toBe(NO_CELL);
           }

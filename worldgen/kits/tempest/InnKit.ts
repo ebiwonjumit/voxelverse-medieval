@@ -69,7 +69,7 @@ export class InnKit extends BuildingKit {
     b.beam(M.x1 + veranda, M.z0, M.x1 + veranda, vz, PLATE1, 'beam');
     for (let x = M.x0 - veranda + 2; x < M.x1 + veranda; x += 4) if (!gap.includes(x)) b.set(x, PLATE1 - 1, vz, (x % 8 === 0) === lanternAlt ? 'lightAlt' : 'light');
     for (let z = M.z0 + 2; z < M.z1; z += 4) { b.set(M.x0 - veranda, PLATE1 - 1, z, 'light'); b.set(M.x1 + veranda, PLATE1 - 1, z, 'light'); }
-    for (const x of gap) b.stair(x, FLOOR, vz + 1, SOUTH, 'stoneStairs');
+    for (const x of gap) b.stair(x, FLOOR, vz + 1, NORTH, 'stoneStairs');
 
     // Upper storeys, each with the stair that reaches it.
     interface Level { walls: Rect; inner: Rect; floorRow: number }

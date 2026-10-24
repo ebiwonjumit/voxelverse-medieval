@@ -61,7 +61,7 @@ export class GardenHouseKit extends BuildingKit {
     // The veranda along the front and, on the garden side, along the east wall.
     const gap = [doorX];
     b.engawa(walls, FLOOR, SOUTH, 1, { from: walls.x0, to: walls.x1, gap, posts: 4, postTop: PLATE1 });
-    b.stair(doorX, FLOOR, walls.z1 + 1, SOUTH, 'stoneStairs');
+    b.stair(doorX, FLOOR, walls.z1 + 1, NORTH, 'stoneStairs');
     if (sideVeranda) b.engawa(walls, FLOOR, EAST, 1, { from: walls.z0, to: walls.z1, posts: 4, postTop: PLATE1 });
     let top = PLATE1;
     let upperInner = inner;
@@ -105,8 +105,12 @@ export class GardenHouseKit extends BuildingKit {
       if (side.x1 - side.x0 >= 8) layGarden(b, side, rng, { pond: side.x1 - side.x0 >= 10 && rng.chance(0.5), bridge: true, lanterns: 2, trees: 2, bamboo: true, rock: true, gate: null });
       b.fenceRect(rect(1, walls.z1 + 3, Math.min(walls.x1 + 3, W - 2), D - 2), 1, [[doorX, D - 2], [doorX + 1, D - 2]]);
       b.stoneLantern(walls.x0 - 1, 1, walls.z1 + 3);
-      if (planterAt) planter(b, walls.x1 - 2, 1, walls.z1 + 2, 2, 'x');
-      b.set(walls.x1 - 1, 1, walls.z1 + 3, T.BARREL);
+      // The planter and the barrel stand off to the side of the steps, never in the way up to the door.
+      const clearOfDoor = (x: number, len: number): boolean => x + len - 1 < doorX - 1 || x > doorX + 1;
+      const planterX = clearOfDoor(walls.x1 - 2, 2) ? walls.x1 - 2 : walls.x0 + 1;
+      if (planterAt) planter(b, planterX, 1, walls.z1 + 2, 2, 'x');
+      const barrelX = clearOfDoor(walls.x1 - 1, 1) ? walls.x1 - 1 : walls.x0 + 3;
+      b.set(barrelX, 1, walls.z1 + 3, T.BARREL);
       b.treeSpot(2, walls.z1 + 4, 'sakura');
     }
     const bp = b.build();

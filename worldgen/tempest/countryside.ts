@@ -29,6 +29,8 @@ export const newDecor = (): Decor => ({ surface: BlockType.GRASS, prop: 0, fluid
 export interface ForestTree { x: number; z: number; kind: TreeKind; variant: number; ground: number }
 
 /** The furthest any forest tree's blocks reach from its trunk (the sakura's wide crown). */
+/** Half the side of the square the built grid, its boundary road and its edge streets fill (cells from the Central Square). */
+const GRID_HALF = 196;
 export const FOREST_REACH = 8;
 const CELL = 6;
 const FOREST_CACHE = 40000;
@@ -172,7 +174,8 @@ export class Countryside {
     const z = gz * CELL + ((h >>> 4) & 7) % CELL;
     const lx = localX(x), lz = localZ(z);
     const d = Math.hypot(lx, lz);
-    if (d < 200) return null;
+    // Never in the built grid (a lot's corner is 256 cells out on the diagonal, beyond the circle of 200): a tree in a house is a bug.
+    if (d < 200 || (Math.abs(lx) < GRID_HALF && Math.abs(lz) < GRID_HALF)) return null;
     const wooded = isWooded(x, z);
     const roll = ((h >>> 8) & 255) / 256;
     const r = ((h >>> 17) & 127) / 128;

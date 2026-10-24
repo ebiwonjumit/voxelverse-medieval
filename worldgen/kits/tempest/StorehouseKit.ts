@@ -14,8 +14,8 @@ import { bays, framedWindow, furnishRoom, mirrorX, pent, roofOver, setOnWall, st
 //   variant 1  two storeys: a skirt roof round the stone-footed ground floor, a smaller plastered storey above under a gable
 export class StorehouseKit extends BuildingKit {
   readonly name = 'storehouse';
-  readonly frontage: KitSize = { min: 9, max: 17 };
-  readonly depth: KitSize = { min: 10, max: 18 };
+  readonly frontage: KitSize = { min: 11, max: 24 };
+  readonly depth: KitSize = { min: 11, max: 22 };
   readonly floors: KitSize = { min: 1, max: 2 };
   readonly variants = 2;
 

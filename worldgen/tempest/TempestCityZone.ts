@@ -3,7 +3,7 @@ import { AIR_CELL, Cell, cellId, packCell } from '../../engine/cell';
 import { AtmosphereSettings, LodLevel, Zone } from '../../zones/Zone';
 import { BlockType } from '../../worldConstants';
 import { Rng, hash2 } from '../noise';
-import { Blueprint, NO_CELL, Placement } from '../structures/Blueprint';
+import { Blueprint, Bounds, NO_CELL, Placement } from '../structures/Blueprint';
 import { BoxHouseKit } from '../structures/BoxHouseKit';
 import { BuildingKit, buildWithKit } from '../structures/BuildingKit';
 import { KitRegistry } from '../structures/KitRegistry';
@@ -12,10 +12,11 @@ import { StylePack } from '../structures/StylePack';
 import { Countryside, Decor, FOREST_REACH, ForestTree, newDecor } from './countryside';
 import { DistrictPlanner, PlannedLandmark, PlannedLot, PlannedProp } from './DistrictPlanner';
 import { createFillerKits } from './fillers';
-import { createTempestKits } from './kits';
+import { createTempestCityKits } from './cityKits';
 import {
   Block, COMPOUND, LANDMARKS, TEMPEST_CENTER_X, TEMPEST_CENTER_Z, TEMPEST_GROUND, TEMPEST_RADIUS, inBlock, landmarkById, localX, localZ,
 } from './layout';
+import { LandmarkRegistry, LandmarkSpec, LANDMARK_SEED, createTempestLandmarks, frameSize, landmarkLot, placeBlueprint } from './landmarks';
 import { Lru } from './lru';
 import { roadBlock } from './streets';
 import { TEMPEST_STYLE } from './style';
@@ -39,11 +40,32 @@ const MAX_PROPS = 96;
 export interface TempestCityOptions {
   /** The world seed: the lots, the buildings and the countryside all come from it. Default WORLD_SEED. */
   seed?: number;
-  /** The kits for the building lots. Default `createTempestKits()`. A kit named after a landmark's layout id builds that landmark. */
+  /** The kits for the building lots. Default `createTempestCityKits()`, the district kits. A kit named after a landmark's layout id builds that landmark. */
   kits?: KitRegistry;
+  /**
+   * The hand-built landmarks (compound and Town Hall, arena, gates, cave, cairn, bridge...) the zone stamps on the layout's places,
+   * and the free set pieces it stands on the plan's lots. Default `createTempestLandmarks()`; `null` leaves the landmarks to the
+   * kits registry (and the placeholder bridge), which is how the zone tests isolate the planner.
+   */
+  landmarks?: LandmarkRegistry | null;
   style?: StylePack;
   /** Blueprints kept at once (default 256). Only memory and time depend on it, never the world. */
   lotCache?: number;
+}
+
+/** What a column asks of a building: the cell at a world position, and how high it reaches. A `Placement` is one. */
+interface Stand {
+  cellAt(wx: number, wy: number, wz: number): number;
+  bounds(): Bounds | null;
+}
+
+// A placement with a hole in it: the surround of a free set piece (a park) has nothing inside the piece's own footprint.
+class MaskedStand implements Stand {
+  constructor(private readonly base: Placement, private readonly x0: number, private readonly z0: number, private readonly x1: number, private readonly z1: number) {}
+  cellAt(wx: number, wy: number, wz: number): number {
+    return wx >= this.x0 && wx <= this.x1 && wz >= this.z0 && wz <= this.z1 ? NO_CELL : this.base.cellAt(wx, wy, wz);
+  }
+  bounds(): Bounds | null { return this.base.bounds(); }
 }
 
 interface ColumnCache {
@@ -51,7 +73,7 @@ interface ColumnCache {
   x: number; z: number; ground: number; high: boolean;
   surface: Cell;
   maxY: number;
-  placements: Placement[];
+  placements: Stand[];
   nProps: number;
   propY: Int32Array;
   propCell: Uint16Array;
@@ -79,6 +101,11 @@ export class TempestCityZone extends Zone {
   private readonly lotCache: Lru<number, Placement | null>;
   private readonly landmarkKits: Array<{ planned: PlannedLandmark; kit: BuildingKit }> = [];
   private readonly landmarkCache = new Map<number, Placement | null>();
+  // The hand-built landmarks: one entry per spec (the compound covers the Town Hall, the forecourt and the lodge), with the rectangle to test a column against.
+  private readonly specLandmarks: Array<{ spec: LandmarkSpec; x0: number; z0: number; x1: number; z1: number; groundY: number; index: number }> = [];
+  private readonly specCache = new Map<number, Placement | null>();
+  private readonly freePieces = new Map<string, LandmarkSpec>();
+  private readonly pieceCache = new Map<number, Stand[]>();
   private readonly propCache = new Map<number, Placement | null>();
   private readonly col: ColumnCache = {
     valid: false, x: 0, z: 0, ground: 0, high: true, surface: 0, maxY: 0, placements: [], nProps: 0,
@@ -91,16 +118,29 @@ export class TempestCityZone extends Zone {
     super();
     this.seed = (options.seed ?? 20251122) | 0;
     this.style = options.style ?? TEMPEST_STYLE;
-    this.kits = options.kits ?? createTempestKits();
+    this.kits = options.kits ?? createTempestCityKits(this.style);
     this.lotCache = new Lru(options.lotCache ?? CACHE_LOTS);
     this.terrain = new TempestTerrain(this.seed);
     this.planner = new DistrictPlanner({ seed: this.seed, style: this.style, groundAt: (x, z) => this.terrain.ground(x, z) });
     this.countryside = new Countryside(this.seed, this.terrain);
-    // A landmark is built by the kit registered under its layout id; the east bridge has a placeholder until its own kit exists.
+    // A landmark is built by the kit registered under its layout id, else by the hand-built spec that covers it (the compound covers
+    // the Town Hall), else by nothing, except the east bridge, which has a placeholder.
+    const landmarks = options.landmarks === undefined ? createTempestLandmarks() : options.landmarks;
+    const seen = new Set<string>();
     for (const planned of this.planner.landmarkLots) {
-      const kit = this.kits.get(planned.landmark.id) ?? (planned.landmark.id === 'east-bridge' ? this.fillers.get('placeholder-bridge') : undefined);
+      const id = planned.landmark.id;
+      const kit = this.kits.get(id);
+      const spec = kit || !landmarks ? undefined : landmarks.covering(id) ?? landmarks.get(id);
       if (kit) this.landmarkKits.push({ planned, kit });
+      else if (spec && !spec.free && !spec.partOf) {
+        if (seen.has(spec.id)) continue;
+        seen.add(spec.id);
+        const own = this.planner.landmarkLots.find((l) => l.landmark.id === spec.id) ?? planned;
+        const f = spec.footprint;
+        this.specLandmarks.push({ spec, x0: f.x0, z0: f.z0, x1: f.x1, z1: f.z1, groundY: own.lot.groundY, index: this.specLandmarks.length });
+      } else if (!spec && id === 'east-bridge') this.landmarkKits.push({ planned, kit: this.fillers.get('placeholder-bridge')! });
     }
+    if (landmarks) for (const spec of landmarks.specs) if (spec.free) this.freePieces.set(spec.id, spec);
   }
 
   // --- Zone ------------------------------------------------------------------------------------------------------------
@@ -163,6 +203,76 @@ export class TempestCityZone extends Zone {
     if (pl === undefined) {
       pl = this.place(p.lot, this.kitFor(p));
       this.lotCache.set(p.index, pl);
+    }
+    return pl;
+  }
+
+  /** What stands on a lot, bottom to top: the lot's kit, and on the plan's three set piece lots the piece itself over a park. */
+  private lotStands(p: PlannedLot): Stand[] {
+    const spec = p.piece ? this.freePieces.get(p.piece) : undefined;
+    // A building lot bigger than any kit of its district takes is built on part of it, with a lawn round.
+    const fitted = !spec && p.kind === 'building' && !this.kits.pick(p.lot) ? this.kits.pickFitted(p.lot) : null;
+    if (!spec && !fitted) {
+      const pl = this.lotPlacement(p);
+      return pl ? [pl] : [];
+    }
+    let stands = this.pieceCache.get(p.index);
+    if (!stands) {
+      stands = spec ? this.pieceStands(p, spec) : this.fittedStands(p, fitted!.kit, fitted!.lot);
+      this.pieceCache.set(p.index, stands);
+    }
+    return stands;
+  }
+
+  // The lot's whole rectangle is a lawn (the park kit) with a hole where the building or piece stands.
+  private lawnWithHole(lot: Lot, hole: Lot): Stand[] {
+    const park = this.place(lot, this.kits.get('park-lot') ?? this.fillers.get('park-lot')!);
+    return park ? [new MaskedStand(park, hole.x, hole.z, hole.x + hole.w - 1, hole.z + hole.d - 1)] : [];
+  }
+
+  private fittedStands(p: PlannedLot, kit: BuildingKit, sub: Lot): Stand[] {
+    const out = this.lawnWithHole(p.lot, sub);
+    const pl = this.place(sub, kit);
+    if (pl) out.push(pl);
+    return out;
+  }
+
+  // A free set piece stands in the middle of its lot, on a lawn: the park kit fills the lot (a hole in the piece's footprint) and
+  // the piece is drawn into the hole. A lot too small for it keeps the kit's own building.
+  private pieceStands(p: PlannedLot, spec: LandmarkSpec): Stand[] {
+    const lot = p.lot;
+    const { frontage, depth } = frameSize(spec);
+    if (lot.frontage < frontage || lot.depth < depth) {
+      const pl = this.lotPlacement({ ...p, piece: undefined });
+      return pl ? [pl] : [];
+    }
+    const along = lot.facing === 0 || lot.facing === 2;
+    const w = along ? frontage : depth;
+    const d = along ? depth : frontage;
+    const x = lot.x + ((lot.w - w) >> 1);
+    const z = lot.z + ((lot.d - d) >> 1);
+    const sub = new Lot({ id: `${lot.id}.${spec.id}`, x, z, w, d, facing: lot.facing, district: lot.district, seed: lot.seed, floors: lot.floors, groundY: lot.groundY });
+    const out = this.lawnWithHole(lot, sub);
+    try {
+      const bp = spec.build(this.style, landmarkRngFor(spec, this.seed));
+      growMarkedTrees(bp, sub);
+      out.push(sub.place(bp));
+    } catch { /* a piece that throws leaves its lawn */ }
+    return out;
+  }
+
+  private specPlacement(entry: { spec: LandmarkSpec; groundY: number; index: number }): Placement | null {
+    let pl = this.specCache.get(entry.index);
+    if (pl === undefined) {
+      try {
+        const bp = entry.spec.build(this.style, landmarkRngFor(entry.spec, this.seed));
+        const lot = landmarkLot(entry.spec, entry.groundY);
+        growMarkedTrees(bp, lot);
+        pl = placeBlueprint(entry.spec, bp, entry.groundY);
+      } catch {
+        pl = null;
+      }
+      this.specCache.set(entry.index, pl);
     }
     return pl;
   }
@@ -234,11 +344,13 @@ export class TempestCityZone extends Zone {
       const pl = this.propPlacement(prop);
       if (pl) { c.placements.push(pl); this.reach(c, pl); }
     }
-    const lot = planner.lotAt(x, z);
-    if (lot) {
-      const pl = this.lotPlacement(lot);
+    for (const entry of this.specLandmarks) {
+      if (x < entry.x0 || z < entry.z0 || x > entry.x1 || z > entry.z1) continue;
+      const pl = this.specPlacement(entry);
       if (pl) { c.placements.push(pl); this.reach(c, pl); }
     }
+    const lot = planner.lotAt(x, z);
+    if (lot) for (const st of this.lotStands(lot)) { c.placements.push(st); this.reach(c, st); }
 
     // The surface and what stands on it.
     const road = planner.roadOf(x, z);
@@ -259,11 +371,11 @@ export class TempestCityZone extends Zone {
 
     this.lamps(c, x, z, ground);
     this.streetTrees(c, x, z, !!lot);
-    if (Math.hypot(localX(x), localZ(z)) > FOREST_RADIUS - FOREST_REACH) this.forestTrees(c, x, z, ground);
+    if (Math.hypot(localX(x), localZ(z)) > FOREST_RADIUS - FOREST_REACH) this.forestTrees(c, x, z, ground, !!lot);
     return c;
   }
 
-  private reach(c: ColumnCache, pl: Placement): void {
+  private reach(c: ColumnCache, pl: Stand): void {
     const b = pl.bounds();
     if (b && b.maxY > c.maxY) c.maxY = b.maxY;
   }
@@ -360,10 +472,10 @@ export class TempestCityZone extends Zone {
     }
   }
 
-  private forestTrees(c: ColumnCache, x: number, z: number, ground: number): void {
+  private forestTrees(c: ColumnCache, x: number, z: number, ground: number, inLot: boolean): void {
     const list = this.forestList;
     this.countryside.forestTrees(x, z, list);
-    for (const t of list) this.stamp(c, x, z, t, forestTree(t.kind, t.variant), t.ground, false, ground);
+    for (const t of list) this.stamp(c, x, z, t, forestTree(t.kind, t.variant), t.ground, inLot, ground);
   }
 
   // The blocks of a tree at this column.
@@ -386,9 +498,16 @@ export class TempestCityZone extends Zone {
  */
 export const growMarkedTrees = (bp: Blueprint, lot: Lot): void => {
   const W = lot.frontage, D = lot.depth;
-  bp.markers.filter((m) => m.kind === 'tree').forEach((m, i) => {
+  const markers = bp.markers.filter((m) => m.kind === 'tree');
+  if (markers.length === 0) return;
+  // A crown never grows through anything the kit built: a column that holds a floor, a wall, a roof or a prop above the ground row
+  // keeps its leaves out (otherwise a tree beside a house would fill its rooms: the interior is air the blueprint does not carve).
+  const taken = new Set<number>();
+  bp.forEach((x, y, _z, c) => { if (y >= 1 && c !== AIR_CELL) taken.add(x * 4096 + _z); });
+  const key = (x: number, z: number): number => x * 4096 + z;
+  markers.forEach((m, i) => {
     const room = Math.min(m.x, W - 1 - m.x, m.z, D - 1 - m.z);
-    if (room < 2 || bp.has(m.x, m.y, m.z)) return;
+    if (room < 2 || bp.has(m.x, m.y, m.z) || taken.has(key(m.x, m.z))) return;
     const rng = new Rng(hash2(lot.seed, i, 0x7ee));
     const kind: TreeKind = m.tag === 'cedar' ? 'cedar' : m.tag === 'sakura' ? 'sakura' : rng.chance(0.6) ? 'sakura' : 'cedar';
     const shape = smallTree(kind, rng.int(VARIANTS), 4, room >= 3 ? 1 : 0.7);
@@ -396,8 +515,15 @@ export const growMarkedTrees = (bp: Blueprint, lot: Lot): void => {
     for (let k = 0; k < shape.length; k++) {
       const x = m.x + shape.dx[k], z = m.z + shape.dz[k], y = m.y - 1 + shape.dy[k];
       if (x < 0 || z < 0 || x >= W || z >= D || y < 1 || bp.has(x, y, z)) continue;
+      if ((shape.dx[k] !== 0 || shape.dz[k] !== 0) && taken.has(key(x, z))) continue;
       bp.set(x, y, z, packCell(shape.id[k]));
     }
   });
 };
 
+/** A generator for a landmark that is the same on every thread and differs with the world's seed (but not with the order anything is built in). */
+const landmarkRngFor = (spec: LandmarkSpec, seed: number): Rng => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < spec.id.length; i++) h = Math.imul(h ^ spec.id.charCodeAt(i), 0x01000193);
+  return new Rng((LANDMARK_SEED ^ seed) | 0).fork(h | 0);
+};

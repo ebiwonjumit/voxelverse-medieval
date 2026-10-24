@@ -58,8 +58,8 @@ The owner's pictures in `reference/tempest/` (not in the repository, they are ot
 | 160 | `shoji_pane` | pane | `shoji` | yes | no | dims 2 |
 | 161 | `shoji_pane_lit` | pane | `shoji_lit` | yes | no | emits 8, dims 2 |
 | 162 | `lattice_window` | pane | `lattice_window` | yes | no |  |
-| 163 | `paper_lantern_red` | box | `black_lacquer` / `paper_lantern_red` / `paper_lantern_red` | yes | no | emits 14 |
-| 164 | `paper_lantern_striped` | box | `black_lacquer` / `paper_lantern_striped` / `paper_lantern_striped` | yes | no | emits 14 |
+| 163 | `paper_lantern_red` | box | `black_lacquer` / `paper_lantern_red` / `paper_lantern_red` | no | no | emits 14 |
+| 164 | `paper_lantern_striped` | box | `black_lacquer` / `paper_lantern_striped` / `paper_lantern_striped` | no | no | emits 14 |
 | 165 | `stone_lantern_base` | box | `lantern_stone` | yes | no |  |
 | 166 | `stone_lantern_light` | box | `lantern_stone` / `stone_lantern_light` / `stone_lantern_light` | yes | no | emits 12 |
 | 167 | `stone_lantern_cap` | box | `lantern_stone` | yes | no |  |

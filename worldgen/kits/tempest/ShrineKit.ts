@@ -60,7 +60,7 @@ export class ShrineKit extends BuildingKit {
     b.ring(terrace, 1, 1, 'wallBase');
     b.floor(rect(terrace.x0 + 1, terrace.z0 + 1, terrace.x1 - 1, terrace.z1 - 1), 1, 'path');
     // Steps up to the terrace, three wide, with blue ore lamps beside them.
-    for (let x = cx - 1; x <= cx + 1; x++) { b.stair(x, 1, terrace.z1 + 1, SOUTH, 'stoneStairs'); b.set(x, 0, terrace.z1 + 1, 'wallBase'); }
+    for (let x = cx - 1; x <= cx + 1; x++) { b.stair(x, 1, terrace.z1 + 1, NORTH, 'stoneStairs'); b.set(x, 0, terrace.z1 + 1, 'wallBase'); }
     b.set(cx - 2, 1, terrace.z1 + 1, T.BLUE_ORE_LAMP);
     b.set(cx + 2, 1, terrace.z1 + 1, T.BLUE_ORE_LAMP);
     b.fence(terrace.x0, terrace.z1, cx - 3, terrace.z1, 2, 'rail');

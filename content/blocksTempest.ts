@@ -219,13 +219,15 @@ const defs = (): TempestDef[] => [
   { id: TempestBlock.SHOJI_PANE, name: 'shoji_pane', color: '#ebe4d0', faces: same('shoji'), solid: true, opaque: false, lightDim: 2, model: new PaneModel() },
   { id: TempestBlock.SHOJI_PANE_LIT, name: 'shoji_pane_lit', color: '#fbc063', faces: same('shoji_lit'), solid: true, opaque: false, lightDim: 2, emits: 8, model: new PaneModel() },
   { id: TempestBlock.LATTICE_WINDOW, name: 'lattice_window', color: '#5b4129', faces: same('lattice_window'), solid: true, opaque: false, model: new PaneModel() },
+  // The paper lanterns hang at the height of a head (from a lamp arm, a beam, the eave, a ceiling cord) and have no collision: a
+  // person walks through one as through a curtain, instead of being stopped by a lamp over a room's floor.
   {
     id: TempestBlock.PAPER_LANTERN_RED, name: 'paper_lantern_red', color: '#d03a2a', faces: faces('black_lacquer', 'paper_lantern_red'),
-    solid: true, opaque: false, emits: 14, model: new BoxModel(px([5, 2, 5, 11, 14, 11], [7, 14, 7, 9, 16, 9]), 'cell'),
+    solid: false, opaque: false, emits: 14, model: new BoxModel(px([5, 2, 5, 11, 14, 11], [7, 14, 7, 9, 16, 9]), 'cell'),
   },
   {
     id: TempestBlock.PAPER_LANTERN_STRIPED, name: 'paper_lantern_striped', color: '#e0a79a', faces: faces('black_lacquer', 'paper_lantern_striped'),
-    solid: true, opaque: false, emits: 14, model: new BoxModel(px([5, 2, 5, 11, 14, 11], [7, 14, 7, 9, 16, 9]), 'cell'),
+    solid: false, opaque: false, emits: 14, model: new BoxModel(px([5, 2, 5, 11, 14, 11], [7, 14, 7, 9, 16, 9]), 'cell'),
   },
   { id: TempestBlock.STONE_LANTERN_BASE, name: 'stone_lantern_base', color: '#8f959a', faces: same('lantern_stone'), solid: true, opaque: false, model: new BoxModel(px(...LANTERN_BASE), 'cell') },
   {

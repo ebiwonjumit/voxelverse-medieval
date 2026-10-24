@@ -1,9 +1,11 @@
 import { NatureBlock } from '../../../content/blocksNature';
 import { ShapedBlock } from '../../../content/blocksShaped';
 import { TempestBlock as T } from '../../../content/blocksTempest';
+import { hash2 } from '../../noise';
 import { Blueprint } from '../../structures/Blueprint';
+import { furnish } from '../../tempest/interiors';
 import {
-  BlockRef, BlueprintBuilder, DX, DZ, Dir, EAST, FurnitureItem, NORTH, OpeningKind, Rect, Room, SOUTH, WEST, opposite, rect, turnLeft, turnRight,
+  BlockRef, BlueprintBuilder, DX, DZ, Dir, EAST, NORTH, OpeningKind, Rect, Room, SOUTH, WEST, opposite, rect, turnLeft, turnRight,
 } from '../../structures/BlueprintBuilder';
 import { RoofInfo } from '../../structures/roofs';
 import { FLARED, FLARED_DEEP, FLARED_TIGHT, RoofProfile } from '../../structures/roofProfile';
@@ -186,13 +188,18 @@ export const pent = (
 export const stairRun = (x: number, z: number, dir: Dir, rise: number): Array<[number, number]> =>
   Array.from({ length: rise }, (_, k) => [x + DX[dir] * k, z + DZ[dir] * k] as [number, number]);
 
+/** A "door" that is really a stair's end or step: the furnisher keeps the cells round it free instead of treating it as an entrance. */
+export interface StairDoor { x: number; z: number; inward: Dir; stair: boolean }
+
 /**
  * The cells furniture must leave alone round a stair, as the "doors" `room` and `furnish` understand: the landing in front of
  * the foot, the run itself, and the landing at the top, which on the upper floor is just past the last step.
  */
-export const stairDoors = (x: number, z: number, dir: Dir, rise: number): Array<{ x: number; z: number; inward: Dir }> => {
-  const out: Array<{ x: number; z: number; inward: Dir }> = [];
-  for (let k = -1; k <= rise + 1; k += 2) out.push({ x: x + DX[dir] * k, z: z + DZ[dir] * k, inward: dir });
+export const stairDoors = (x: number, z: number, dir: Dir, rise: number): StairDoor[] => {
+  const out: StairDoor[] = [];
+  // The two ends are real doors: the landing the stair is climbed from and the one it arrives on stay joined to the rest of the
+  // room (a counter or a shelf may never seal a stair off). The cells between are only kept clear.
+  for (let k = -1; k <= rise + 1; k += 2) out.push({ x: x + DX[dir] * k, z: z + DZ[dir] * k, inward: dir, stair: k > -1 && k + 2 <= rise + 1 });
   return out;
 };
 
@@ -222,8 +229,8 @@ const climbFacing = (path: ReadonlyArray<readonly [number, number]>, k: number):
 };
 
 /** The "doors" that keep furniture off a stair path (see `stairDoors`). */
-export const pathDoors = (path: ReadonlyArray<readonly [number, number]>): Array<{ x: number; z: number; inward: Dir }> =>
-  path.map((c, k) => ({ x: c[0], z: c[1], inward: climbFacing(path, k) }));
+export const pathDoors = (path: ReadonlyArray<readonly [number, number]>): StairDoor[] =>
+  path.map((c, k) => ({ x: c[0], z: c[1], inward: climbFacing(path, k), stair: k > 0 && k < path.length - 1 }));
 
 /** A straight run of `rise` cells from (x, z) towards `dir`. */
 export const straightPath = (x: number, z: number, dir: Dir, rise: number): Array<[number, number]> => stairRun(x, z, dir, rise);
@@ -239,36 +246,29 @@ export const staircase = (b: BlueprintBuilder, x: number, z: number, dir: Dir, f
 
 export type RoomKind = 'living' | 'sleeping' | 'kitchen' | 'shop' | 'hall' | 'store' | 'empty';
 
-/** Furniture for a room by what it is for; the doors stay clear. */
+/** What the interior furnisher calls each of the kits' room kinds ('empty' is left bare). */
+const FURNISHED_AS = { living: 'living', sleeping: 'bedroom', kitchen: 'kitchen', shop: 'shop', hall: 'inn', store: 'storage' } as const;
+
+/**
+ * Furniture for a room by what it is for, from the interior furnisher (worldgen/tempest/interiors): a hearth and low tables,
+ * futons, counters with goods, shelves, lanterns hung from the ceiling. The doors and stairs stay clear, and the generator is
+ * forked from the builder's by where the room is, so the same lot always gets the same rooms.
+ */
 export const furnishRoom = (b: BlueprintBuilder, room: Room, kind: RoomKind, options: { tatami?: boolean; lamp?: boolean } = {}): void => {
-  const area = (room.rect.x1 - room.rect.x0 + 1) * (room.rect.z1 - room.rect.z0 + 1);
-  const scale = area < 20 ? 0 : area < 45 ? 1 : 2;
-  const items: FurnitureItem[] = [];
-  switch (kind) {
-    case 'living':
-      items.push({ block: T.LOW_TABLE, count: 1, where: 'center' }, { block: T.CUSHION, count: 2 + scale, where: 'any' });
-      if (scale > 0) items.push({ block: T.BOOKSHELF, count: 1, where: 'wall', tall: 1 }, { block: T.HEARTH, count: 1, where: 'corner' }, { block: T.VASE, count: 1, where: 'wall' });
-      break;
-    case 'sleeping':
-      items.push({ block: T.FUTON, count: 1 + scale, where: 'wall' }, { block: T.BOOKSHELF, count: 1, where: 'wall', tall: 1 }, { block: T.VASE, count: 1, where: 'wall' }, { block: T.CUSHION, count: 1, where: 'any' });
-      break;
-    case 'kitchen':
-      items.push({ block: T.HEARTH, count: 1, where: 'wall' }, { block: T.BARREL, count: 2, where: 'wall' }, { block: T.BUCKET, count: 1, where: 'any' }, { block: T.LOW_TABLE, count: 1, where: 'center' }, { block: T.RICE_BALE, count: 1, where: 'wall' }, { block: T.CRATE, count: 1, where: 'wall' });
-      break;
-    case 'shop':
-      items.push({ block: T.CRATE, count: 2 + scale, where: 'wall' }, { block: T.BARREL, count: 2, where: 'wall' }, { block: T.RICE_BALE, count: 2, where: 'wall' }, { block: T.BOOKSHELF, count: 1, where: 'wall', tall: 1 }, { block: T.VASE, count: 1, where: 'wall' });
-      break;
-    case 'hall':
-      items.push({ block: T.LOW_TABLE, count: 2 + scale, where: 'center' }, { block: T.CUSHION, count: 4 + scale * 2, where: 'any' }, { block: T.VASE, count: 2, where: 'wall' }, { block: T.BOOKSHELF, count: 1, where: 'wall', tall: 1 });
-      break;
-    case 'store':
-      items.push({ block: T.CRATE, count: 4 + scale * 2, where: 'wall' }, { block: T.RICE_BALE, count: 3 + scale, where: 'any' }, { block: T.BARREL, count: 3, where: 'wall' }, { block: T.BUCKET, count: 1, where: 'any' });
-      break;
-    default:
-      break;
+  if (kind === 'empty') return;
+  const rng = b.rng.fork(hash2(room.rect.x0 * 131 + room.rect.z0, room.floorY, 0x1f7a));
+  // A stair's cells are not entrances: the stair, its landings and the cell on each side of the run stay free, and only the real doors steer the room.
+  const r = room.rect;
+  const inside = (d: { x: number; z: number }): boolean => d.x >= r.x0 && d.x <= r.x1 && d.z >= r.z0 && d.z <= r.z1;
+  // (an end of a stair that lies in the wall, past the room, has no cell of the room to keep joined)
+  const doors = room.doors.filter((d) => !d.stair && inside(d));
+  const keepClear: Rect[] = [];
+  for (const d of room.doors) {
+    if (!d.stair) continue;
+    for (const k of [-1, 0, 1]) keepClear.push({ x0: d.x + DX[d.inward] * k, z0: d.z + DZ[d.inward] * k, x1: d.x + DX[d.inward] * k, z1: d.z + DZ[d.inward] * k });
   }
-  if (options.lamp) items.push({ block: 'light', count: 1, where: 'wall' });
-  b.furnish(room, items);
+  furnish(b.bp, { rect: room.rect, floorY: room.floorY, doors, keepClear }, FURNISHED_AS[kind], rng, b.style);
+  if (options.lamp) b.furnish(room, [{ block: 'light', count: 1, where: 'wall' }]);
 };
 
 // --- Street life -----------------------------------------------------------------------------------------------------
