@@ -1,7 +1,7 @@
 import { Zone } from './Zone';
 import { SAOZone } from './SAOZone';
 import { GreensomZone } from './GreensomZone';
-import { TempestZone } from './TempestZone';
+import { TempestCityZone } from '../worldgen/tempest/TempestCityZone';
 import { AmestrisZone } from './AmestrisZone';
 import { RankingZone } from './RankingZone';
 import { FremmevillaZone } from './FremmevillaZone';
@@ -11,7 +11,7 @@ import { WildernessZone } from './WildernessZone';
 const zones: Zone[] = [
   new SAOZone(),
   new GreensomZone(), 
-  new TempestZone(),
+  new TempestCityZone(),
   new AmestrisZone(),
   new RankingZone(),
   new FremmevillaZone(),

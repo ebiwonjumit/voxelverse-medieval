@@ -1,6 +1,6 @@
 # The Tempest city: layout, structures and kits
 
-Step 7.1b of Phase 7 builds the machinery the town is made with: a **layout** that says where every street, block and landmark of Tempest stands, a **structures** library for drawing buildings (blueprints, a builder with Japanese-fusion helpers, style packs, lots and kits), and a **viewer** where everyone judges a building (`?sandbox=kits`). The blocks the buildings are made of are in [tempest-blocks.md](tempest-blocks.md). This page is written for the steps that follow, which run in parallel and rely on it: the district planner and the house kits, the landmarks, the zone itself.
+Step 7.1b of Phase 7 builds the machinery the town is made with (step 7.2a, [the district planner and the zone](#the-district-planner-and-the-zone), then builds the town from it): a **layout** that says where every street, block and landmark of Tempest stands, a **structures** library for drawing buildings (blueprints, a builder with Japanese-fusion helpers, style packs, lots and kits), and a **viewer** where everyone judges a building (`?sandbox=kits`). The blocks the buildings are made of are in [tempest-blocks.md](tempest-blocks.md). This page is written for the steps that follow, which run in parallel and rely on it: the district planner and the house kits, the landmarks, the zone itself.
 
 | What | Where |
 | --- | --- |
@@ -12,6 +12,7 @@ Step 7.1b of Phase 7 builds the machinery the town is made with: a **layout** th
 | The Tempest layout | `worldgen/tempest/layout.ts` |
 | The demonstration kits | `worldgen/tempest/kits/` (`TimberHouseKit`, `GateKit`, `LanternPostKit`, `RoofStudyKit`) |
 | The kit viewer | `components/sandbox/KitSandbox.tsx` and `kitsLayout.ts` |
+| The district planner, the terrain, the countryside, `TempestCityZone` | `worldgen/tempest/DistrictPlanner.ts`, `terrain.ts`, `countryside.ts`, `TempestCityZone.ts` (see [below](#the-district-planner-and-the-zone)) |
 
 `worldgen/structures` and `worldgen/tempest` are pure data code like the rest of `worldgen/`: no Three.js, React or DOM (`tests/worldgen/structures-purity.test.ts`). The engine and `content/` never import them.
 
@@ -288,6 +289,174 @@ Honestly, comparing the viewer with Tempest-3, -4, -5 and -7:
 - **Street life:** noren, awnings, signs, barrels and laundry exist as helpers and are used on the demonstration house and gate, but the town's streets will only look lived in when the district kits use them all.
 - **Plaster is greyer** than the pictures' white at noon; that is the tile, not the builder.
 
+## The district planner and the zone
+
+Step 7.2a builds the town itself: a **planner** that cuts the layout's blocks into lots and decides where the street trees and lamp posts stand, the **terrain** of the zone, the **countryside** round the grid, and **`TempestCityZone`**, which answers every cell of the footprint from them and from the kits' buildings. It extends the legacy `Zone`, so it can stand where `TempestZone` stands today; the integration step swaps it in ([Wiring it in](#wiring-it-in)). Nothing in the game uses it yet.
+
+| What | Where |
+| --- | --- |
+| The planner: lots, landmark lots, street trees, lamps, stalls, the raster | `worldgen/tempest/DistrictPlanner.ts` |
+| Ground height: the town, the roads out, the river, the ponds, the cairn's hill | `worldgen/tempest/terrain.ts` |
+| What the streets are paved with | `worldgen/tempest/streets.ts` |
+| The land outside the grid: river banks, ponds, farms, pastures, open land, forest | `worldgen/tempest/countryside.ts` |
+| Small trees and the wilderness's trees as lookup tables | `worldgen/tempest/trees.ts` |
+| The zone | `worldgen/tempest/TempestCityZone.ts` |
+| Kits for the planner's own lots (gardens, parks, meadows, building sites, stalls) and the placeholder bridge | `worldgen/tempest/fillers/` |
+| A chunk of the zone the way the generator builds it (tests, tools, benchmark) | `worldgen/tempest/zoneChunk.ts` |
+| Maps | `tools/render-tempest-map.ts` |
+| Chunk cost | `tools/bench-tempest-zone.ts` |
+
+The planner, terrain, zone, paving, filler kits and the chunk helper are exported from `worldgen/tempest/index.ts`, and all of it is pure data code (`tests/worldgen/structures-purity.test.ts` covers the new files).
+
+![The plan as the planner makes it: districts, lots with a tick on each front, gardens, parks and building sites, streets, lamps, trees, landmarks and the gates](maps/tempest-plan.png)
+
+*`npx vite-node tools/render-tempest-map.ts`. Lots are outlined, with a red tick on the middle of each front; palest are gardens and meadows, hatched are building sites; yellow and white dots are lamps, green dots trees, magenta the two RoadNetwork gates.*
+
+### The planner
+
+`new DistrictPlanner({ seed, style?, groundAt? })` plans the whole town in 36 ms (node, measured) and is a pure function of the seed: `hash()` is a 32 bit hash of every lot, landmark lot, tree, lamp and stall, and two planners with one seed agree on it. The zone gives it `groundAt`, so a landmark's lot stands on the right ground.
+
+**Blocks to lots.** A block is 38 cells square (the annexes beside the compound 12 wide). A **verge** one cell wide runs round it (`VERGE`): street trees, paving in the busy districts, street furniture. Inside it, the block is cut from its edges inwards in one of five ways, chosen per block from its district (`layoutStyle`) and its seed:
+
+| Style | What it is | Used for |
+| --- | --- | --- |
+| `ring` | a row of lots along each of the four edges, 12 to 13 deep, round an open courtyard | dense residential blocks (60 percent), some commercial and production |
+| `rows` | two deep rows (15 to 21), one facing each of the north and south streets | the rest of residential, commerce, production, storage, government, public strip, guests, luxury |
+| `quad` | four big plots in a pinwheel, each facing the street it is nearest | tourism, luxury, guest houses |
+| `single` | the block is one plot, facing the avenue if it borders one | tourism and public blocks, empty plots |
+| `column` | one column of lots along the street, fronts to the compound | the two annex blocks |
+
+Rows are cut into lots with `splitLength` (a length, an average and a minimum and maximum; boundaries are jittered by up to two cells): 9 to 16 wide in the dense districts, 13 to 26 for storage and government, 15 to 36 for the large-lot districts. A lot is never smaller than 8 on either side. Lots near the chamfered corners are shortened from the end that sticks out (`fitPlot`) and dropped if too small, which is what leaves the little lawns round the Central Square.
+
+**Blocks with a diagonal street.** A block the diagonal cuts is planned differently (`crossedByDiagonal`): first a staircase of 9 to 11 cell squares is stepped down each side of the street, each as close to it as a verge allows and facing the nearer of the two axis streets (`diagonalPlots`, which tries the offset in steps until no road is within a cell of the square); then the rows or ring along the block's own edges, cut into the stretches that no road or staircase lot blocks (`runs`). What is left over between them is open ground, planted with trees. This does not reach the density of the picture, where houses line both sides of a diagonal without a gap; it reads as a street of detached houses with pocket parks behind them.
+
+**What stands on a lot.** `PlannedLot` is a `Lot` ([above](#lots-kits-and-the-registry): id `c-2r3.4`, rectangle, facing, district, seed, floors, family, neighbours, `groundY` 8) and a `kind`:
+
+| Kind | Built by | Chance |
+| --- | --- | --- |
+| `building` | the registry's pick for the lot (the placeholder box house until the kits merge) | most |
+| `garden` | `garden-lot`: a bamboo fence with a lacquered gate, a koi pond, a paved court with a basin, or a bamboo grove | luxury 12 percent and the empty luxury plots, guests 5 percent, tourism 8, residential 5 |
+| `park` | `park-lot`: lawn, ring path, trees, benches, a pond with a pavilion or a grove | guests 22 percent, tourism 16, the empty plots of tourism |
+| `meadow` | `meadow-lot`: flowers and tall grass, a worn path, a few trees, a signboard | tourism 4 percent, public 8, half the empty plots |
+| `construction` | `construction-site`: a bamboo fence, a footing, bare timber frame or half-built plaster walls with scaffolding, heaps of logs, planks, crates and bales | 55 percent of the blocks the plan marks under construction |
+
+Storeys follow the distance from the Central Square, as the plan asks: two to three in the middle (within 80 cells, 89 percent of lots get a second storey and 54 percent a third), one to two beyond 130. On the seed of the game: 238 buildings of which 71 have one storey, 122 two and 45 three. **Palette families** are drawn from the Tempest pack's weights for the district, then the accent families (dark tile, green glaze, thatch, vermilion) are traded for the ordinary house with a chance per district (`BASE_BIAS`: residential 55 percent, commercial and production 50, luxury and guests 15), and a lot never gets the same accent family as the one before it in its row. The result is 166 terracotta of 238 buildings (70 percent), 26 dark tile, 14 green, 10 thatch and 22 vermilion with dark tile, so from above the town is one terracotta mass with accents (`zone-aerial.png` below). `neighbours` holds the lots beside each one as seen from the street, and the one behind it.
+
+**Lookups.** Roads, blocks and lots of the built grid are rasterised once into three flat arrays (local -216 to 216 both ways, 187,000 cells), so `lotAt(x, z)`, `roadOf(x, z)` and `blockOf(x, z)` are one array read; outside the raster they fall back to the layout. `lotsIntersecting(minX, minZ, maxX, maxZ)` lists the lots with a cell in a chunk, `landmarksIntersecting(..., margin)` the landmark lots, `lotById(id)`, `lampAt(x, z)`, `treesInTile(tx, tz)` (16 cell tiles, for the zone's column lookups). A test checks `lotAt` against a brute-force scan of 4,000 random cells, and `lotsIntersecting` against a scan for four chunks.
+
+**Landmark lots.** `planner.landmarkLots` has a `Lot` for each of the layout's 25 landmarks: its id, its bounding rectangle, its facing and a `groundY`: the ground at its centre, except the bridge, which stands at the height of the road it carries (the ground at its end, 8). The cairn's lot is therefore at 13, on its hill, and the north cave's at 14.
+
+**Street trees, lamps, stalls.** A **tree** in the verge where two lots of a side meet (thinned to one per 8 cells), leaning its crown over the street so that it clears the houses; trees in the open ground a block's lots leave (a jittered lattice of 7 cells, a tree where no lot or road is within 3 cells). 304 trees. Types by hash: 55 percent sakura, 25 cedar, 20 birch on the streets. **Lamp posts**: 1,060, on the edge of every road, every 10 cells on the avenues (both sides), 12 on streets, lanes and the boundary road (the two sides half a spacing apart) and down each side of a diagonal (69 of them), 24 on the roads out within 262 cells of the centre; never at a crossing, in the Central Square or at a gate. Every other lamp is hung with a red-and-white lantern. **Stalls**: 12 market stalls on the east shoulder of the boundary road every 24 cells, their fronts to the road (the `street-stall` kit).
+
+### Streets
+
+`roadBlock(road, x, z)` picks the paving by kind and by distance from the Central Square (the larger of |x| and |z|, `ring`):
+
+| Road | Paving |
+| --- | --- |
+| avenue (11 wide) | stone paving, a fan-cobble strip five wide down the middle out to 150 cells, a stone band across it every 11 cells; beyond 180 plain stone |
+| street (6) | stone paving, two fan cells in the middle within 100 cells; beyond 150 packed earth with a stone edge |
+| diagonal (5) | stone, a fan line in the middle within 100; beyond 150 earth |
+| lane (7) | stone |
+| boundary road (7) | stone edge, earth between |
+| the roads out (9) | stone with cobblestone every other cell to 215 cells, then earth |
+
+Earth is the pale path block, with gravel and dark soil showing through in patches (70, 16 and 14 percent, per 2 by 2 cells). The **Central Square** (a disc of radius 7) is fan paving with a fountain in the middle: a ring of stone basins (`d < 2.7`) round a two-cell water jet, and bollards in the four corners of the crossing. A `central-square` kit registered later is drawn over it.
+
+### Terrain
+
+`TempestTerrain(seed).height(x, z, baseH)` is the zone's `getHeight`; `baseH` is the wilderness height the blender passes. In this order:
+
+1. **The land.** y = 8 out to 300 cells from the centre (the grid, the farms, the open meadows, the arena clearing), then it eases to the natural height with a smoothstep and *is* the natural height at the footprint's edge (700), which is what the blender needs of a zone with no band.
+2. **The roads out** (west, east, north, south) are levelled: across a road and 12 cells beyond its edge the ground is the land's height along its centre-line, fading to nothing towards the edge of the footprint. A road never tilts or steps across its width; along it the ground follows the land (the north road runs flat at 8 for 300 cells and then climbs about 4 blocks to the cave).
+3. **The river** carves its channel: a profile of 0 at the centre-line to 2.5 at the water's edge (3.5 cells out), then a bank rising 0.75 a cell, taken as the lower of the land and the profile. The water is the world's own (level 3), the channel is under it, the banks are sand and gravel to the shelf, moss and grass above, reeds at the edge.
+4. **The ponds** are bowls: bed at 6 over the water radius, rising to the street's 8 over the last 2.5 cells of their circle. Their water is placed by the zone at y = 7, one block under the street (so the ponds fit in their small circles), mud under it, koi on one cell in eight and lily pads on one in six.
+5. **The cairn's hill**: +5 over a radius of 18.
+
+Measured over the whole footprint, every column against its neighbour in x and in z (1.5 million pairs each way): **no two neighbouring columns differ by more than one block**, anywhere. The test samples a row and a column every 5 cells in both directions. The ground is exactly 8 at every sampled cell of the grid and out to 300 cells (apart from the river, ponds and hill).
+
+### Countryside
+
+`Countryside` answers every column outside the grid and off the roads from its hash, never from a running generator:
+
+- **Farms** east of the boundary road in the layout's fields (rings of 26 cells, sectors of 3 degrees). A path along every field's edge; a field is wheat in rows that follow the rings (so they curve) in one of three growth stages chosen per field, or a fallow meadow of one flower, or rough grass. Not on the river's banks or the ponds.
+- **Pastures**: a fence ring (the legacy fence) with a gap on the side facing the road, tall grass inside and the odd rice bale.
+- **Open land**: grass with tall grass and flowers, and copses and lone trees (sakura, oak, birch) where a coarse hash says so.
+- **Forest** from the layout's `isWooded` outwards, to the footprint's edge: trees on a jittered grid of 6 cells, kept with a chance that rises from 0.28 at the open land's edge to 0.58 deep in; cedar 40 percent, sakura 25, oak 15, birch 10, bamboo 10, built from the wilderness's own tree features; podzol and moss patches and ferns under them. Trees keep clear of the roads by their crown's reach (7 cells for a sakura, 4 for the others), so no crown hangs low over a road, and of the strips where the RoadNetwork's roads arrive at the west and north gates.
+
+### The zone
+
+`new TempestCityZone({ seed, kits?, style?, lotCache? })`. Its natural question is **`getCell(x, y, z, groundH, lod)`**, a cell (id and state), because most of what it builds has a state; `getBlock` is `cellId(getCell(...))`, which is what the legacy interface can say. A cell is decided in this order, first match wins:
+
+1. a **landmark's** blueprint (kits registered under the landmark's layout id, see below),
+2. a **market stall**'s, 3. the blueprint of the **lot** the column is in,
+4. the things that stand on the ground: lamp posts and their arms, street and forest trees, crops, fences, flowers, street furniture,
+5. the surface (street paving, grass, sand, farmland...) at the ground row; air above it.
+
+Everything that does not depend on the height is computed once per column and kept for the next `y` (the generator asks every row of a column in turn), so a chunk costs a few column lookups and not 65 times as much. **Lot blueprints** are built lazily, one per lot, in a bounded LRU (`Lru`, 256 lots by default): a lot's blueprint depends only on the seed and the lot, so each chunk that touches a lot builds the same building, and a forgotten one is simply built again. `lotCache: 1` gives the same chunks as the default (a test builds nine chunks both ways, in opposite orders, and compares hashes). A kit that throws does not take a chunk down: the box house stands in for a building and a landmark stays empty.
+
+**Kits and landmarks (the contract with the other steps).**
+
+- Building lots take `registry.pick(lot)`, the registry the zone is given (default `createTempestKits()`); with nothing that fits, the box house.
+- Gardens, parks, meadows and sites look up `garden-lot`, `park-lot`, `meadow-lot` and `construction-site` **in that registry first**, then use the planner's own fillers: a better kit with one of those names replaces them. The stalls are `street-stall`.
+- **A landmark is built by the kit registered under its layout id** (`town-hall`, `civic-compound`, `central-square`, `arena`, `west-gate`, `north-cave`...): `kits.get(landmark.id)`. It is built the standard way (`buildWithKit`) for the landmark's lot (its bounding rectangle, facing and `groundY`), and only the cells inside that rectangle are used. Where nothing is registered a landmark is empty ground, except the **east bridge**, which has `placeholder-bridge` (a straight deck of lacquered planks at the road's height, rails, lantern posts and timber piers down into the river bed), and the Central Square, which the zone paves and gives a fountain.
+- Trees: a kit's `tree` markers are grown by the zone, **only where the crown fits inside the lot** (`growMarkedTrees`: a full crown needs 3 cells of room on every side, a small one 2, with less no tree), so a lot never has leaves in its neighbour.
+
+**Trees on the street** are clipped where a lot begins (a lot's cells are its own), so their crowns lean over the street and stop at the front line.
+
+![Down the avenue from the compound](screens/p7/zone-avenue.png)
+![The Central Square at dusk](screens/p7/zone-square-dusk.png)
+![An eye-level street at noon, and at dusk](screens/p7/zone-street-eye.png)
+![](screens/p7/zone-street-dusk.png)
+![The luxury quarter's gardens and a diagonal street](screens/p7/zone-diagonal.png)
+![The boundary road with its stalls, a pond, and the farms](screens/p7/zone-stalls.png)
+![The river, the placeholder bridge and the farms](screens/p7/zone-farms-river.png)
+![The forest and the north road](screens/p7/zone-forest.png)
+![The town from above, all box houses](screens/p7/zone-aerial.png)
+
+*These were taken in the game itself with the zone swapped in locally (an uncommitted change of three lines, below), at 1280 by 720, noon unless said.*
+
+### Wiring it in
+
+The step that connects the zone to the game does three things; none is in this step.
+
+1. `zones/index.ts`: `new TempestCityZone({ seed: WORLD_SEED })` in place of `new TempestZone()` (the zone list is read by `getZone`; the name is the old one, so `ZoneInfo`, the tint and the blender still match). The seed must be the generator's.
+2. `worldgen/VoxelverseGenerator.ts`: ask the zone for a **cell**, not a block id. In `generateChunk`, where it calls `col.zone.getBlock(...)` and `packCell(block)`, call `getCell(...)` when the zone has one and set that; add `sampleCell` (the engine's optional `WorldGenerator.sampleCell`) so a stair on a chunk border is read with its facing. The screenshots above were taken with exactly this (a dozen lines).
+3. Give the zone the registry of kits that exist by then, and register the landmark kits under the layout ids.
+
+Also for that step: the grass of the zone takes its colour from `GRASS_TEMPEST` (`#2e7d32`, a dark jungle green) in `meshing/biomeTint.ts`, which looks dark next to the pictures' yellow-green meadows; and the legacy `RoadNetwork` paints its own roads on the ground between the core (550) and the edge (700), so the zone leaves those columns' surface to it (it keeps its trees clear of them).
+
+### Chunk cost
+
+In node, `tools/bench-tempest-zone.ts`, a chunk built from scratch (stone, water and the zone's cells, with the zone's caches cold): **8.6 ms on average, 9.5 ms at the 95th percentile**, 25.7 ms the worst (the first chunk of a region that builds blueprints), over 274 chunks across the dense town, the tourism sector, the compound strip, the farms, the river, the pastures, the forest and the north road; 8 ms again when warm. Almost all of that is filling the column below the ground with stone, which the legacy zone's chunks do too, so the zone itself adds little. The workers measured 22.5 ms per job for the legacy zones and about 12 for the new wilderness ([perf-after-integration.md](perf-after-integration.md)). The planner takes 36 ms and the zone 31 ms to construct, once per worker. Blueprints are small: all 289 box-house lots together are 1.3 MB (4 KB on average, 47 KB the largest), so the cache of 256 holds almost the whole town; real kits' buildings will be larger.
+
+### The maps
+
+`npx vite-node tools/render-tempest-map.ts` writes three maps to `docs/maps/`:
+
+| Map | Shows |
+| --- | --- |
+| `tempest-plan.png` | the town at 3 pixels a cell: districts, lots with their fronts, kinds, streets, lamps, trees, landmarks and gates |
+| `tempest-zone.png` | the whole footprint at 1 pixel a cell, shaded by the terrain's height, with the river, the arena, the pastures, the forest's outline and the roads out |
+| `tempest-ground.png` (with `--ground`) | the top block of every column as the zone really builds it, roofs and trees included |
+
+Options: `--scale n`, `--out dir`, `--region lx0,lz0,lx1,lz1` (local cells, the Central Square is 0, 0), `--only plan|zone|ground`, `--seed n`.
+
+![The whole footprint](maps/tempest-zone.png)
+![The top block of every column](maps/tempest-ground.png)
+
+### Compared with the plan, and with the pictures
+
+Against `Tempest-6.png`: the two avenues cross at the square, the grid and the diagonals are the layout's, the civic compound is at the head of the north avenue, guest houses and government to its west, the public strip with its scaffolded plots to its east, luxury villas (some left as empty gardens) in the north west, commerce along the avenue and production, storage and dense residences in the west and south west, centre-east residences, the tourism sector in the south east with its big plots, parks, meadows and sites, farms with curved fields on the east, the river down the north east, the pasture and paddock on the west, the arena clearing north east, the forest round all of it. The planner makes about 290 lots; the picture has more and smaller houses in the dense blocks, so the real kits will want to fill narrow lots (9 to 12 wide) with several buildings or the planner a second pass for the small blocks.
+
+Against the other pictures, what is still missing:
+
+- **Buildings.** Every building lot is the placeholder box house. The town's character (curved eaves, half-timber, shoji, the hall's teal roof, interiors that glow) comes with the kits and landmarks. What the zone does give: a terracotta mass with accents, the right storeys by distance, lamps with red and striped lanterns that light the street at dusk (`zone-street-dusk.png`), stone and fan paving, stalls, gardens with ponds and lanterns.
+- **Detail on the streets** (Tempest-4): awnings, signs, noren, laundry and barrels at the shop fronts are the kits'. The verge has barrels, crates, buckets and rice bales in the working districts, stone lanterns elsewhere and bollards by the public buildings.
+- **The compound** is bare lawn with the forecourt paved; the Town Hall, the walls, the gates, the arena, the cave portal, the stalls at the west gate, the aqueduct and the cave pools are landmarks and optional set pieces for the landmark step.
+- **Grass colour** is the zone's old dark green (above), which is the biggest single difference from the pictures' bright meadows.
+- **Diagonal streets** have detached houses rather than a continuous frontage.
+
 ## Tests
 
 | File | Covers |
@@ -295,6 +464,9 @@ Honestly, comparing the viewer with Tempest-3, -4, -5 and -7:
 | `tests/structures/blueprint.test.ts` | cells, negative coordinates and growth, tight bounds, set order, hash, turning and mirroring (states of stairs, horns, awnings, markers), merge, the orientation table against the registry, `Placement` (every turn and mirror against the turned blueprint, markers, a million lookups) |
 | `tests/structures/builder.test.ts` | boxes, shells, floors; roles, ids and states; door openings carved and marked, windows filled; frames; steps, awnings, signs, ponds, lanterns, tree markers, the engawa; roof profiles; **roofs closed, no floating blocks, outside the wall volume, symmetric, ridge and horns, raised corners** for every roof kind, profile and several sizes; furniture and the door path; every role of every family is a registered block |
 | `tests/structures/kits.test.ts` | `Lot` turned to every facing, the registry, the Tempest style pack and its weights, and every kit, variant and palette family: deterministic, inside the lot, no floating blocks, clear doors, the box house without a gap |
+| `tests/tempest/planner.test.ts` | the planner: lots of every kind and district, never overlapping each other, landmarks, roads, the compound or their block's corners, all within the footprint with a street beside them and facing one, `lotAt` against a scan, `lotsIntersecting` against a scan, the raster against the layout, determinism by seed, storeys and families, the zoning by quadrant, landmark lots, trees in the verge, lamps on road edges with their arms over the road, stalls, the roads out where the RoadNetwork expects them, `splitLength` |
+| `tests/tempest/terrain.test.ts` | flat at 8 out to 300 cells, never a step of more than one block over the footprint (x and z), the zone's own height inside and the wilderness's at the edge, the roads out level across and gentle along, the river under the water level and 40 cells from the grid, ponds and the cairn's hill, landmark ground |
+| `tests/tempest/zone.test.ts` | the zone as a `Zone` (name, footprint, atmosphere, getBlock and getCell), the paving, the fountain, bollards, lamp posts, roads out 9 wide and level, street trees, every lot's blueprint on its rectangle and the same every time, the filler kits, a kit that throws, a landmark kit by id and the bridge placeholder, `growMarkedTrees`, **the same chunks from the same seed in any order and with a cache of one lot**, **single cells asked cold against chunk generation**, buildings across chunk borders, farms, ponds, river, forest clear of roads, pastures, chunk cost |
 | `tests/tempest/layout.test.ts` | the grid, blocks apart from each other and the roads, zoning against the plan, diagonals, landmarks (unique, in the footprint, not overlapping, off blocks and roads unless built on one), the Town Hall at the head of the avenue, the arena, cave and cairn, **the gates equal the RoadNetwork's and its roads (built from the seed) start there**, the river, farms and forest |
 | `tests/worldgen/structures-purity.test.ts` | the new layers import no Three.js, React or DOM, and the engine and content do not import them |
 | `tests/kitSandbox.test.ts` | the viewer's options, stage, camera and light, meshed with the real mesher |

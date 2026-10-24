@@ -266,14 +266,14 @@ Phase 7 puts buildings into the zones. Step 7.1b added the machinery, described 
 | Folder | What it is |
 | --- | --- |
 | `structures/` | Pure and generic: `Blueprint` (a sparse volume of cells with bounds, turning, mirroring, merging, a stable hash and a `Placement` that answers `cellAt` in world coordinates in one array read), the `StylePack` (roles mapped to blocks, with palette families), roof profiles as data and the roofs built from them, the `BlueprintBuilder` with its Japanese-fusion helpers, `Lot`, `BuildingKit`, `KitRegistry` and a placeholder `BoxHouseKit`. Nothing in it names a Tempest block. |
-| `tempest/` | `style.ts` (the Tempest pack and its families), `layout.ts` (the contract of where the town's streets, blocks, districts and landmarks are, and the gates it shares with the roads), and `kits/` (the demonstration kits and `createTempestKits()`). |
+| `tempest/` | `style.ts` (the Tempest pack and its families), `layout.ts` (the contract of where the town's streets, blocks, districts and landmarks are, and the gates it shares with the roads), `kits/` (the demonstration kits and `createTempestKits()`), and, from step 7.2a, `DistrictPlanner.ts` (lots, street trees, lamps), `terrain.ts`, `countryside.ts`, `TempestCityZone.ts` (the zone that answers every cell of the footprint) and `fillers/` (kits for the planner's own gardens, parks, sites and stalls). |
 
 Two connections to what is above:
 
 - **Roads.** `layout.ts` reads `GATES.tempestWest` and `GATES.tempestNorth` from `roads/layout.ts` and lays its roads to them, so the network's road meets the town's head on. A test builds the `RoadNetwork` from the seed and checks that its Tempest roads start at those gates.
-- **Zones.** The layout is a new description of the Federation of Tempest's interior and is not wired into `zones/TempestZone.ts` yet; the zone keeps building the old planned grid until the zone step replaces it. It uses the same footprint (circle of 700 about (1500, 0), core 550, ground y = 8), so the terrain blender needs no change.
+- **Zones.** `TempestCityZone` extends the legacy `Zone` and has the old Tempest's name and footprint (circle of 700 about (1500, 0), core 550, ground y = 8), so the terrain blender needs no change; it ends exactly on the wilderness height at the footprint's edge, as the blender wants of a zone with no band. It is not wired into `zones/index.ts` yet: the game still builds the old planned grid until the integration step swaps it in ([how](tempest.md#wiring-it-in): the zone is asked for a cell, with its state, not a block id). Its roads out stop where the `RoadNetwork` takes over (the gates at 600 cells) and the network's own roads, painted between the core and the edge, win over the zone's surface there.
 
-`structures/` and `tempest/` are pure like the rest of `worldgen/`, and the engine and `content/` never import them (`tests/worldgen/structures-purity.test.ts`). The viewer for kits is `components/sandbox/` (`?sandbox=kits`); `npx vite-node tools/render-tempest-layout.ts` draws the layout as a map.
+`structures/` and `tempest/` are pure like the rest of `worldgen/`, and the engine and `content/` never import them (`tests/worldgen/structures-purity.test.ts`). The viewer for kits is `components/sandbox/` (`?sandbox=kits`); `npx vite-node tools/render-tempest-layout.ts` draws the layout as a map, and `tools/render-tempest-map.ts` the planner's lots and the zone as it is built (see [tempest.md](tempest.md#the-maps)).
 
 ## Tools
 
