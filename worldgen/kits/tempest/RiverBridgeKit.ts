@@ -119,7 +119,13 @@ export class RiverBridgeKit extends BuildingKit {
       const r = row(z);
       for (const x of [dx0, dx1]) {
         if (stone) b.stoneLantern(x, r + 2, z);
-        else { b.column(x, z, r + 1, r + 3, 'accent'); b.set(x, r + 4, z, z === crownZ ? 'lightAlt' : 'light'); }
+        else {
+          // A lacquered newel with a thin rail post above it, under a paper lantern: slender, like the rails it stands in.
+          b.set(x, r + 1, z, 'accent');
+          b.set(x, r + 2, z, 'rail');
+          b.set(x, r + 3, z, 'rail');
+          b.set(x, r + 4, z, z === crownZ ? 'lightAlt' : 'light');
+        }
       }
     }
     // Magic ore lamps on the posts at the crown of a stone bridge, and bollards at both ends.

@@ -44,7 +44,7 @@ export class MarketStallKit extends BuildingKit {
     for (let x = frame.x0 + 1; x <= frame.x1 - 1; x++) counterCells.push([x, z1]);
     if (sideCounter) for (let z = frame.z0 + 1; z <= z1 - 1; z++) counterCells.push([frame.x1, z]);
     for (const [x, z] of counterCells) {
-      b.set(x, 1, z, 'wallBase');
+      b.set(x, 1, z, 'wall');
       b.set(x, 2, z, 'interiorFloor');
       const roll = rng.int(8);
       if (roll === 0) b.set(x, 3, z, T.VASE);
