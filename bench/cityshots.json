@@ -36,5 +36,7 @@
   { "name": "public-clinic", "shot": "1575,10.8,-130,0,3" },
   { "name": "watchtower", "shot": "1536,11,-145,180,8" },
   { "name": "shrine-park", "shot": "1655,16,120,180,-6" },
-  { "name": "north-aerial", "shot": "1500,260,-80,0,-60", "query": "&rd=14" }
+  { "name": "north-aerial", "shot": "1500,260,-80,0,-60", "query": "&rd=14" },
+  { "name": "obl-ne", "shot": "1590,52,-30,0,-32", "query": "&rd=10" },
+  { "name": "obl-commercial", "shot": "1480,48,34,70,-30", "query": "&rd=10" }
 ]

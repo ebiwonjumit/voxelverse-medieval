@@ -10,7 +10,7 @@ import { Lot } from '../../structures/Lot';
 import { StylePack } from '../../structures/StylePack';
 import { FLARED } from '../../structures/roofProfile';
 import {
-  Rect, bays, chimneyStack, eaveBrackets, furnishRoom, hangingSign, mirrorX, pent, planter, postCoords, roofOver, setOnWall, stairDoors, staircase, windowRow,
+  Rect, bays, chimneyStack, eaveBrackets, furnishRoom, hangingSign, mirrorX, pent, planter, postCoords, roofOver, setOnWall, stairDoors, staircase, tipsFor, windowRow,
 } from './parts';
 
 // The workshop: where the town makes things. The production sector of the plan is a quarter of these, and the glow of the forge
@@ -119,7 +119,7 @@ const forge = (b: BlueprintBuilder, lot: Lot, flip: boolean, lanterns: boolean):
   b.mark({ kind: 'door', x: doorX, y: 1, z: z1, facing: SOUTH });
   for (const wall of [EAST, WEST, NORTH] as Dir[]) windowRow(b, walls, wall, spacing, { y: 3, height: 2, kind: 'lattice', width: 2 });
 
-  const info = roofOver(b, walls, PLATE, { kind: 'gable-x', profile: FLARED, tips: 2, gableWall: 'wallFrame' });
+  const info = roofOver(b, walls, PLATE, { kind: 'gable-x', profile: FLARED, tips: tipsFor(walls), gableWall: 'wallFrame' });
   eaveBrackets(b, walls, PLATE, [NORTH], spacing);
   // The lean-to over the yard, on posts, with lanterns under its lip.
   pent(b, walls, SOUTH, walls.x0, walls.x1, PLATE, 3, { postFrom: 1, postEvery: spacing, lanterns: true });
@@ -195,7 +195,7 @@ const smithy = (b: BlueprintBuilder, lot: Lot, flip: boolean, lanterns: boolean)
       windowRow(b, walls, wall, spacing, { y: PLATE1 + 3, height: 2, kind: wall === SOUTH ? 'shoji' : 'lattice', lit: wall === SOUTH, width: wall === SOUTH ? 3 : 2, sill: 'trim' });
     }
   }
-  const info = roofOver(b, walls, top, { kind: 'hip', profile: FLARED, tips: 2, gableWall: 'wallFrame' });
+  const info = roofOver(b, walls, top, { kind: 'hip', profile: FLARED, tips: tipsFor(walls), gableWall: 'wallFrame' });
   eaveBrackets(b, walls, top, [NORTH, SOUTH, EAST, WEST], spacing);
   b.floor(rect(walls.x0, z1 + 1, walls.x1, D - 1), 0, 'path');
   for (let i = 0; i < doorWidth; i++) b.stair(walls.x0 + doorAt + i, FLOOR, z1 + 1, NORTH, 'stoneStairs');
@@ -264,7 +264,7 @@ const weavingHall = (b: BlueprintBuilder, lot: Lot, flip: boolean, lanterns: boo
   for (const wall of [EAST, WEST] as Dir[]) windowRow(b, walls, wall, spacing, { y: 3, height: 3, kind: 'shoji', lit: true, sill: 'wallBase' });
   windowRow(b, walls, NORTH, spacing, { y: 3, height: 2, kind: 'lattice', width: 2 });
 
-  const info = roofOver(b, walls, PLATE, { kind: 'gable-z', profile: FLARED, tips: 2, gableWall: 'wallFrame' });
+  const info = roofOver(b, walls, PLATE, { kind: 'gable-z', profile: FLARED, tips: tipsFor(walls), gableWall: 'wallFrame' });
   eaveBrackets(b, walls, PLATE, [EAST, WEST], spacing);
   const cx = (walls.x0 + walls.x1) >> 1;
   if (info.gable) for (let k = 0; k < 2; k++) if (b.bp.has(cx, info.base + k, z1)) b.set(cx, info.base + k, z1, 'shojiLit');
@@ -317,7 +317,7 @@ const lumberYard = (b: BlueprintBuilder, lot: Lot, flip: boolean, rng: Rng): voi
   b.beamRing(walls, PLATE, 'beam');
   // A solid back wall of boards keeps the stacks from the weather.
   for (let x = walls.x0; x <= walls.x1; x++) for (let y = 1; y <= PLATE - 1; y++) b.setIfEmpty(x, y, walls.z0, 'wallFrame');
-  roofOver(b, walls, PLATE, { kind: 'gable-x', profile: FLARED, tips: 2, gableWall: 'wallFrame' });
+  roofOver(b, walls, PLATE, { kind: 'gable-x', profile: FLARED, tips: tipsFor(walls), gableWall: 'wallFrame' });
   eaveBrackets(b, walls, PLATE, [NORTH, SOUTH], spacing);
 
   // Seasoning stacks of logs and boards against the back wall and one side, in courses.

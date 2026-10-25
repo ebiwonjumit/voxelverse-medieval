@@ -6,8 +6,9 @@ import { FamilyDef, RoleMap, StylePack } from '../structures/StylePack';
 
 // The Tempest style pack: what the forest city's buildings are made of. The base roles are the commonest house of the
 // town (white plaster in a dark timber frame under a warm terracotta roof), and the families are the other palettes of the
-// owner's pictures, so a street mixes them. From above the town should read as one terracotta mass, which is why that roof
-// is the base and the heaviest weight in every ordinary district; dark ridged tile, green glaze and thatch are accents.
+// owner's pictures, so a street mixes them. Terracotta is the base and still the commonest single palette in every ordinary
+// district, but only by a plurality (about four houses in ten): the pictures' roofs are as much dark ridged tile, green
+// glaze and thatch, so those make up the rest and no street is one colour.
 //
 // Districts are the names worldgen/tempest/layout.ts gives its blocks.
 
@@ -66,8 +67,8 @@ export const TEMPEST_FAMILIES: readonly FamilyDef[] = [
       roofBlock: T.DARK_TILE_ROOF, roofStairs: T.DARK_TILE_ROOF_STAIRS, roofSlab: T.DARK_TILE_ROOF_SLAB,
       ridge: T.DARK_RIDGE, ridgeHorn: T.DARK_RIDGE_HORN, accent: T.VERMILION_LOG,
     },
-    weights: { residential: 2, commercial: 2, production: 1, storage: 1, luxury: 4, guest: 4, government: 3, public: 2, tourism: 3 },
-    fallback: 2,
+    weights: { residential: 4.5, commercial: 4, production: 3, storage: 2, luxury: 4, guest: 4, government: 3.5, public: 3.5, tourism: 3 },
+    fallback: 3,
   },
   {
     // Half-timber under green glaze, the inns and the bath: no ridge cap, the tiles run over the crest.
@@ -76,8 +77,8 @@ export const TEMPEST_FAMILIES: readonly FamilyDef[] = [
       wall: T.PLASTER_TIMBER, roofBlock: T.GREEN_TILE_ROOF, roofStairs: T.GREEN_TILE_ROOF_STAIRS, roofSlab: T.GREEN_TILE_ROOF_SLAB,
       ridge: T.GREEN_TILE_ROOF, ridgeHorn: T.GREEN_TILE_ROOF,
     },
-    weights: { residential: 1, commercial: 2, production: 0.5, storage: 0.5, luxury: 2, guest: 3, government: 1, public: 1, tourism: 6 },
-    fallback: 1,
+    weights: { residential: 1.5, commercial: 2, production: 0.8, storage: 0.8, luxury: 2, guest: 3, government: 1.5, public: 1.5, tourism: 6 },
+    fallback: 1.5,
   },
   {
     // Dark timber with red lacquer, the shrines and the grander houses.
@@ -87,8 +88,8 @@ export const TEMPEST_FAMILIES: readonly FamilyDef[] = [
       roofBlock: T.DARK_TILE_ROOF, roofStairs: T.DARK_TILE_ROOF_STAIRS, roofSlab: T.DARK_TILE_ROOF_SLAB,
       ridge: T.DARK_RIDGE, ridgeHorn: T.DARK_RIDGE_HORN, light: T.PAPER_LANTERN_STRIPED, lightAlt: T.PAPER_LANTERN_RED,
     },
-    weights: { residential: 1, commercial: 1, production: 0.5, storage: 0.2, luxury: 3, guest: 2, government: 2, public: 1, tourism: 3 },
-    fallback: 0.5,
+    weights: { residential: 1.5, commercial: 1.5, production: 0.8, storage: 0.4, luxury: 3, guest: 2, government: 2, public: 1.5, tourism: 3 },
+    fallback: 0.8,
   },
   {
     // Thatch over plaster and bamboo: huts, stalls and the farm houses.
@@ -97,8 +98,18 @@ export const TEMPEST_FAMILIES: readonly FamilyDef[] = [
       roofBlock: T.THATCH_ROOF, roofStairs: T.THATCH_ROOF_STAIRS, roofSlab: T.THATCH_ROOF_SLAB,
       ridge: T.THATCH_ROOF, ridgeHorn: T.THATCH_ROOF, beam: T.BAMBOO_POLE, post: T.BAMBOO_POLE,
     },
-    weights: { residential: 1, commercial: 0.5, production: 1, storage: 2, luxury: 0, guest: 0, government: 0, public: 0, tourism: 1 },
+    weights: { residential: 2.5, commercial: 0.8, production: 2.5, storage: 3, luxury: 0, guest: 0, government: 0, public: 0, tourism: 1.2 },
     fallback: 0.5,
+  },
+  {
+    // Green glaze over white plaster in the ordinary dark frame: the house with the green tile roof of Tempest-7.
+    name: 'plaster-green',
+    overrides: {
+      roofBlock: T.GREEN_TILE_ROOF, roofStairs: T.GREEN_TILE_ROOF_STAIRS, roofSlab: T.GREEN_TILE_ROOF_SLAB,
+      ridge: T.GREEN_TILE_ROOF, ridgeHorn: T.GREEN_TILE_ROOF,
+    },
+    weights: { residential: 1, commercial: 1.2, production: 0.5, storage: 0.3, luxury: 1.5, guest: 1.5, government: 1, public: 1, tourism: 2 },
+    fallback: 0.7,
   },
   {
     // The civic hall: white plaster and columns under the teal roof.

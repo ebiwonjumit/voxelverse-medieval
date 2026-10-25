@@ -7,7 +7,7 @@ import { BuildingKit, KitSize } from '../../structures/BuildingKit';
 import { Lot } from '../../structures/Lot';
 import { StylePack } from '../../structures/StylePack';
 import { FLARED, FLARED_TIGHT, STEEP } from '../../structures/roofProfile';
-import { RoofKind, bays, chimneyStack, eaveBrackets, furnishRoom, lanternBracket, mirrorX, planter, roofOver, setOnWall, stairDoors, staircase, windowRow } from './parts';
+import { RoofKind, bays, chimneyStack, eaveBrackets, furnishRoom, lanternBracket, mirrorX, planter, roofOver, setOnWall, stairDoors, staircase, tipsFor, windowRow } from './parts';
 
 // The townhouse: the ordinary house of the town, one or two storeys, its front to the street. What makes two of them differ
 // comes from the lot's seed (which bay the door is in, whether it is mirrored, the wall of the upper storey, a chimney,
@@ -95,7 +95,7 @@ export class TownhouseKit extends BuildingKit {
       plate = PLATE2;
       if (tiered) {
         // The skirt roof round the ground floor, and a smaller storey standing inside it.
-        upper = b.eaves(rect(walls.x0 - 1, walls.z0 - 1, walls.x1 + 1, walls.z1 + 1), PLATE1 + 1, 2, FLARED_TIGHT, 2) ?? rect(walls.x0 + 1, walls.z0 + 1, walls.x1 - 1, walls.z1 - 1);
+        upper = b.eaves(rect(walls.x0 - 1, walls.z0 - 1, walls.x1 + 1, walls.z1 + 1), PLATE1 + 1, 2, FLARED_TIGHT, 3) ?? rect(walls.x0 + 1, walls.z0 + 1, walls.x1 - 1, walls.z1 - 1);
       }
       const upperSpacing = tiered ? ((upper.x1 - upper.x0) % 5 === 0 || upper.x1 - upper.x0 > 11 ? 5 : 4) : spacing;
       b.floor(inner, PLATE1, 'interiorFloor');
@@ -108,7 +108,7 @@ export class TownhouseKit extends BuildingKit {
         });
       }
     }
-    const roofInfo = roofOver(b, upper, plate, { kind, profile, tips: variant === 1 ? 0 : 2, gableWall: 'wallFrame' });
+    const roofInfo = roofOver(b, upper, plate, { kind, profile, tips: variant === 1 ? 0 : tipsFor(upper), gableWall: 'wallFrame' });
     // Brackets under the eaves: the stubs of the beams that carry the roof (a steep gable has no deep eave to hold them).
     const eaveSides: Dir[] = kind === 'gable-x' ? [NORTH, SOUTH] : kind === 'gable-z' ? [] : [NORTH, SOUTH, EAST, WEST];
     eaveBrackets(b, upper, plate, eaveSides, tiered ? 4 : spacing);

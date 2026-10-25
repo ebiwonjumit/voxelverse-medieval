@@ -8,7 +8,7 @@ import { Lot } from '../../structures/Lot';
 import { StylePack } from '../../structures/StylePack';
 import { FLARED, FLARED_TIGHT } from '../../structures/roofProfile';
 import {
-  Rect, RoomKind, bayWindow, bays, bench, eaveBrackets, furnishRoom, mirrorX, middleBay, pent, planter, roofOver, setOnWall, stairDoors, staircase, windowRow,
+  Rect, RoomKind, bayWindow, bays, bench, eaveBrackets, furnishRoom, mirrorX, middleBay, pent, planter, roofOver, setOnWall, stairDoors, staircase, tipsFor, windowRow,
 } from './parts';
 
 // The public hall: the long buildings of the plan's public facilities strip, two storeys, a lot of windows, a yard in front.
@@ -81,7 +81,7 @@ export class PublicHallKit extends BuildingKit {
 
     // The roof, and what stands on and under it, by variant.
     const kind = variant === 0 ? 'hip-gable' : variant === 1 ? 'hip' : 'gable-x';
-    const info = roofOver(b, walls, top, { kind, profile: FLARED, tips: 2, gableWall: 'wallFrame' });
+    const info = roofOver(b, walls, top, { kind, profile: FLARED, tips: tipsFor(walls), gableWall: 'wallFrame' });
     eaveBrackets(b, walls, top, kind === 'gable-x' ? [NORTH, SOUTH] : [NORTH, SOUTH, EAST, WEST], spacing);
     const cx = (walls.x0 + walls.x1) >> 1;
     const stepsAt = walls.x0 + doorAt;

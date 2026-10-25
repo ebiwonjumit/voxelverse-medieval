@@ -7,7 +7,7 @@ import { Lot } from '../../structures/Lot';
 import { StylePack } from '../../structures/StylePack';
 import { FLARED } from '../../structures/roofProfile';
 import { layGarden } from './garden';
-import { RoofKind, bays, furnishRoom, mirrorX, planter, roofOver, stairDoors, staircase, windowRow } from './parts';
+import { RoofKind, bays, furnishRoom, mirrorX, planter, roofOver, stairDoors, staircase, tipsFor, windowRow } from './parts';
 
 // A garden house: a small timber house in a big garden, the kind of lot the luxury quarter and the guest houses are made of.
 //   variant 0  a tea house at the back of a pond garden, a veranda on the front and one side, a hip or hip and gable roof
@@ -74,7 +74,7 @@ export class GardenHouseKit extends BuildingKit {
       for (const wall of [SOUTH, EAST, WEST, NORTH] as Dir[]) windowRow(b, walls, wall, spacing, { y: PLATE1 + 3, height: 2, kind: wall === NORTH ? 'lattice' : 'shoji', lit: wall !== NORTH, width: 2, sill: 'trim' });
       b.balcony(walls, PLATE1, SOUTH, walls.x0, walls.x1, 1, { rail: true });
     }
-    const info = roofOver(b, walls, top, { kind: roof, profile: FLARED, tips: 2 });
+    const info = roofOver(b, walls, top, { kind: roof, profile: FLARED, tips: tipsFor(walls) });
     if (chimney) {
       b.column(walls.x0 + 1, walls.z0 + 1, FLOOR + 1, info.crestTop + 1, 'wallBase');
       b.set(walls.x0 + 1, info.crestTop + 2, walls.z0 + 1, 'stoneSlab', 0);

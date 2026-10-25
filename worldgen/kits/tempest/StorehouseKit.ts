@@ -6,7 +6,7 @@ import { BuildingKit, KitSize } from '../../structures/BuildingKit';
 import { Lot } from '../../structures/Lot';
 import { StylePack } from '../../structures/StylePack';
 import { FLARED, FLARED_TIGHT } from '../../structures/roofProfile';
-import { bays, framedWindow, furnishRoom, mirrorX, pent, roofOver, setOnWall, stairDoors, staircase } from './parts';
+import { bays, framedWindow, furnishRoom, mirrorX, pent, roofOver, setOnWall, stairDoors, staircase, tipsFor } from './parts';
 
 // The kura: a storehouse of white plaster on a stone plinth with a heavy tile roof, a few small windows set deep in
 // the wall and one big door with a lacquered frame. Nothing about it is open or light: it is where the town keeps its rice.
@@ -76,7 +76,7 @@ export class StorehouseKit extends BuildingKit {
     let upperInner = inner;
     if (two) {
       // The skirt roof round the stone-footed ground floor and the smaller storey that stands inside it.
-      const skirt = b.eaves(rect(walls.x0 - 1, walls.z0 - 1, walls.x1 + 1, walls.z1 + 1), PLATE1 + 1, 2, FLARED_TIGHT, 2);
+      const skirt = b.eaves(rect(walls.x0 - 1, walls.z0 - 1, walls.x1 + 1, walls.z1 + 1), PLATE1 + 1, 2, FLARED_TIGHT, 3);
       const upper = skirt ?? rect(walls.x0 + 1, walls.z0 + 1, walls.x1 - 1, walls.z1 - 1);
       b.floor(inner, PLATE1, 'interiorFloor');
       b.walls(upper, PLATE1 + 1, PLATE2 - 1, 'wall');
@@ -88,7 +88,7 @@ export class StorehouseKit extends BuildingKit {
       roofWalls = upper;
       upperInner = rect(upper.x0 + 1, upper.z0 + 1, upper.x1 - 1, upper.z1 - 1);
     }
-    const info = roofOver(b, roofWalls, top, { kind: 'gable-x', profile: FLARED, tips: 2, gableWall: 'wall' });
+    const info = roofOver(b, roofWalls, top, { kind: 'gable-x', profile: FLARED, tips: tipsFor(roofWalls), gableWall: 'wall' });
     // A small eave over the door of a single storey.
     if (!two) pent(b, walls, SOUTH, cx - 2, cx + 2, PLATE1 - 1, 2);
     // A lattice window in each gable end.

@@ -80,10 +80,10 @@ export const VERGE = 1;
 const MIN_LOT = 9;
 
 const FAMILY_TRIES = 3;
-/** The ordinary house (terracotta under dark timber): it may stand beside itself, the accent palettes may not. */
+/** The ordinary house (terracotta under dark timber): it may stand beside itself, the other palettes may not. */
 const BASE_FAMILY = 'timber-terracotta';
-/** The chance that a lot given an accent palette gets the ordinary house instead, by district: the grander districts keep more accents. */
-const BASE_BIAS: Record<string, number> = { residential: 0.55, commercial: 0.5, production: 0.5, storage: 0.3, public: 0.3, tourism: 0.3, government: 0.2, luxury: 0.15, guest: 0.15, civic: 0 };
+/** The chance that a lot given another palette gets the ordinary house instead, by district: small, because the town should show its dark, green and thatch roofs. */
+const BASE_BIAS: Record<string, number> = { residential: 0.2, commercial: 0.2, production: 0.2, storage: 0.1, public: 0.1, tourism: 0.1, government: 0.05, luxury: 0.05, guest: 0.05, civic: 0 };
 
 type Plot = { x: number; z: number; w: number; d: number; facing: Facing; row: string };
 

@@ -134,6 +134,15 @@ export interface RoofSpec {
 /** The profile that suits a roof across `span` blocks of wall: the flare needs room to curve. */
 export const profileFor = (wallSpan: number, deep = false): RoofProfile => (wallSpan < 6 ? FLARED_TIGHT : deep && wallSpan >= 11 ? FLARED_DEEP : FLARED);
 
+/**
+ * How far to turn the eave corners up for a roof over `walls`: a pagoda's corners rise higher the bigger the roof, 1.5
+ * blocks on a narrow house to 2.5 on a broad one, and sweep along the eave (`cornerTips`).
+ */
+export const tipsFor = (walls: Rect): number => {
+  const span = Math.min(walls.x1 - walls.x0, walls.z1 - walls.z0) + 1;
+  return span >= 12 ? 5 : span >= 8 ? 4 : 3;
+};
+
 export const roofOver = (b: BlueprintBuilder, walls: Rect, plateY: number, spec: RoofSpec): RoofInfo => {
   const profile = spec.profile ?? FLARED;
   const opts = { profile, tips: spec.tips ?? 2, gableWall: spec.gableWall };

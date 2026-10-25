@@ -163,11 +163,17 @@ export const cornerTips = (sink: RoofSink, outer: Rect, base: number, profile: R
   };
   for (const [cx, cz, sx, sz] of corners) {
     rise(cx, cz, half);
-    // Past three half-blocks the cells beside the corner rise too, so a tall tip sweeps up instead of standing alone.
+    // Past three half-blocks the cells beside the corner rise too, a half block less for every cell along the edge, so a tall
+    // tip sweeps up out of the eave (the curve of a pagoda roof) instead of standing alone. The second ring in from the edge
+    // follows the first three half blocks lower, so the tip has some thickness from the front and is not a fin.
     if (half >= 3) {
-      for (const [nx, nz] of [[cx + sx, cz], [cx, cz + sz]]) {
-        if (nx < outer.x0 || nx > outer.x1 || nz < outer.z0 || nz > outer.z1) continue;
-        rise(nx, nz, half - 2);
+      for (let k = 1; half - k > 0; k++) {
+        for (const [nx, nz, ix, iz] of [[cx + sx * k, cz, 0, sz], [cx, cz + sz * k, sx, 0]]) {
+          if (nx < outer.x0 || nx > outer.x1 || nz < outer.z0 || nz > outer.z1) continue;
+          rise(nx, nz, half - k);
+          const px = nx + ix, pz = nz + iz;
+          if (half - k - 3 > 0 && px >= outer.x0 && px <= outer.x1 && pz >= outer.z0 && pz <= outer.z1) rise(px, pz, half - k - 3);
+        }
       }
     }
   }

@@ -135,12 +135,19 @@ describe('the district planner: lots', () => {
     expect(mean(near)).toBeGreaterThan(mean(far) + 0.4);
     expect(Math.min(...buildings.map((p) => p.lot.floors))).toBe(1);
     expect(Math.max(...buildings.map((p) => p.lot.floors))).toBe(3);
-    // The town reads as one terracotta mass: the ordinary house is the commonest family, with a clear lead.
+    // The roofs of the pictures: terracotta is the commonest palette but under half of the town, and the dark ridged tile, the
+    // green glaze and the thatch together are at least a third of the building lots (it was 70 percent terracotta before).
     const count = new Map<string, number>();
     for (const p of buildings) count.set(p.lot.family!, (count.get(p.lot.family!) ?? 0) + 1);
     const terracotta = count.get('timber-terracotta') ?? 0;
-    expect(terracotta / buildings.length).toBeGreaterThan(0.45);
-    for (const [family, n] of count) if (family !== 'timber-terracotta') expect(n, family).toBeLessThan(terracotta / 2);
+    expect(terracotta / buildings.length).toBeGreaterThan(0.3);
+    expect(terracotta / buildings.length).toBeLessThan(0.5);
+    for (const [family, n] of count) if (family !== 'timber-terracotta') expect(n, family).toBeLessThan(terracotta);
+    const dark = (count.get('plaster-dark') ?? 0) + (count.get('vermilion-dark') ?? 0);
+    const green = (count.get('half-timber-green') ?? 0) + (count.get('plaster-green') ?? 0);
+    expect(dark / buildings.length).toBeGreaterThan(0.2);
+    expect(green / buildings.length).toBeGreaterThan(0.1);
+    expect((count.get('thatch') ?? 0) / buildings.length).toBeGreaterThan(0.05);
     // Neighbours: a lot in a row knows the ones beside it.
     expect(planner.lots.some((p) => p.lot.neighbours.left.kind !== null && p.lot.neighbours.right.kind !== null)).toBe(true);
   });

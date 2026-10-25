@@ -90,8 +90,8 @@ describe('kit registry', () => {
 });
 
 describe('the Tempest style pack', () => {
-  it('has the families of the pictures, with terracotta the base and the heaviest weight in every ordinary district', () => {
-    expect(TEMPEST_STYLE.familyNames).toEqual(expect.arrayContaining(['timber-terracotta', 'plaster-dark', 'half-timber-green', 'vermilion-dark', 'thatch', 'civic-teal']));
+  it('has the families of the pictures, with terracotta the base and the commonest palette, by a plurality, in every ordinary district', () => {
+    expect(TEMPEST_STYLE.familyNames).toEqual(expect.arrayContaining(['timber-terracotta', 'plaster-dark', 'half-timber-green', 'plaster-green', 'vermilion-dark', 'thatch', 'civic-teal']));
     expect(TEMPEST_STYLE.block('roofBlock')).toBe(registry.byName('voxelverse:terracotta_roof').id);
     for (const district of ['residential', 'commercial', 'production', 'storage']) {
       const rng = new Rng(11);
@@ -102,7 +102,10 @@ describe('the Tempest style pack', () => {
       }
       const best = [...count.entries()].sort((a, b) => b[1] - a[1])[0];
       expect(best[0], district).toBe('timber-terracotta');
-      expect(count.get('timber-terracotta')! / 2000, district).toBeGreaterThan(0.3);
+      // A plurality and not a majority: the dark tile, green glaze and thatch of the pictures are most of the other roofs.
+      const share = count.get('timber-terracotta')! / 2000;
+      expect(share, district).toBeGreaterThan(0.25);
+      expect(share, district).toBeLessThan(0.5);
       // No roof role of any family is blue slate: the pack never offers one.
       expect(count.has('civic-teal') ? count.get('civic-teal')! : 0).toBe(0);
     }

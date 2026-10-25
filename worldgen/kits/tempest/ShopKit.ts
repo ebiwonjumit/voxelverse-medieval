@@ -6,7 +6,7 @@ import { Lot } from '../../structures/Lot';
 import { StylePack } from '../../structures/StylePack';
 import { FLARED } from '../../structures/roofProfile';
 import {
-  RoofKind, bays, chimneyStack, eaveBrackets, furnishRoom, goodsAt, hangingSign, mirrorX, pent, planter, postCoords, roofOver, setOnWall, stairDoors, staircase, windowRow,
+  RoofKind, bays, chimneyStack, eaveBrackets, furnishRoom, goodsAt, hangingSign, mirrorX, pent, planter, postCoords, roofOver, setOnWall, stairDoors, staircase, tipsFor, windowRow,
 } from './parts';
 
 // The shop: a trade on the ground floor and the family's rooms above, its front open to the street.
@@ -139,7 +139,7 @@ export class ShopKit extends BuildingKit {
         windowRow(b, upper, wall, spacing, { y: PLATE1 + 3, height: 2, kind: wall === SOUTH ? 'shoji' : 'lattice', lit: wall === SOUTH, width: wall === SOUTH ? 3 : 2, sill: 'trim' });
       }
     }
-    const info = roofOver(b, roofWalls, top, { kind, profile: FLARED, tips: 2, gableWall: 'wallFrame' });
+    const info = roofOver(b, roofWalls, top, { kind, profile: FLARED, tips: tipsFor(roofWalls), gableWall: 'wallFrame' });
     eaveBrackets(b, roofWalls, top, kind === 'gable-x' ? [NORTH] : variant === 2 ? [NORTH, EAST, WEST, SOUTH] : [NORTH, EAST, WEST, SOUTH], spacing);
     if (chimney) chimneyStack(b, walls.x0 + 1, walls.z0 + 1, 1, info.crestTop + 1);
 

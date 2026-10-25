@@ -80,7 +80,7 @@ export class InnKit extends BuildingKit {
     for (let t = 1; t < want; t++) {
       let next: Rect | null;
       if (variant === 0) {
-        next = b.eaves(rect(walls.x0 - 2, walls.z0 - 2, walls.x1 + 2, walls.z1 + 2), plate + 1, 4, FLARED, 2);
+        next = b.eaves(rect(walls.x0 - 2, walls.z0 - 2, walls.x1 + 2, walls.z1 + 2), plate + 1, 4, FLARED, 3);
         // Too small to carry another storey (a stair needs four blocks of depth): a hip goes on as it is.
         if (!next || next.z1 - next.z0 < 5 || next.x1 - next.x0 < 5) break;
       } else {
