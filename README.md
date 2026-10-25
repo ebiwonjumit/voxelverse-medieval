@@ -111,7 +111,7 @@ VoxelVerse is partway through a rebuild. The goal is to make **Tempest and the w
 | P5 | Baked sky and block light, ambient occlusion, a 20 minute day and night cycle ([light](docs/light.md), [sky](docs/sky.md)) | Verified, in the next PR |
 | P6 | Terrain, biomes, rivers and roads: seeded noise, zone blending, six roads with bridges ([worldgen](docs/worldgen.md)) | Merged (PR #1), connected to the game in the next PR |
 | P7 | Tempest city: style pack, district planner, building kits, landmarks, interiors | Done, in the next PR: the block set (72 blocks), the structures library, the district planner and `TempestCityZone`, the district kits, the landmarks and interiors, all connected to the game and checked against the owner's plan; 60 fps with no frame over 50 ms through its streets ([tempest-blocks](docs/tempest-blocks.md), [tempest](docs/tempest.md), [tempest-landmarks](docs/tempest-landmarks.md), [results](docs/perf-after-p7.md)) |
-| P8 | Living world: swaying foliage, animated water, fireflies, petals, smoke | Step 8.1 done: foliage sway and animated water, with switches in the debug panel ([effects](docs/effects.md)); fireflies, petals, smoke and lantern flicker to come |
+| P8 | Living world: swaying foliage, animated water, fireflies, petals, smoke | Built, verification still to run: foliage sway and animated water, then fireflies, petals, chimney smoke, embers, lamp halos, lantern flicker and a cloud layer, with switches in the debug panel ([effects](docs/effects.md)) |
 | P9 | Zone template: a guide for building a zone from a style pack and kits, Greensom ported as the test | Not started |
 
 ### Where things stand
@@ -124,7 +124,7 @@ VoxelVerse is partway through a rebuild. The goal is to make **Tempest and the w
 ### What comes next
 
 1. **Tempest city (P7):** done. The city is `worldgen/tempest/TempestCityZone.ts` on the layout of the owner's plan, with the district kits (townhouse, shop, inn, shrine, watchtower, storehouse, workshop with its forge, smithy, weaving hall and lumber yard, public hall with its school, clinic and barracks, garden house and plot, stall, well, bridge), hand-built landmarks (civic compound and Town Hall, arena, Central Square, gates, cave, cairn, bridge, aqueduct) and a furnisher for interiors ([docs/tempest.md](docs/tempest.md#the-finished-city) says how it fits together, how it compares with the plan and the pictures, and how to extend it). Still weaker than the pictures: the Town Hall's detail, warm cobbles, yurts, an eave line that is straight between the swept corners, and a forge whose fire-box is lit but does not read as a fire at night.
-2. **Living world (P8):** foliage sway and animated water are done ([docs/effects.md](docs/effects.md)); pooled particles (petals, fireflies, smoke) and lantern flicker are next.
+2. **Living world (P8):** foliage sway, animated water, pooled particles (fireflies, petals, smoke, embers), lamp halos, lantern flicker and clouds are built ([docs/effects.md](docs/effects.md)); their verification is the next step.
 3. **Zone template (P9):** `docs/zone-authoring.md`, with Greensom as the first zone built from it. The Town of Beginnings, Amestris, Bosse, Fremmevilla and Magnolia follow, in that order.
 
 ### Known issues
