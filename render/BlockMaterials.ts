@@ -1,4 +1,4 @@
-import { DataArrayTexture, MeshBasicMaterial, Vector3, WebGLProgramParametersWithUniforms } from 'three';
+import { DataArrayTexture, MeshBasicMaterial, Vector2, Vector3, WebGLProgramParametersWithUniforms } from 'three';
 
 // The three materials chunk meshes use. All of them are MeshBasicMaterial patched with onBeforeCompile: chunk geometry
 // takes nothing from the scene's lights, because the light is baked into the vertices (see meshing/ChunkMesher.ts and
@@ -17,17 +17,45 @@ import { DataArrayTexture, MeshBasicMaterial, Vector3, WebGLProgramParametersWit
 // so day and night never re-mesh a chunk.
 //
 // Vertex attributes (see meshing/ChunkMesher.ts): uv, texLayer (base layer, overlay layer or -1), tint and bakedLight
-// (sky, block, ao, glow).
+// (sky, block, ao, glow), and sway on the buckets that have swaying blocks.
+//
+// Two things move, both in the vertex shader and neither touching the baked light, the culling or the collision (see
+// docs/effects.md). Foliage: the opaque and cutout materials push a vertex downwind by its `sway` weight times a gust
+// pattern read from the vertex's world position and the clock. Water: the water material slides two copies of the water
+// tile past each other, darkens it with depth and lightens it at a shore (both come in the water's tint channel), and
+// lifts the surface in a small wave.
 
 export interface BlockMaterials {
   /** Fully opaque tiles. No alpha test, so it keeps early depth rejection. */
   opaque: MeshBasicMaterial;
   /** Leaves, glass and shaped blocks: alpha test at one half, no sorting needed. */
   cutout: MeshBasicMaterial;
-  /** Water: same texture lookup, blended, with the wave in the vertex shader. */
+  /** Water: the tile flowed by world position and shaded by depth, blended, with a small wave in the vertex shader. */
   water: MeshBasicMaterial;
   dispose(): void;
 }
+
+/**
+ * The uniforms that drive the living-world effects. Like the daylight and the clock they belong to the caller, so one
+ * object serves every material and changing a value changes the next frame, with no recompile and no re-mesh.
+ */
+export interface EffectUniforms {
+  /** 1 lets foliage sway, 0 holds it still. */
+  sway: { value: number };
+  /** 1 animates the water surface, 0 freezes it (and flattens the wave). */
+  water: { value: number };
+  /** The clock the water reads: the game's time while water is animated, 0 while it is not. */
+  waterTime: { value: number };
+  /** Unit vector the wind blows toward, in world x and z. */
+  wind: { value: Vector2 };
+}
+
+export const createEffectUniforms = (): EffectUniforms => ({
+  sway: { value: 1 },
+  water: { value: 1 },
+  waterTime: { value: 0 },
+  wind: { value: new Vector2(0.8, 0.6) },
+});
 
 const VERTEX_DECLARATIONS = `
 attribute vec3 tint;
@@ -91,9 +119,71 @@ texel.rgb *= bakedLighting();
 diffuseColor *= texel;
 `;
 
+// How far the wind pushes a point, in blocks, before the vertex's own weight scales it. The wind is a swell of gusts
+// travelling downwind: `front` is a long sine along the wind, bent by a slower one across it so the gusts are patches and
+// not straight lines, and `gust` (0 in a lull, 1 at the crest) takes the lean from a quarter of its strength to all of it.
+// On top of that, a flutter that is faster and smaller and out of step from one block to the next. The flutter's phase
+// comes from the block the point is in, not from the point, so a plant moves as one piece instead of rippling along its
+// own width. Everything is a function of world position and time, so two faces that share a corner agree on where it goes.
+const SWAY_FUNCTION = `
+attribute float sway;
+uniform float uTime;
+uniform float uSwayOn;
+uniform vec2 uWind;
+
+vec2 windPush( vec3 wp ) {
+  vec2 side = vec2( -uWind.y, uWind.x );
+  float along = dot( wp.xz, uWind );
+  float across = dot( wp.xz, side );
+  float front = sin( along * 0.09 - uTime * 0.85 + sin( across * 0.05 + uTime * 0.17 ) * 1.7 );
+  float gust = smoothstep( -0.6, 0.9, front );
+  vec2 cell = floor( wp.xz + 0.5 );
+  float flutterA = sin( uTime * 2.3 + dot( cell, vec2( 1.7, 2.3 ) ) );
+  float flutterB = sin( uTime * 3.1 + dot( cell, vec2( -2.1, 1.3 ) ) );
+  float lively = 0.4 + 0.6 * gust;
+  return uWind * ( 0.2 * ( 0.25 + 0.75 * gust ) + 0.05 * flutterA * lively ) + side * ( 0.06 * flutterB * lively );
+}
+`;
+
+const SWAY_DISPLACEMENT = `
+#include <begin_vertex>
+if ( uSwayOn > 0.5 && sway > 0.0 ) {
+  vec4 swayOrigin = modelMatrix * vec4( position, 1.0 );
+  transformed.xz += windPush( swayOrigin.xyz ) * sway;
+}
+`;
+
+// Water, fragment side. The tile is sampled from the world position instead of the face's own uv, so a river does not
+// repeat the same patch every block, and twice: once at the size of a block and once about two and a half times larger,
+// each sliding its own way. Where the bright ripples of the two line up the water glints, where they cross it dims. The
+// derivatives are taken from the unwrapped coordinates, so `fract` leaves no seam in the mip level. vTint is not a colour on
+// water: x is the depth (0 to 1) and y the shoreline (0 to 1), written by the mesher. Deep water is darker, bluer and less
+// see-through; a shore is lighter, with a pale edge, and the most see-through.
+const WATER_FRAGMENT = `
+float waterLayer = floor( vTexLayer.x + 0.5 );
+vec2 uvA = vWaterUv;
+vec2 uvB = vWaterUv * 0.4 + vec2( 0.31, 0.57 );
+vec2 flowA = vec2( 0.04, 0.015 ) * uWaterTime;
+vec2 flowB = vec2( -0.022, 0.05 ) * uWaterTime;
+vec4 waterA = textureGrad( uBlockTextures, vec3( fract( uvA + flowA ), waterLayer ), dFdx( uvA ), dFdy( uvA ) );
+vec4 waterB = textureGrad( uBlockTextures, vec3( fract( uvB + flowB ), waterLayer ), dFdx( uvB ), dFdy( uvB ) );
+float lumA = dot( waterA.rgb, vec3( 0.3, 0.55, 0.15 ) );
+float lumB = dot( waterB.rgb, vec3( 0.3, 0.55, 0.15 ) );
+float depthLevel = clamp( vTint.x, 0.0, 1.0 );
+float shoreLevel = clamp( vTint.y, 0.0, 1.0 );
+vec3 waterColor = mix( waterA.rgb, waterB.rgb, 0.4 );
+float glint = smoothstep( 0.42, 0.62, lumA * 0.5 + lumB * 0.5 );
+waterColor *= 0.86 + 0.28 * glint * ( 0.6 + 0.4 * lumA );
+waterColor = mix( waterColor * vec3( 1.0, 1.02, 1.0 ), waterColor * vec3( 0.5, 0.72, 0.86 ), smoothstep( 0.0, 0.6, depthLevel ) );
+waterColor = mix( waterColor, vec3( lumA + 0.35 ) * vec3( 0.8, 0.95, 1.0 ), shoreLevel * 0.25 );
+float waterAlpha = mix( 0.72, 1.12, smoothstep( 0.0, 0.6, depthLevel ) ) * ( 1.0 - 0.25 * shoreLevel );
+vec4 texel = vec4( waterColor * bakedLighting(), clamp( waterAlpha, 0.0, 1.0 ) );
+diffuseColor *= texel;
+`;
+
 export const patchTextureLookup = (
   shader: WebGLProgramParametersWithUniforms, textures: { value: DataArrayTexture | null },
-  daylight: { value: number }, skyLight: { value: Vector3 },
+  daylight: { value: number }, skyLight: { value: Vector3 }, mapFragment: string = MAP_FRAGMENT,
 ): void => {
   shader.uniforms.uBlockTextures = textures;
   shader.uniforms.uDaylight = daylight;
@@ -103,45 +193,73 @@ export const patchTextureLookup = (
     .replace('#include <color_vertex>', `#include <color_vertex>\nvTexUv = uv;\nvTexLayer = texLayer;\nvTint = tint;${VERTEX_LIGHT}`);
   shader.fragmentShader = shader.fragmentShader
     .replace('void main() {', `${FRAGMENT_DECLARATIONS}\nvoid main() {`)
-    .replace('#include <map_fragment>', MAP_FRAGMENT);
+    .replace('#include <map_fragment>', mapFragment);
 };
 
-// The wave used to read each instance's position. Chunk meshes have no instances, so it reads the vertex's
-// world position, which also keeps neighbouring water faces moving together.
-const patchWaterWave = (shader: WebGLProgramParametersWithUniforms, time: { value: number }): void => {
+// Foliage: the opaque and cutout materials displace by the vertex's sway weight. A geometry with no sway attribute (a
+// bucket where nothing sways) reads weight 0 from the default below, so the same program draws every bucket.
+const patchSway = (shader: WebGLProgramParametersWithUniforms, time: { value: number }, effects: EffectUniforms): void => {
   shader.uniforms.uTime = time;
-  shader.vertexShader = `uniform float uTime;\n${shader.vertexShader}`.replace(
+  shader.uniforms.uSwayOn = effects.sway;
+  shader.uniforms.uWind = effects.wind;
+  shader.vertexShader = shader.vertexShader
+    .replace('void main() {', `${SWAY_FUNCTION}\nvoid main() {`)
+    .replace('#include <begin_vertex>', SWAY_DISPLACEMENT);
+};
+
+// Water, vertex side: a small wave that reads each vertex's world position (so neighbouring faces move together), and the
+// world position and whether the face is a top, for the fragment shader to flow the tile by. The wave is a few hundredths
+// of a block: it breaks the line of the surface without opening gaps against the banks.
+const patchWaterWave = (shader: WebGLProgramParametersWithUniforms, effects: EffectUniforms): void => {
+  shader.uniforms.uWaterTime = effects.waterTime;
+  shader.uniforms.uWaterOn = effects.water;
+  shader.vertexShader = `uniform float uWaterTime;\nuniform float uWaterOn;\nvarying vec2 vWaterUv;\n${shader.vertexShader}`.replace(
     '#include <begin_vertex>',
     `
     vec3 transformed = vec3( position );
     vec4 waveOrigin = modelMatrix * vec4( position, 1.0 );
-    transformed.y += sin( waveOrigin.x * 0.5 + uTime ) * 0.2 + cos( waveOrigin.z * 0.4 + uTime * 1.2 ) * 0.15;
+    transformed.y += uWaterOn * ( sin( waveOrigin.x * 0.5 + uWaterTime ) * 0.06 + cos( waveOrigin.z * 0.4 + uWaterTime * 1.2 ) * 0.045 );
+    // A top face is flowed by world x and z; a wall by distance along it and height.
+    vWaterUv = normal.y > 0.5 ? waveOrigin.xz : vec2( waveOrigin.x + waveOrigin.z, waveOrigin.y );
     `,
   );
+  shader.fragmentShader = `uniform float uWaterTime;\nvarying vec2 vWaterUv;\n${shader.fragmentShader}`;
 };
 
 /**
- * `textures` is the shared array, `time` the clock the water wave reads, `daylight` the sky light multiplier, 0 to 1, and
- * `skyLight` the colour that light takes (white unless the sky system says otherwise). All four are uniform objects the
- * caller keeps: swapping `textures.value` changes the texture of every material and setting `daylight.value` or
- * `skyLight.value` changes the time of day, neither recompiling anything.
+ * `textures` is the shared array, `time` the clock the foliage reads, `daylight` the sky light multiplier, 0 to 1, and
+ * `skyLight` the colour that light takes (white unless the sky system says otherwise). `effects` drives the sway and the
+ * water (see EffectUniforms). All of them are uniform objects the caller keeps: swapping `textures.value` changes the
+ * texture of every material and setting `daylight.value` or `skyLight.value` changes the time of day, none of it
+ * recompiling anything.
  */
 export const createBlockMaterials = (
   textures: { value: DataArrayTexture | null }, time: { value: number }, daylight: { value: number } = { value: 1 },
-  skyLight: { value: Vector3 } = { value: new Vector3(1, 1, 1) },
+  skyLight: { value: Vector3 } = { value: new Vector3(1, 1, 1) }, effects: EffectUniforms = createEffectUniforms(),
 ): BlockMaterials => {
+  // A bucket with nothing swaying has no `sway` attribute; this makes it read 0 instead of whatever the GPU last held.
+  const noSway = { sway: [0] };
+
   const opaque = new MeshBasicMaterial();
-  opaque.onBeforeCompile = (shader) => patchTextureLookup(shader, textures, daylight, skyLight);
+  opaque.onBeforeCompile = (shader) => {
+    patchTextureLookup(shader, textures, daylight, skyLight);
+    patchSway(shader, time, effects);
+  };
   opaque.customProgramCacheKey = () => 'block-opaque';
+  (opaque as unknown as { defaultAttributeValues: typeof noSway }).defaultAttributeValues = noSway;
 
   const cutout = new MeshBasicMaterial({ alphaTest: 0.5 });
-  cutout.onBeforeCompile = (shader) => patchTextureLookup(shader, textures, daylight, skyLight);
+  cutout.onBeforeCompile = (shader) => {
+    patchTextureLookup(shader, textures, daylight, skyLight);
+    patchSway(shader, time, effects);
+  };
   cutout.customProgramCacheKey = () => 'block-cutout';
+  (cutout as unknown as { defaultAttributeValues: typeof noSway }).defaultAttributeValues = noSway;
 
   const water = new MeshBasicMaterial({ transparent: true, opacity: 0.75 });
   water.onBeforeCompile = (shader) => {
-    patchTextureLookup(shader, textures, daylight, skyLight);
-    patchWaterWave(shader, time);
+    patchTextureLookup(shader, textures, daylight, skyLight, WATER_FRAGMENT);
+    patchWaterWave(shader, effects);
   };
   water.customProgramCacheKey = () => 'block-water';
 

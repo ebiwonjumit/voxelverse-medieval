@@ -446,19 +446,142 @@ describe('ChunkRenderer', () => {
       own.renderer.dispose();
     });
 
-    it('moves the water wave into a vertex shader that reads the vertex world position', () => {
+    it('moves the water wave into a vertex shader that reads the vertex world position and the water clock', () => {
       const { renderer } = upload(['water']);
       const water = meshesIn(renderer)[0].material as MeshBasicMaterial;
       const shader = patchedShader();
       water.onBeforeCompile(shader as never, null as never);
-      expect(shader.vertexShader).toContain('uniform float uTime');
+      expect(shader.vertexShader).toContain('uniform float uWaterTime');
       expect(shader.vertexShader).toContain('modelMatrix');
       expect(shader.vertexShader).not.toContain('instanceMatrix');
       expect(shader.vertexShader).not.toContain('USE_INSTANCING');
       expect(shader.vertexShader).toContain('vTexUv = uv'); // and still samples the water texture
 
       renderer.update(...inChunk(3, -2), 12.5);
-      expect(shader.uniforms.uTime.value).toBe(12.5);
+      expect(shader.uniforms.uWaterTime.value).toBe(12.5);
+    });
+  });
+
+  describe('living-world effects', () => {
+    const upload = (buckets: Array<'opaque' | 'cutout' | 'water'>) => {
+      const ctx = track(make({ renderDistance: 1, poolSize: 1 }));
+      ctx.renderer.update(...inChunk(3, -2), 0);
+      drain(ctx.workers, (cx, cz) => quadMesh(cx, cz, buckets));
+      frames(ctx.renderer, ...inChunk(3, -2), 60);
+      return ctx;
+    };
+    const shaderOf = (mesh: Mesh) => {
+      const shader = patchedShader();
+      (mesh.material as MeshBasicMaterial).onBeforeCompile(shader as never, null as never);
+      return shader;
+    };
+
+    it('displaces opaque and cutout vertices by their sway weight from world position and the clock', () => {
+      const { renderer } = upload(['opaque', 'cutout']);
+      for (const mesh of meshesIn(renderer)) {
+        const shader = shaderOf(mesh);
+        expect(shader.vertexShader).toContain('attribute float sway');
+        expect(shader.vertexShader).toContain('modelMatrix * vec4( position, 1.0 )');
+        expect(shader.vertexShader).toContain('transformed.xz += windPush');
+        expect(shader.vertexShader).toContain('uTime');
+        // The light, the culling and the collision never see it: the baked light attribute is passed on untouched.
+        expect(shader.vertexShader).toContain('vBakedLight = bakedLight');
+      }
+    });
+
+    it('does not sway water, and gives it no sway code', () => {
+      const { renderer } = upload(['water']);
+      const shader = shaderOf(meshesIn(renderer)[0]);
+      expect(shader.vertexShader).not.toContain('windPush');
+      expect(shader.vertexShader).not.toContain('attribute float sway');
+    });
+
+    it('shares one switch, one wind and one clock between the opaque and cutout materials', () => {
+      const { renderer } = upload(['opaque', 'cutout']);
+      const shaders = meshesIn(renderer).map(shaderOf);
+      expect(new Set(shaders.map((s) => s.uniforms.uSwayOn)).size).toBe(1);
+      expect(new Set(shaders.map((s) => s.uniforms.uWind)).size).toBe(1);
+      expect(new Set(shaders.map((s) => s.uniforms.uTime)).size).toBe(1);
+    });
+
+    it('switches the sway off and on without touching a mesh or a geometry', () => {
+      const { renderer } = upload(['cutout']);
+      const geometries = renderer.getStats().geometries;
+      const shader = shaderOf(meshesIn(renderer)[0]);
+      expect(renderer.isSwayEnabled()).toBe(true);
+      expect(shader.uniforms.uSwayOn.value).toBe(1);
+      renderer.setSwayEnabled(false);
+      expect(renderer.isSwayEnabled()).toBe(false);
+      expect(shader.uniforms.uSwayOn.value).toBe(0);
+      renderer.setSwayEnabled(true);
+      expect(shader.uniforms.uSwayOn.value).toBe(1);
+      expect(renderer.getStats().geometries).toBe(geometries);
+    });
+
+    it('turns the wind slowly, as a unit vector', () => {
+      const { renderer } = upload(['cutout']);
+      const wind = shaderOf(meshesIn(renderer)[0]).uniforms.uWind.value as { x: number; y: number };
+      const seen: Array<[number, number]> = [];
+      for (const t of [0, 5, 20, 60, 200]) {
+        renderer.update(...inChunk(3, -2), t);
+        expect(Math.hypot(wind.x, wind.y)).toBeCloseTo(1, 6);
+        seen.push([wind.x, wind.y]);
+      }
+      expect(new Set(seen.map(String)).size).toBeGreaterThan(1);
+      // One second later it has hardly moved.
+      renderer.update(...inChunk(3, -2), 10);
+      const before = [wind.x, wind.y];
+      renderer.update(...inChunk(3, -2), 11);
+      expect(Math.hypot(wind.x - before[0], wind.y - before[1])).toBeLessThan(0.05);
+    });
+
+    it('gives only a bucket that has weights a sway attribute, and pads its bounds for the movement', () => {
+      const ctx = track(make({ renderDistance: 1, poolSize: 1 }));
+      ctx.renderer.update(...inChunk(3, -2), 0);
+      drain(ctx.workers, (cx, cz) => {
+        const m = quadMesh(cx, cz, ['opaque', 'cutout']);
+        m.opaque.sway = new Float32Array(0); // nothing in it sways
+        return m;
+      });
+      frames(ctx.renderer, ...inChunk(3, -2), 60);
+      const [opaque, cutout] = meshesIn(ctx.renderer).filter((m) => m.geometry.getAttribute('position').count === 8);
+      expect(opaque.geometry.getAttribute('sway')).toBeUndefined();
+      expect(cutout.geometry.getAttribute('sway').count).toBe(8);
+      expect(cutout.geometry.boundingSphere!.radius).toBeGreaterThan(opaque.geometry.boundingSphere!.radius + 0.3);
+    });
+
+    it('reads a missing sway attribute as zero', () => {
+      const { renderer } = upload(['opaque']);
+      const material = meshesIn(renderer)[0].material as unknown as { defaultAttributeValues: Record<string, number[]> };
+      expect(material.defaultAttributeValues.sway).toEqual([0]);
+    });
+
+    it('drives the water by its own clock, which stops and flattens the wave when the animation is off', () => {
+      const { renderer } = upload(['water']);
+      const shader = shaderOf(meshesIn(renderer)[0]);
+      renderer.update(...inChunk(3, -2), 30);
+      expect(renderer.isWaterAnimated()).toBe(true);
+      expect(shader.uniforms.uWaterTime.value).toBe(30);
+      expect(shader.uniforms.uWaterOn.value).toBe(1);
+      renderer.setWaterAnimated(false);
+      expect(renderer.isWaterAnimated()).toBe(false);
+      expect(shader.uniforms.uWaterOn.value).toBe(0);
+      expect(shader.uniforms.uWaterTime.value).toBe(0);
+      renderer.update(...inChunk(3, -2), 45);
+      expect(shader.uniforms.uWaterTime.value).toBe(0); // still frozen
+      renderer.setWaterAnimated(true);
+      renderer.update(...inChunk(3, -2), 46);
+      expect(shader.uniforms.uWaterTime.value).toBe(46);
+    });
+
+    it('shades water from depth and shoreline in its tint channel, flows it by world position, and still lights it', () => {
+      const { renderer } = upload(['water']);
+      const shader = shaderOf(meshesIn(renderer)[0]);
+      expect(shader.fragmentShader).toContain('vTint.x'); // depth
+      expect(shader.fragmentShader).toContain('vTint.y'); // shoreline
+      expect(shader.fragmentShader).toContain('uWaterTime');
+      expect(shader.fragmentShader).toContain('bakedLighting()');
+      expect(shader.fragmentShader).toContain('textureGrad');
     });
   });
 

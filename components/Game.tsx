@@ -1,4 +1,4 @@
-import React, { useState, Suspense, useEffect, useMemo } from 'react';
+import React, { useState, Suspense, useEffect, useMemo, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Stats } from '@react-three/drei';
 import World from './World';
@@ -14,6 +14,7 @@ import BenchResults from '../bench/BenchResults';
 import ShotCamera from '../bench/ShotCamera';
 import { getWorldProbe } from '../bench/worldProbe';
 import { parseRenderDistance, parseShot } from '../bench/shot';
+import { EffectName, effectSettings, toggleEffect } from '../render/effectSettings';
 
 // How often the HUD and the atmosphere look at playerState. The player moves every frame, but nothing
 // on screen needs React to hear about it that often.
@@ -26,6 +27,8 @@ const Game: React.FC = () => {
   const [loadedChunks, setLoadedChunks] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const [showStats, setShowStats] = useState(false);
+  // The debug panel's switches for the living-world effects, mirrored from effectSettings so the panel redraws.
+  const [effects, setEffects] = useState(() => ({ ...effectSettings }));
 
   // ?bench runs a scripted flythrough instead of the player; ?bench=quick is a short smoke run
   // and ?bench=soak walks a closed loop for 90 s while recording geometry counts.
@@ -70,6 +73,10 @@ const Game: React.FC = () => {
     return () => clearTimeout(timer);
   }, []);
 
+  // The key handler lives for the whole session, so it reads whether the panel is open from a ref.
+  const showStatsRef = useRef(false);
+  showStatsRef.current = showStats;
+
   // Toggle stats with F3
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -79,6 +86,14 @@ const Game: React.FC = () => {
       }
       if (e.key === 'h' || e.key === 'H') {
         setShowControls(prev => !prev);
+      }
+      // While the debug panel is open, 1 and 2 switch the effects it lists.
+      if (showStatsRef.current && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const name: EffectName | null = e.code === 'Digit1' ? 'sway' : e.code === 'Digit2' ? 'waterAnimation' : null;
+        if (name) {
+          toggleEffect(name);
+          setEffects({ ...effectSettings });
+        }
       }
     };
     
@@ -199,6 +214,10 @@ const Game: React.FC = () => {
             <div>Zone: {hud.currentZone}{hud.biome ? ` (${hud.biome})` : ''}</div>
             <div>Chunks Loaded: {loadedChunks}</div>
             <div>Time: {skyInfo}</div>
+            <div className="pt-1 mt-1 border-t border-white/10">
+              <div><span className="text-gray-400">[1]</span> Foliage sway: {effects.sway ? 'on' : 'off'}</div>
+              <div><span className="text-gray-400">[2]</span> Water animation: {effects.waterAnimation ? 'on' : 'off'}</div>
+            </div>
             <div className="text-gray-400 text-xs mt-2">Press F3 to toggle</div>
           </div>
         </div>

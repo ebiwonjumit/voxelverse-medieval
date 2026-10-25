@@ -7,7 +7,8 @@ import { createDefaultTextureLayout } from '../../content/textures/layout';
 import { createDefaultCatalog } from '../../content/textures/TextureCatalog';
 import { BUCKET_NAMES } from '../../meshing/ChunkMesher';
 import { buildAtlas } from '../../render/AtlasBuilder';
-import { createBlockMaterials } from '../../render/BlockMaterials';
+import { createBlockMaterials, createEffectUniforms } from '../../render/BlockMaterials';
+import { effectSettings } from '../../render/effectSettings';
 import { bucketGeometry } from '../../render/ChunkRenderer';
 import { BlockRegistry } from '../../engine/BlockRegistry';
 import {
@@ -91,8 +92,12 @@ const Scene: React.FC<SceneProps> = ({ build, cam, onCount, look, fov }) => {
     const atlas = buildAtlas(catalog, textureLayout);
     const textures: { value: DataArrayTexture | null } = { value: atlas.texture };
     const time = { value: 0 };
+    // The sandboxes show the sway and the water too, so a plant or a pond can be looked at up close (?sway=0 and ?waterfx=0 stop them).
+    const effects = createEffectUniforms();
+    effects.sway.value = effectSettings.sway ? 1 : 0;
+    effects.water.value = effectSettings.waterAnimation ? 1 : 0;
     const materials = createBlockMaterials(
-      textures, time, { value: look.daylight }, { value: new Vector3(...look.skyLight) },
+      textures, time, { value: look.daylight }, { value: new Vector3(...look.skyLight) }, effects,
     );
     const layout = build(registry);
 
@@ -102,13 +107,13 @@ const Scene: React.FC<SceneProps> = ({ build, cam, onCount, look, fov }) => {
         for (const name of BUCKET_NAMES) {
           const bucket = mesh[name];
           if (bucket.indices.length === 0) continue;
-          const m = new Mesh(bucketGeometry(bucket, name === 'water' ? 0.4 : 0), materials[name]);
+          const m = new Mesh(bucketGeometry(bucket, name === 'water' ? 0.4 : bucket.sway.length > 0 ? 0.4 : 0), materials[name]);
           m.position.set(offsetX, 0, offsetZ);
           meshes.push(m);
         }
       }
     }
-    return { layout, meshes, materials, atlas, time };
+    return { layout, meshes, materials, atlas, time, effects };
   }, [build, look]);
 
   useEffect(() => {
@@ -151,6 +156,7 @@ const Scene: React.FC<SceneProps> = ({ build, cam, onCount, look, fov }) => {
   }, []);
   useFrame(({ clock }) => {
     built.time.value = clock.elapsedTime;
+    if (built.effects.water.value > 0.5) built.effects.waterTime.value = clock.elapsedTime;
     if (++frames.current === READY_FRAMES) {
       (window as unknown as { __SHOT_READY__?: boolean }).__SHOT_READY__ = true;
     }

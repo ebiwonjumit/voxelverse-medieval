@@ -169,6 +169,22 @@ const TINT = new Map<BlockType, BlockTint>([
 // Leaves are see-through but shade what is under them: sky light does not fall through a canopy for free.
 const LEAF_BLOCKS = new Set<BlockType>([BlockType.LEAVES, BlockType.BIRCH_LEAVES, BlockType.PINE_LEAVES]);
 
+// How far the wind moves each block (BlockDef.sway, docs/effects.md). Canopies stir a little over the whole block;
+// grass, flowers and crops lean with their tops. Pine needles are stiffer than oak and birch, the lily pad lies on
+// the water and does not move.
+const SWAY = new Map<BlockType, number>([
+  [BlockType.LEAVES, 0.35],
+  [BlockType.BIRCH_LEAVES, 0.4],
+  [BlockType.PINE_LEAVES, 0.25],
+  [BlockType.TALL_GRASS, 0.9],
+  [BlockType.FLOWER_YELLOW, 0.75],
+  [BlockType.FLOWER_RED, 0.75],
+  [BlockType.SUGARCANE, 0.6],
+  [BlockType.WHEAT, 0.65],
+  [BlockType.WHEAT_STAGE_1, 0.65],
+  [BlockType.WHEAT_STAGE_2, 0.65],
+]);
+
 const EMITS = new Map<BlockType, number>([
   [BlockType.LANTERN, 15],
   [BlockType.MAGIC_CRYSTAL, 10],
@@ -189,6 +205,7 @@ export const createDefaultRegistry = (): BlockRegistry => {
       faces: type === BlockType.AIR ? undefined : FACES[type as Colored],
       tint: TINT.get(type),
       model: MODELS.get(type),
+      sway: SWAY.get(type),
       // The old renderer drew a water cube under every lily pad.
       holdsWater: type === BlockType.LILY_PAD ? true : undefined,
     });

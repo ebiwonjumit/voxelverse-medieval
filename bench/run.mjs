@@ -13,6 +13,8 @@
 //   --url <url>       page to load (defaults to port 3000; use --url for any other port)
 //   --out <file>      where the JSON result goes (default docs/bench-latest.json, docs/bench-soak.json with --soak)
 //   --timeout <ms>    give up after this long (screenshots wait for __SHOT_READY__ for up to 3 minutes)
+//   --then <file>     with --shot: after the first capture wait --gap ms (default 1000) and capture the same page again, for pairs
+//                     that show the wind and the water moving (tools/shot-diff.ts puts them side by side)
 //   --width/--height  window size, default 1280x800
 //   --chrome <path>   Chrome binary
 //
@@ -36,6 +38,8 @@ const quick = flag('quick');
 const smoke = flag('smoke');
 const soak = flag('soak');
 const shotFile = option('shot', null);
+const thenFile = option('then', null);
+const gapMs = Number(option('gap', 1000));
 const defaultMode = quick ? '=quick' : soak ? '=soak' : '';
 const url = option('url', smoke ? 'http://localhost:3000/' : `http://localhost:3000/?bench${defaultMode}`);
 const out = option('out', quick ? 'docs/bench-quick.json' : soak ? 'docs/bench-soak.json' : 'docs/bench-latest.json');
@@ -166,9 +170,31 @@ try {
     await sleep(400);
     const timeStepped = await readTime();
 
+    // The debug panel: F3 opens it, 1 and 2 flip the sway and the water animation, and the panel says which are on.
+    const panelText = async () => (await evaluate('document.body.innerText')).match(/(Foliage sway: \w+)[\s\S]*?(Water animation: \w+)/)?.slice(1, 3).join(', ');
+    // The game listens for F3 by e.key, which the helper above would write in lower case.
+    for (const type of ['rawKeyDown', 'keyUp']) {
+      await send('Input.dispatchKeyEvent', { type, code: 'F3', key: 'F3', windowsVirtualKeyCode: 114 }, sessionId);
+    }
+    await sleep(300);
+    const panelOpen = await panelText();
+    await key('rawKeyDown', 'Digit1', 49);
+    await key('keyUp', 'Digit1', 49);
+    await key('rawKeyDown', 'Digit2', 50);
+    await key('keyUp', 'Digit2', 50);
+    await sleep(300);
+    const panelOff = await panelText();
+    await key('rawKeyDown', 'Digit1', 49);
+    await key('keyUp', 'Digit1', 49);
+    await key('rawKeyDown', 'Digit2', 50);
+    await key('keyUp', 'Digit2', 50);
+    await sleep(300);
+    const panelOn = await panelText();
+
     console.log('  after landing:', landed, 'zone:', zoneAtSpawn);
     console.log('  after 3 s of W:', walked);
     console.log(`  sky clock: ${timeBefore}, after F4: ${timeDawn}, after ]: ${timeStepped}`);
+    console.log(`  debug panel: ${panelOpen}; after 1 and 2: ${panelOff}; after 1 and 2 again: ${panelOn}`);
     console.log(`  page errors: ${pageErrors.length}`);
     for (const e of pageErrors.slice(0, 5)) console.log('   ', String(e).slice(0, 200));
 
@@ -181,6 +207,9 @@ try {
     if (zoneAtSpawn !== 'Greensom Village') problems.push(`the HUD names the zone "${zoneAtSpawn}" at the spawn`);
     if (timeDawn !== '06:15 dawn') problems.push(`F4 did not select the dawn preset (${timeDawn})`);
     if (timeStepped !== '07:15 stopped') problems.push(`] did not step the clock to 07:15 (${timeStepped})`);
+    if (panelOpen !== 'Foliage sway: on, Water animation: on') problems.push(`the debug panel does not list both effects as on (${panelOpen})`);
+    if (panelOff !== 'Foliage sway: off, Water animation: off') problems.push(`1 and 2 did not switch the effects off (${panelOff})`);
+    if (panelOn !== 'Foliage sway: on, Water animation: on') problems.push(`1 and 2 did not switch the effects back on (${panelOn})`);
     if (pageErrors.length) problems.push('page errors');
     console.log(problems.length ? `FAILED: ${problems.join('; ')}` : 'OK');
     shutdown(problems.length ? 1 : 0);
@@ -197,6 +226,13 @@ try {
         mkdirSync(dirname(shotFile), { recursive: true });
         writeFileSync(shotFile, Buffer.from(data, 'base64'));
         console.log(`Wrote ${shotFile} after ${((Date.now() - started) / 1000).toFixed(1)}s, page errors: ${pageErrors.length}`);
+        if (thenFile) {
+          await sleep(gapMs);
+          const second = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
+          mkdirSync(dirname(thenFile), { recursive: true });
+          writeFileSync(thenFile, Buffer.from(second.data, 'base64'));
+          console.log(`Wrote ${thenFile} ${gapMs} ms later`);
+        }
         shutdown(0);
       }
     }

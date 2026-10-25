@@ -45,7 +45,7 @@ export const fakeWorkerFactory = (): { factory: WorkerFactory; workers: FakeWork
 
 const emptyBucket = (): BucketData => ({
   positions: new Float32Array(0), normals: new Float32Array(0), light: new Float32Array(0),
-  tints: new Float32Array(0), uvs: new Float32Array(0), layers: new Float32Array(0), indices: new Uint32Array(0),
+  tints: new Float32Array(0), uvs: new Float32Array(0), layers: new Float32Array(0), sway: new Float32Array(0), indices: new Uint32Array(0),
 });
 
 // One upward-facing unit quad at chunk-local (x 0..1, y 5, z 0..1) in the chosen bucket, or two quads far apart
@@ -60,6 +60,7 @@ export const quadMesh = (cx: number, cz: number, buckets: Array<'opaque' | 'cuto
       tints: new Float32Array(24).fill(1),
       uvs: new Float32Array(16),
       layers: new Float32Array(16),
+      sway: new Float32Array(8),
       indices: new Uint32Array([0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7]),
     };
   }

@@ -8,7 +8,7 @@ import { MeshWorkerPool, WorkerFactory, defaultPoolSize } from '../meshing/MeshW
 import { registerWorldProbe } from '../bench/worldProbe';
 import { CHUNK_SIZE, LodLevel, RENDER_DISTANCE } from '../worldConstants';
 import { Atlas, buildAtlas } from './AtlasBuilder';
-import { BlockMaterials, createBlockMaterials } from './BlockMaterials';
+import { BlockMaterials, createBlockMaterials, createEffectUniforms } from './BlockMaterials';
 import { createMeshWorker } from './createMeshWorker';
 
 // Chunks this close to the player (in chunks) are built with full detail, the rest without small decorations.
@@ -29,8 +29,15 @@ const READY_QUIET_MS = 1000;
 // The old renderer centred cubes on whole numbers, so every chunk sits half a block back.
 const CHUNK_OFFSET = -0.5;
 
-// Water moves up and down by at most 0.2 + 0.15 in the wave shader.
-const WAVE_PAD = 0.4;
+// Water moves up and down by at most 0.06 + 0.045 in the wave shader.
+const WAVE_PAD = 0.15;
+
+// Foliage moves by at most about 0.31 blocks downwind in the sway shader (0.2 + 0.05 along, 0.06 across).
+const SWAY_PAD = 0.4;
+
+// The wind swings slowly around this heading (radians, 0 is +x, positive turns toward +z) so the gusts do not always
+// run the same way.
+const WIND_HEADING = 0.64;
 
 type BucketName = (typeof BUCKET_NAMES)[number];
 
@@ -102,6 +109,8 @@ export const bucketGeometry = (data: BucketData, pad = 0): BufferGeometry => {
   geometry.setAttribute('tint', new BufferAttribute(data.tints, 3));
   geometry.setAttribute('uv', new BufferAttribute(data.uvs, 2));
   geometry.setAttribute('texLayer', new BufferAttribute(data.layers, 2));
+  // Only a bucket with something swaying has weights; the others skip the upload and read 0 (see createBlockMaterials).
+  if (data.sway.length > 0) geometry.setAttribute('sway', new BufferAttribute(data.sway, 1));
   geometry.setIndex(new BufferAttribute(data.indices, 1));
   // Set by hand: the default would scan the positions again the first time the mesh is culled.
   geometry.boundingSphere = boundingSphereOf(data.positions, pad);
@@ -125,6 +134,8 @@ export class ChunkRenderer {
   private readonly textureUniform: { value: DataArrayTexture | null };
   private readonly materials: BlockMaterials;
   private readonly timeUniform = { value: 0 };
+  // Foliage sway and the water animation: switches, the water's clock and the wind direction (see BlockMaterials.ts).
+  private readonly effects = createEffectUniforms();
   // Scales the baked sky light in the shader; the day/night cycle sets it each frame with setDaylight.
   private readonly daylightUniform = { value: 1 };
   // The colour of that light: white at noon, warm at dusk, blue at night.
@@ -147,7 +158,7 @@ export class ChunkRenderer {
     this.atlas = options.atlas
       ?? buildAtlas(createDefaultCatalog(), createDefaultTextureLayout(createDefaultRegistry()));
     this.textureUniform = { value: this.atlas.texture };
-    this.materials = createBlockMaterials(this.textureUniform, this.timeUniform, this.daylightUniform, this.skyLightUniform);
+    this.materials = createBlockMaterials(this.textureUniform, this.timeUniform, this.daylightUniform, this.skyLightUniform, this.effects);
 
     const factory = options.workerFactory ?? createMeshWorker;
     const size = options.poolSize ?? defaultPoolSize(typeof navigator === 'undefined' ? undefined : navigator.hardwareConcurrency);
@@ -194,6 +205,25 @@ export class ChunkRenderer {
     this.skyLightUniform.value.set(r, g, b);
   }
 
+  // Foliage sway on or off. Takes effect on the next frame for every chunk; the weights stay in the meshes either way.
+  setSwayEnabled(enabled: boolean): void {
+    this.effects.sway.value = enabled ? 1 : 0;
+  }
+
+  isSwayEnabled(): boolean {
+    return this.effects.sway.value > 0.5;
+  }
+
+  // The water's animation (flowing tile and wave) on or off. Off leaves the surface still and flat, with its depth colour.
+  setWaterAnimated(animated: boolean): void {
+    this.effects.water.value = animated ? 1 : 0;
+    if (!animated) this.effects.waterTime.value = 0;
+  }
+
+  isWaterAnimated(): boolean {
+    return this.effects.water.value > 0.5;
+  }
+
   // True once the world around the player has been requested, built and uploaded and nothing has changed for a moment.
   isReady(): boolean {
     if (!this.started || this.pool.pending > 0 || this.uploads.size > 0) return false;
@@ -204,6 +234,9 @@ export class ChunkRenderer {
   update(x: number, z: number, time: number): void {
     if (this.disposed) return;
     this.timeUniform.value = time;
+    if (this.effects.water.value > 0.5) this.effects.waterTime.value = time;
+    const heading = WIND_HEADING + 0.4 * Math.sin(time * 0.05) + 0.15 * Math.sin(time * 0.13 + 1);
+    this.effects.wind.value.set(Math.cos(heading), Math.sin(heading));
 
     const cx = Math.floor(x / CHUNK_SIZE);
     const cz = Math.floor(z / CHUNK_SIZE);
@@ -352,7 +385,7 @@ export class ChunkRenderer {
       return false;
     }
 
-    const geometry = this.buildGeometry(data, name === 'water' ? WAVE_PAD : 0);
+    const geometry = this.buildGeometry(data, name === 'water' ? WAVE_PAD : data.sway.length > 0 ? SWAY_PAD : 0);
     if (old) {
       this.disposeGeometry(old.geometry);
       old.geometry = geometry;

@@ -25,12 +25,13 @@
 | `positions` | 3 | Chunk-local position. |
 | `normals` | 3 | Outward face normal. |
 | `light` | 4 | Baked light: sky (0 to 1), block light (0 to 1), ambient occlusion multiplier (0.55 to 1) and glow (0 to 1). See [light.md](light.md#smooth-light-in-the-mesher). |
-| `tints` | 3 | Linear rgb biome tint; white on faces that take none. |
+| `tints` | 3 | Linear rgb biome tint; white on faces that take none. On water faces it is not a colour: `r` is the depth of the water under the vertex and `g` how much of a shoreline it is, both 0 to 1 (see [effects.md](effects.md#what-the-mesher-adds)). |
 | `uvs` | 2 | Position inside the tile, 0 to 1. `v = 0` is the top row of the tile. |
 | `layers` | 2 | Texture array layer of the face, and the layer of its tint overlay or -1. |
+| `sway` | 1 | How far the wind moves the vertex, 0 to 1, from `BlockDef.sway` and the shape of the block (see [effects.md](effects.md#the-weight-the-mesher-writes)). Empty when the mesher was asked for no sway (`options.sway = false`), when nothing in the registry sways, and for a bucket none of whose quads sway. |
 | `indices` (Uint32Array) | 6 per face | Two triangles. |
 
-Every face is four vertices and six indices, counter-clockwise from outside. `meshTransferables(mesh)` lists the 21 buffers for `postMessage`.
+Every face is four vertices and six indices, counter-clockwise from outside. `meshTransferables(mesh)` lists the 24 buffers for `postMessage`.
 
 - Positions are chunk-local: x and z run 0 to 32, y is the world height. A block at (x, y, z) fills the unit cube from (x, y, z) to (x+1, y+1, z+1). The old renderer centred cubes on whole numbers, so the render code must place each chunk mesh half a block back on all three axes to look the same and to match the player's collision, which uses the same block-centred coordinates (see [collision.md](collision.md)).
 - There is no vertex colour any more: the light attribute replaces it, and the materials are unlit (`MeshBasicMaterial`) and shade from it. The block's own colour does not live in the vertices either: it comes from the texture layer. The face-direction factor (tops brighter than sides) is applied in the shader from the normal, not baked.

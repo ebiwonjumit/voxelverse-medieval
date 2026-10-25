@@ -41,7 +41,7 @@ A model ignores state bits it does not use, so a stray bit never changes anythin
 
 ## Blocks
 
-`BlockRegistry` holds a `BlockDef` per block: id, name, flat colour, `solid`, `opaque`, `emits`, and optionally `lightDim`, `faces`, `tint`, `model` and `holdsWater`. The legacy blocks keep their old `BlockType` numbers as ids, so the old zones work without changes. Registration rejects duplicate ids and names, any colour that is not `#rrggbb`, a `faces` object with a missing name and a `tint` other than `grass` or `foliage`.
+`BlockRegistry` holds a `BlockDef` per block: id, name, flat colour, `solid`, `opaque`, `emits`, and optionally `lightDim`, `faces`, `tint`, `model`, `holdsWater` and `sway` (how far the wind moves it, 0 to 1, see [effects.md](effects.md)). The legacy blocks keep their old `BlockType` numbers as ids, so the old zones work without changes. Registration rejects duplicate ids and names, any colour that is not `#rrggbb`, a `faces` object with a missing name and a `tint` other than `grass` or `foliage`.
 
 ### Light
 
@@ -65,6 +65,7 @@ A block with no `faces`, or whose face names a tile the catalog does not have, i
 ```ts
 model?: BlockModel;      // default: a plain cube
 holdsWater?: boolean;    // the cell also holds a cube of water (a lily pad)
+sway?: number;           // 0..1, how far the wind moves the block (leaves, grass, bamboo); visual only
 ```
 
 `model` says what the block looks like, where it can be bumped into and which sides of its cell it covers. A block with no model, and any block whose id the registry does not know, is a cube, so a block added by another branch with only an id and a colour still draws as a full cube in its flat colour. `registry.model(id)` is the lookup. `opaque` now means "a solid material that hides the faces of neighbours it covers": a stair is opaque but only hides what its model covers. Models, their state bits and how faces are culled against them are in [models.md](models.md).

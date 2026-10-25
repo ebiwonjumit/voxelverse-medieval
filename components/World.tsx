@@ -3,6 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { ChunkRenderer } from '../render/ChunkRenderer';
 import { parseDaylight, parseRenderDistance } from '../bench/shot';
 import { SkySystem } from '../render/SkySystem';
+import { effectSettings } from '../render/effectSettings';
 
 // The world is drawn by a ChunkRenderer that builds chunk meshes in workers. This component only owns its
 // lifetime and tells it where the camera is and what time of day it is once a frame.
@@ -30,6 +31,9 @@ const World: React.FC<{ sky: SkySystem }> = ({ sky }) => {
     const [r, g, b] = sky.state.skyLight;
     renderer.current?.setDaylight(daylightOverride ?? sky.state.daylight);
     renderer.current?.setSkyLightColor(r, g, b);
+    // The F3 panel flips these; setting a uniform to the value it has is free.
+    renderer.current?.setSwayEnabled(effectSettings.sway);
+    renderer.current?.setWaterAnimated(effectSettings.waterAnimation);
     renderer.current?.update(camera.position.x, camera.position.z, clock.elapsedTime);
   });
 
