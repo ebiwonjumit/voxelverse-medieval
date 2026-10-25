@@ -41,6 +41,8 @@ const HALO_REBUILD_DISTANCE = 5;
 const PICK_TRIES = 6;
 /** The least light smoke is lit with (the ground's is about 0.02 at night): a plume still reads against a night sky. */
 const SMOKE_MIN_LIGHT = 0.1;
+/** The same for petals, which are small and pale. */
+const PETAL_MIN_LIGHT = 0.1;
 
 /** The simulation never steps further than this in one call (a stalled tab must not throw particles across the map). */
 const MAX_DT = 0.1;
@@ -435,13 +437,17 @@ export class EffectsSim {
         p.position[o3 + 1] = p.y[i];
         p.position[o3 + 2] = p.z[i];
         p.params[o4] = 0.27 + 0.13 * seed;
-        // In at the start, out as it reaches the ground.
-        p.params[o4 + 1] = 0.92 * smoothstep(0, 0.35, age) * smoothstep(p.hy[i], p.hy[i] + 0.35, p.y[i]);
+        // In at the start, out as it reaches the ground, and out as it comes up against the camera (a sprite right in front of the eye is huge).
+        const dy = p.y[i] - f.y;
+        const near = smoothstep(1.2 * 1.2, 3.2 * 3.2, dx * dx + dy * dy + dz * dz);
+        p.params[o4 + 1] = 0.92 * near * smoothstep(0, 0.35, age) * smoothstep(p.hy[i], p.hy[i] + 0.35, p.y[i]);
         p.params[o4 + 2] = PARTICLE_PETAL;
         p.params[o4 + 3] = age * (1.2 + 1.5 * seed) + seed * 6.2831853;
-        p.color[o3] = lightR;
-        p.color[o3 + 1] = lightG * (0.4 + 0.1 * seed);
-        p.color[o3 + 2] = lightB * (0.55 + 0.1 * seed);
+        // At night a petal is a pale fleck in the moonlight, not as black as the ground: it has a light of its own to be seen by.
+        const pale = 1 - smoothstep(0.08, 0.25, lightR); // in the dark the pink goes to the white of moonlit blossom
+        p.color[o3] = Math.max(lightR, PETAL_MIN_LIGHT);
+        p.color[o3 + 1] = Math.max(lightG, PETAL_MIN_LIGHT) * (0.4 + 0.1 * seed + 0.45 * pale);
+        p.color[o3 + 2] = Math.max(lightB, PETAL_MIN_LIGHT * 1.1) * (0.55 + 0.1 * seed + 0.35 * pale);
       } else {
         if (age >= life) {
           p.kill(i);
@@ -449,6 +455,7 @@ export class EffectsSim {
         }
         const dx = p.x[i] - f.x;
         const dz = p.z[i] - f.z;
+        const dy = p.y[i] - f.y;
         const d2 = dx * dx + dz * dz;
         const u = age / life;
         // Rises and slows, and turns downwind as it climbs: the wind takes hold of it.
@@ -465,7 +472,8 @@ export class EffectsSim {
         p.position[o3 + 1] = p.y[i];
         p.position[o3 + 2] = p.z[i];
         p.params[o4] = 0.9 + 3.2 * Math.pow(u, 0.7);
-        p.params[o4 + 1] = 0.72 * smoothstep(0, 0.6, age) * Math.pow(1 - u, 1.1) * (1 - smoothstep(smokeFadeA, smokeFadeB, d2));
+        p.params[o4 + 1] = 0.72 * smoothstep(0, 0.6, age) * Math.pow(1 - u, 1.1) * (1 - smoothstep(smokeFadeA, smokeFadeB, d2))
+          * smoothstep(2.5 * 2.5, 7 * 7, d2 + dy * dy); // and out right up against the camera, where a puff would fill the screen
         p.params[o4 + 2] = PARTICLE_SMOKE;
         p.params[o4 + 3] = 0;
         // Smoke is lit by the whole sky, not just the ground's share of it: it never goes as dark as the ground does at night.

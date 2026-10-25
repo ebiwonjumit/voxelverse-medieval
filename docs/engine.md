@@ -7,7 +7,7 @@ Phase 1 of the rebuild plan added a block and chunk layer under the game. The pl
 | Folder | What is in it |
 | --- | --- |
 | `engine/` | Voxel core: `coords`, `cell`, `BlockRegistry`, `Chunk`, `ChunkStore`, `VoxelWorld`, the `WorldGenerator` interface, box `collision` ([collision.md](collision.md)) and `spawn` (`standingEyeY`, the eye height for standing on a column). No Three.js, no React. `engine/models/` holds the block models, see [models.md](models.md). |
-| `content/` | Block definitions. `blocks.ts` registers the legacy blocks (ids 0 to 47), then calls `registerNatureBlocks` (`blocksNature.ts`, ids 48 to 79) for the wilderness, `registerShapedBlocks` (`blocksShaped.ts`, the stairs, slabs and pane at ids 80 to 92) and `registerTempestBlocks` (`blocksTempest.ts`, the 72 blocks of the city at ids 128 to 199, see [tempest-blocks.md](tempest-blocks.md); ids 200 to 255 are still free). `content/textures/` holds the generated pixel-art tiles, see [textures.md](textures.md). |
+| `content/` | Block definitions. `blocks.ts` registers the legacy blocks (ids 0 to 47), then calls `registerNatureBlocks` (`blocksNature.ts`, ids 48 to 79) for the wilderness, `registerShapedBlocks` (`blocksShaped.ts`, the stairs, slabs and pane at ids 80 to 92) and `registerTempestBlocks` (`blocksTempest.ts`, the 72 blocks of the city at ids 128 to 199, see [tempest-blocks.md](tempest-blocks.md); the smoke vent at id 200 comes with the living-world effects, see [effects.md](effects.md); ids 201 to 255 are still free). `content/textures/` holds the generated pixel-art tiles, see [textures.md](textures.md). |
 | `meshing/` | Pure chunk mesher, the light engine and the mesh worker pool, worker-safe. See [meshing.md](meshing.md) and [light.md](light.md). |
 | `render/` | The Three.js chunk renderer and `SkySystem`, the day/night clock, sky dome and fog. See [renderer.md](renderer.md) and [sky.md](sky.md). |
 | `worldgen/` | Things that implement `WorldGenerator`. `VoxelverseGenerator` is the Phase 6 generator described in [worldgen.md](worldgen.md): biomes, rivers, vegetation, roads and bridges between the zones, the legacy zone interiors inside them. It is what the game runs on (`createWorkerGenerator.ts` for the workers, `gameWorld.ts` for the main thread). `LegacyZoneAdapter` wraps the old zones alone and is kept as the reference the parity and timing tests compare against; the game does not use it. |
@@ -41,7 +41,7 @@ A model ignores state bits it does not use, so a stray bit never changes anythin
 
 ## Blocks
 
-`BlockRegistry` holds a `BlockDef` per block: id, name, flat colour, `solid`, `opaque`, `emits`, and optionally `lightDim`, `faces`, `tint`, `model`, `holdsWater` and `sway` (how far the wind moves it, 0 to 1, see [effects.md](effects.md)). The legacy blocks keep their old `BlockType` numbers as ids, so the old zones work without changes. Registration rejects duplicate ids and names, any colour that is not `#rrggbb`, a `faces` object with a missing name and a `tint` other than `grass` or `foliage`.
+`BlockRegistry` holds a `BlockDef` per block: id, name, flat colour, `solid`, `opaque`, `emits`, and optionally `lightDim`, `faces`, `tint`, `model`, `holdsWater` `sway` (how far the wind moves it, 0 to 1, see [effects.md](effects.md)), `fx` (a set of `BlockFx` bits from `engine/blockFx.ts`: which living-world effects start from the block) and `flicker` (how strongly its glow flickers, 0 to 1). The legacy blocks keep their old `BlockType` numbers as ids, so the old zones work without changes. Registration rejects duplicate ids and names, any colour that is not `#rrggbb`, a `faces` object with a missing name and a `tint` other than `grass` or `foliage`.
 
 ### Light
 
@@ -66,6 +66,8 @@ A block with no `faces`, or whose face names a tile the catalog does not have, i
 model?: BlockModel;      // default: a plain cube
 holdsWater?: boolean;    // the cell also holds a cube of water (a lily pad)
 sway?: number;           // 0..1, how far the wind moves the block (leaves, grass, bamboo); visual only
+fx?: number;             // BlockFx bits: PETALS, HABITAT, SMOKE, LAMP, EMBERS; where particles start from; visual only
+flicker?: number;        // 0..1, how strongly the block's own glow flickers (a lantern 0.5, a hearth 1); visual only
 ```
 
 `model` says what the block looks like, where it can be bumped into and which sides of its cell it covers. A block with no model, and any block whose id the registry does not know, is a cube, so a block added by another branch with only an id and a colour still draws as a full cube in its flat colour. `registry.model(id)` is the lookup. `opaque` now means "a solid material that hides the faces of neighbours it covers": a stair is opaque but only hides what its model covers. Models, their state bits and how faces are culled against them are in [models.md](models.md).

@@ -140,6 +140,12 @@ Paper and cloth let light through at a cost (`lightDim`): the shoji screens and 
 
 ![The street at night](screens/p7/tempest-night.png)
 
+## The smoke vent
+
+Id 200, after the 72 above (the 128 to 199 range stays exactly the set the tests pin), is the one block of the living-world effects ([effects.md](effects.md)): `smoke_vent`, a clay chimney pot (a body 8 wide and 10 tall under a lip 10 wide) in the barrel tile of the terracotta roofs with a sooty `black_lacquer` mouth, solid, not opaque, no light. It stands on the slab cap of every chimney the kits build (`chimneyStack` in `worldgen/kits/tempest/parts.ts`, the workshop's own chimney and the garden house's), and smoke rises from its mouth: its `BlockDef.fx` is `BlockFx.SMOKE`. Never renumber it.
+
+The effects also give some of the blocks above flags that change nothing about them in the world: the paper lanterns (0.5), the stone lantern's lit block (0.45) and the lit shoji screen (0.3) flicker, the hearth (1) flickers and gives off embers, lanterns and the ore lamps get a halo at night, and the koi pond is a place fireflies hide. Which blocks have which flags is one table in `content/blocksTempest.ts` (`fx`, `flicker`).
+
 ## Sandbox pages
 
 `?sandbox=blocks&view=tempest` lists the whole set in id order, nine to a row (`&cols=` changes that). Three options are new for every sandbox view:
