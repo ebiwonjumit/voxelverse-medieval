@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { MILE } from '../../constants';
 import {
-  BIOME_SAMPLE_DISTANCE, CLOCK_SPEEDS, DAY_LENGTH_SECONDS, NIGHT_DAYLIGHT, PRESET_HOURS, SKY_PRESETS, START_HOURS, SkyClock, SkySystem,
+  BIOME_SAMPLE_DISTANCE, CLOCK_SPEEDS, CLOUD_MIN_COVER, DEFAULT_CLOUD_COVER, DAY_LENGTH_SECONDS, NIGHT_DAYLIGHT, PRESET_HOURS, SKY_PRESETS, START_HOURS, SkyClock, SkySystem,
   applySkyKey, computeSky, daylightAt, fogRange, formatClock, hoursToTime, luminance, moonDirection, parseAtmosphere,
   parseHex, parseSkyOptions, samplePalette, sunDirection,
 } from '../../render/SkySystem';
@@ -456,5 +456,102 @@ describe('what is gone', () => {
   it('draws the sky from the sky system', () => {
     expect(game).toMatch(/SkyRig/);
     expect(game).toMatch(/SkySystem/);
+  });
+});
+
+describe('the cloud layer follows the sky', () => {
+  const lum = (c: [number, number, number]) => luminance(c);
+  const cloudsAt = (hours: number, zone = WILDERNESS) => computeSky(hoursToTime(hours), zone).clouds;
+
+  it('takes its cover from the zone, a fair-weather default where the zone says nothing, and none where the zone is clear', () => {
+    expect(DEFAULT_CLOUD_COVER).toBeGreaterThan(0.2);
+    expect(parseAtmosphere({ fogColor: '#ffffff', skyTint: '#ffffff', fogDensity: 0.01 }).clouds).toBe(DEFAULT_CLOUD_COVER);
+    expect(parseAtmosphere({ fogColor: '#ffffff', skyTint: '#ffffff', fogDensity: 0.01, clouds: 0 }).clouds).toBe(0);
+    expect(parseAtmosphere({ fogColor: '#ffffff', skyTint: '#ffffff', fogDensity: 0.01, clouds: 7 }).clouds).toBe(1); // clamped
+    const bosse = zoneAt(0, -3 * MILE);
+    expect(getZone(0, -3 * MILE).name).toMatch(/Bosse|Ranking/i);
+    expect(bosse.clouds).toBe(0);
+    expect(cloudsAt(12, bosse).cover).toBe(0);
+    expect(cloudsAt(12, bosse).cover).toBeLessThanOrEqual(CLOUD_MIN_COVER);
+    expect(cloudsAt(12, SAO).cover).toBeGreaterThan(CLOUD_MIN_COVER);
+    expect(cloudsAt(12, AMESTRIS).cover).toBeGreaterThan(cloudsAt(12, SAO).cover);
+  });
+
+  it('gives every zone and every biome a cover in 0 to 1', () => {
+    for (const [x, z] of [[0, 0], [3 * MILE, 0], [-3 * MILE, 0], [0, -3 * MILE], [1600, -1600], [-1600, 1600], [0, 300]]) {
+      const c = zoneAt(x, z).clouds;
+      expect(c, `${x},${z}`).toBeGreaterThanOrEqual(0);
+      expect(c).toBeLessThanOrEqual(1);
+    }
+    for (let b = 0; b < BIOME_COUNT; b++) {
+      const c = parseAtmosphere(wildernessAtmosphere(b)).clouds;
+      expect(c, biomeName(b as Biome)).toBeGreaterThan(CLOUD_MIN_COVER);
+      expect(c).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('blends the cover when the zone changes, so a clear zone does not make the clouds vanish at once', () => {
+    const sky = new SkySystem({ clock: new SkyClock({ preset: 'noon' }) });
+    sky.update(0.1, 0, 10, 0, 0, 0); // the Town: 0.35
+    expect(sky.state.clouds.cover).toBeCloseTo(0.35, 2);
+    sky.update(0.1, 0, 10, -3 * MILE, 0, -3 * MILE); // Bosse: clear
+    const first = sky.state.clouds.cover;
+    expect(first).toBeLessThan(0.35);
+    expect(first).toBeGreaterThan(0.2);
+    for (let i = 0; i < 80; i++) sky.update(0.1, 0, 10, -3 * MILE, 0, -3 * MILE);
+    expect(sky.state.clouds.cover).toBeLessThan(CLOUD_MIN_COVER);
+    sky.dispose();
+  });
+
+  it('is white by day, warm at sunset and a dim blue-grey at night, lit by the moon and not hidden', () => {
+    const noon = cloudsAt(12);
+    const sunset = cloudsAt(17.75);
+    const night = cloudsAt(0);
+    // Noon: bright, near white.
+    expect(lum(noon.lit)).toBeGreaterThan(0.8);
+    expect(Math.max(...noon.lit) - Math.min(...noon.lit)).toBeLessThan(0.25);
+    // Sunset: warmer than noon (red above blue), a little dimmer.
+    expect(sunset.lit[0] - sunset.lit[2]).toBeGreaterThan(noon.lit[0] - noon.lit[2] + 0.12);
+    // Night: dark, bluish, but they are still there and still opaque enough to see.
+    expect(lum(night.lit)).toBeLessThan(0.3);
+    expect(lum(night.lit)).toBeGreaterThan(0.05);
+    expect(night.lit[2]).toBeGreaterThan(night.lit[0]);
+    expect(night.opacity).toBeGreaterThan(0.4);
+    expect(night.opacity).toBeLessThan(noon.opacity);
+    expect(night.cover).toBe(noon.cover);
+  });
+
+  it('is darker underneath than on top, and greyer under a heavy overcast', () => {
+    for (const h of [6.5, 12, 17.75, 0]) {
+      const c = cloudsAt(h);
+      expect(lum(c.shade)).toBeLessThan(lum(c.lit));
+    }
+    const fair = cloudsAt(12, SAO);
+    const smog = cloudsAt(12, AMESTRIS);
+    expect(lum(smog.lit)).toBeLessThan(lum(fair.lit) - 0.15);
+  });
+
+  it('changes smoothly through the day: no jump of colour from one minute to the next', () => {
+    let prev = cloudsAt(0);
+    for (let h = 0.05; h <= 24; h += 0.05) {
+      const c = cloudsAt(h);
+      for (let k = 0; k < 3; k++) expect(Math.abs(c.lit[k] - prev.lit[k])).toBeLessThan(0.06);
+      expect(Math.abs(c.opacity - prev.opacity)).toBeLessThan(0.05);
+      prev = c;
+    }
+  });
+
+  it('takes some of the zone fog colour, so a green haze or pink magic tints the clouds', () => {
+    const tempest = cloudsAt(12, zoneAt(3 * MILE, 0));
+    const magnolia = cloudsAt(12, zoneAt(-1600, 1600));
+    expect(tempest.lit[1]).toBeGreaterThan(tempest.lit[0] - 0.001); // greener than red
+    expect(magnolia.lit[0]).toBeGreaterThan(magnolia.lit[1] - 0.001);
+    expect(magnolia.lit).not.toEqual(cloudsAt(12, SAO).lit);
+  });
+
+  it('is the dusk look in the fixed twilight preset', () => {
+    const twilight = computeSky(hoursToTime(18), WILDERNESS, 'twilight').clouds;
+    expect(twilight.lit[0]).toBeGreaterThan(twilight.lit[2]);
+    expect(twilight.cover).toBeGreaterThan(CLOUD_MIN_COVER);
   });
 });

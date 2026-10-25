@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseDaylight, parseShot } from '../bench/shot';
+import { parseDaylight, parseRenderDistance, parseShot } from '../bench/shot';
 
 describe('parseShot', () => {
   it('reads x,y,z,yaw,pitch', () => {
@@ -32,5 +32,21 @@ describe('parseDaylight', () => {
     expect(parseDaylight('')).toBeNull();
     expect(parseDaylight('?daylight=')).toBeNull();
     expect(parseDaylight('?daylight=night')).toBeNull();
+  });
+});
+
+describe('parseRenderDistance', () => {
+  it('reads a whole number of chunks from 3 to 24', () => {
+    expect(parseRenderDistance('?shot=0,1,2,3,4&rd=14')).toBe(14);
+    expect(parseRenderDistance('?rd=3')).toBe(3);
+  });
+
+  it('ignores anything else', () => {
+    expect(parseRenderDistance('')).toBeNull();
+    expect(parseRenderDistance('?rd=')).toBeNull();
+    expect(parseRenderDistance('?rd=2')).toBeNull();
+    expect(parseRenderDistance('?rd=25')).toBeNull();
+    expect(parseRenderDistance('?rd=8.5')).toBeNull();
+    expect(parseRenderDistance('?rd=far')).toBeNull();
   });
 });

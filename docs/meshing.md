@@ -18,23 +18,39 @@
 
 ## Output
 
-`MeshData` is `{ cx, cz, opaque, cutout, water, timing? }` (`timing` is milliseconds spent generating, lighting and meshing, set by `runMeshJob`, see [light.md](light.md#the-worker)). Each bucket holds these buffers (all Float32Array except the indices):
+`MeshData` is `{ cx, cz, opaque, cutout, water, sites, timing? }` (`sites` is where the living-world effects can start, see [Effect sites](#effect-sites) below; `timing` is milliseconds spent generating, lighting and meshing, set by `runMeshJob`, see [light.md](light.md#the-worker)). Each bucket holds these buffers (all Float32Array except the indices):
 
 | Buffer | Per vertex | What it is |
 | --- | --- | --- |
 | `positions` | 3 | Chunk-local position. |
 | `normals` | 3 | Outward face normal. |
 | `light` | 4 | Baked light: sky (0 to 1), block light (0 to 1), ambient occlusion multiplier (0.55 to 1) and glow (0 to 1). See [light.md](light.md#smooth-light-in-the-mesher). |
-| `tints` | 3 | Linear rgb biome tint; white on faces that take none. |
+| `tints` | 3 | Linear rgb biome tint; white on faces that take none. On water faces it is not a colour: `r` is the depth of the water under the vertex and `g` how much of a shoreline it is, both 0 to 1 (see [effects.md](effects.md#what-the-mesher-adds)). |
 | `uvs` | 2 | Position inside the tile, 0 to 1. `v = 0` is the top row of the tile. |
 | `layers` | 2 | Texture array layer of the face, and the layer of its tint overlay or -1. |
+| `sway` | 1 | How far the wind moves the vertex, 0 to 1, from `BlockDef.sway` and the shape of the block (see [effects.md](effects.md#the-weight-the-mesher-writes)). Empty when the mesher was asked for no sway (`options.sway = false`), when nothing in the registry sways, and for a bucket none of whose quads sway. |
+| `flicker` | 1 | How strongly the block's own glow flickers, 0 to 1, from `BlockDef.flicker` (lanterns, hearths, lit paper screens): the same number at all four corners of a quad. The chunk shader modulates the block's brightness by it, with the baked light untouched (see [effects.md](effects.md#lantern-flicker)). Empty for a bucket with no flickering quad, and when the mesher was asked for no effects (`options.effects = false`). |
 | `indices` (Uint32Array) | 6 per face | Two triangles. |
 
-Every face is four vertices and six indices, counter-clockwise from outside. `meshTransferables(mesh)` lists the 21 buffers for `postMessage`.
+Every face is four vertices and six indices, counter-clockwise from outside. `meshTransferables(mesh)` lists the 27 buffers of the three buckets and the five arrays of sites for `postMessage`.
 
 - Positions are chunk-local: x and z run 0 to 32, y is the world height. A block at (x, y, z) fills the unit cube from (x, y, z) to (x+1, y+1, z+1). The old renderer centred cubes on whole numbers, so the render code must place each chunk mesh half a block back on all three axes to look the same and to match the player's collision, which uses the same block-centred coordinates (see [collision.md](collision.md)).
 - There is no vertex colour any more: the light attribute replaces it, and the materials are unlit (`MeshBasicMaterial`) and shade from it. The block's own colour does not live in the vertices either: it comes from the texture layer. The face-direction factor (tops brighter than sides) is applied in the shader from the normal, not baked.
 - Buckets: `opaque` is every block the registry marks opaque, whatever its shape (cubes, stairs, slabs, farmland). `water` is water. `cutout` is everything else that draws: leaves, glass, panes, fences, plants and the small boxes. Each bucket has its own material (see [renderer.md](renderer.md)): no alpha test for opaque, alpha test for cutout, blending and the wave for water.
+
+## Effect sites
+
+While it walks the cells the mesher also notes where the living-world effects ([effects.md](effects.md)) can start from, so nothing on the main thread has to scan the world for them. `MeshData.sites` is five `Int32Array`s, one per kind of `BlockFx` flag (`FX_KINDS`: petals, habitat, smoke, lamp, embers), `SITE_STRIDE` (4) ints a site: the block's world x, y and z, and `block id | drop << 12`. A block carries its kinds in `BlockDef.fx`; the lookup is one table read per non-air cell. Each kind has a rule and a limit per chunk (`SITE_LIMITS`):
+
+| Kind | Which cells | Kept |
+| --- | --- | --- |
+| petals | sakura leaves with air directly under them; `drop` is how many cells of air lie below, up to the ground (at most 63) | 1 in 3 by a hash of the cell, at most 96 |
+| habitat | grass, flowers, reeds, ferns, crops, lily pads, koi ponds with air above them | 1 in 4, at most 128 |
+| smoke | every smoke vent (the clay pot on a Tempest chimney) | all, at most 24 |
+| lamp | every lantern and ore lamp | all, at most 64 |
+| embers | every hearth | all, at most 24 |
+
+The hash is of the world cell (not of the chunk or the order the cells are met in), so the same blocks give the same sites. With `options.effects = false` the arrays are empty and the work is skipped; measured in node (`npx vite-node tools/bench-effects.ts`) the sites and the flicker weights together add 1 to 4 percent to a chunk's mesh time (see [perf-after-p8.md](perf-after-p8.md)).
 
 ## Reading cells
 

@@ -1,4 +1,5 @@
 import { BlockRegistry } from '../engine/BlockRegistry';
+import { FX_KIND_COUNT } from '../engine/blockFx';
 import { Cell, MAX_BLOCK_ID } from '../engine/cell';
 import { CHUNK_SIZE, WORLD_MAX_Y, WORLD_MIN_Y } from '../engine/coords';
 import { BlockModel, ModelQuad, Neighbourhood } from '../engine/models/BlockModel';
@@ -29,6 +30,22 @@ import { LightData } from './LightEngine';
 // both sides block it, which would leak light round a corner), and gets an ambient occlusion factor from the same
 // cells. A quad that is only part of a cell face takes the light of the cell in front of it, flat.
 //
+// Wind: a block with BlockDef.sway > 0 writes a per-vertex weight into the `sway` buffer (0 where the block is rooted, up
+// to its strength where it moves most) and the chunk material displaces by it (docs/effects.md). The weights are worked
+// out here, once, from the block's shape; nothing about the wind itself (time, direction) is known to the mesher. With
+// `options.sway = false`, or in a registry where nothing sways, the buffer is empty and no per-quad work is done; a bucket
+// with no swaying quad in it has an empty buffer too.
+//
+// Flicker: a block with BlockDef.flicker > 0 (a lantern, a hearth) writes its strength into every vertex of its quads in the
+// `flicker` buffer, and the chunk material modulates the block's own brightness by a time-based pattern (docs/effects.md).
+// The baked light is the same either way, so there is nothing to re-mesh; like `sway` the buffer is empty when no quad in
+// the bucket flickers.
+//
+// Effect sites: while it walks the cells the mesher also notes where the living-world effects can start from, for the blocks
+// whose BlockDef.fx says so (see `EffectSites` below): the underside of sakura leaves, plants fireflies hide in, chimney
+// pots, lamps and hearths. The renderer's emitters pick their spawn points from these notes, so nothing on the main thread
+// has to scan the world for them. `options.effects = false` skips both the sites and the flicker weights.
+//
 // Textures: every vertex carries the texture array layer of its face and a uv inside the tile (u runs left to
 // right and v from the top row of the tile down, as the tile's pixels are stored). Which layer a face uses comes
 // from the TextureLayout. Faces with a partly tinted tile (a grass side) also carry the layer of the tint mask,
@@ -41,6 +58,11 @@ export interface BucketData {
   tints: Float32Array;  // linear rgb biome tint, white for faces that take none
   uvs: Float32Array;    // two per vertex, 0..1 inside the tile
   layers: Float32Array; // two per vertex: base layer, and the tint overlay layer or -1
+  // One per vertex: how far the wind moves it, 0..1 (see BlockDef.sway). Empty when sway is off and when nothing in the
+  // bucket sways, so a bucket of stone carries no column of zeros.
+  sway: Float32Array;
+  // One per vertex: how much the block's glow flickers, 0..1 (see BlockDef.flicker). Empty when nothing in the bucket flickers.
+  flicker: Float32Array;
   indices: Uint32Array;
 }
 
@@ -52,12 +74,32 @@ export interface MeshTiming {
   generated: number; // how many chunks it generated (0 to 9)
 }
 
+/** Ints per site: world x, world y, world z, and `block id | drop << 12`. */
+export const SITE_STRIDE = 4;
+
+/** How many sites of each kind (see engine/blockFx.ts) one chunk keeps at most, and how sparsely: 1 in `keep` is noted. */
+export const SITE_LIMITS: ReadonlyArray<{ cap: number; keep: number }> = [
+  { cap: 96, keep: 3 },  // petals: leaves with air under them
+  { cap: 128, keep: 4 }, // habitat: plants with air above them
+  { cap: 24, keep: 1 },  // smoke: every vent
+  { cap: 64, keep: 1 },  // lamps: every lamp
+  { cap: 24, keep: 1 },  // embers: every hearth
+];
+
+/** The deepest fall a petal site records (the cells of air below the leaf, up to the ground), in blocks. */
+export const SITE_DROP_MAX = 63;
+
 export interface MeshData {
   cx: number;
   cz: number;
   opaque: BucketData;
   cutout: BucketData;
   water: BucketData;
+  /**
+   * Where the living-world effects can start in this chunk: one array per kind of BlockFx (indexed like FX_KINDS), SITE_STRIDE
+   * ints a site. Empty arrays when `options.effects` is false or the chunk has none. See docs/effects.md.
+   */
+  sites: Int32Array[];
   timing?: MeshTiming;
 }
 
@@ -70,8 +112,9 @@ export const meshTransferables = (mesh: MeshData): ArrayBuffer[] => {
     const b = mesh[name];
     buffers.push(b.positions.buffer as ArrayBuffer, b.normals.buffer as ArrayBuffer,
       b.light.buffer as ArrayBuffer, b.tints.buffer as ArrayBuffer, b.uvs.buffer as ArrayBuffer,
-      b.layers.buffer as ArrayBuffer, b.indices.buffer as ArrayBuffer);
+      b.layers.buffer as ArrayBuffer, b.sway.buffer as ArrayBuffer, b.flicker.buffer as ArrayBuffer, b.indices.buffer as ArrayBuffer);
   }
+  for (const sites of mesh.sites) buffers.push(sites.buffer as ArrayBuffer);
   return buffers;
 };
 
@@ -103,6 +146,16 @@ export interface MeshOptions {
    * wilderness is a plain meadow green. It is read once per column of the chunk, not per face.
    */
   wildTint?: WildTint;
+  /**
+   * Write the per-vertex wind weights (default true). False leaves the `sway` buffers empty and skips every sway
+   * computation, so a caller that never animates foliage pays nothing for it.
+   */
+  sway?: boolean;
+  /**
+   * Write the per-vertex flicker weights and note the effect sites (default true). False leaves the `flicker` buffers and
+   * the site arrays empty and skips the work, so a caller that never shows the effects (most tests) pays nothing for them.
+   */
+  effects?: boolean;
 }
 
 // A registry's flat-only layout, for callers that bring no catalog (most of the mesher tests).
@@ -145,6 +198,12 @@ interface BlockTables {
   opaque: Uint8Array;  // an opaque material: drawn in the opaque bucket
   blocksLight: Uint8Array; // stops light, as the light engine sees it (opaque blocks, and the void below the world)
   glow: Float32Array;  // by block id: what it emits, 0..1, so the shader can make it shine
+  sway: Float32Array;  // by block id: BlockDef.sway, 0..1
+  anySway: boolean;    // some block in the registry sways
+  fx: Uint8Array;      // by block id: BlockDef.fx, the BlockFx bits
+  anyFx: boolean;      // some block has effect flags
+  flicker: Float32Array; // by block id: BlockDef.flicker, 0..1
+  anyFlicker: boolean; // some block flickers
   wet: Uint8Array;     // contains water, so water faces next to it are not drawn
   models: BlockModel[]; // by block id
 }
@@ -161,6 +220,12 @@ const getTables = (registry: BlockRegistry): BlockTables => {
   const opaque = new Uint8Array(TABLE_SIZE);
   const blocksLight = new Uint8Array(TABLE_SIZE);
   const glow = new Float32Array(MAX_BLOCK_ID + 1);
+  const sway = new Float32Array(MAX_BLOCK_ID + 1);
+  let anySway = false;
+  const fx = new Uint8Array(MAX_BLOCK_ID + 1);
+  const flicker = new Float32Array(MAX_BLOCK_ID + 1);
+  let anyFx = false;
+  let anyFlicker = false;
   const wet = new Uint8Array(TABLE_SIZE);
   const models: BlockModel[] = new Array(MAX_BLOCK_ID + 1);
   for (let id = 1; id <= MAX_BLOCK_ID; id++) {
@@ -173,6 +238,12 @@ const getTables = (registry: BlockRegistry): BlockTables => {
     const def = registry.get(id);
     const model = models[id];
     glow[id] = registry.emission(id) / 15;
+    sway[id] = registry.sway(id);
+    if (sway[id] > 0) anySway = true;
+    fx[id] = registry.fx(id);
+    flicker[id] = registry.flicker(id);
+    if (fx[id] > 0) anyFx = true;
+    if (flicker[id] > 0) anyFlicker = true;
     for (let state = 0; state < STATES; state++) {
       const cell = (state << STATE_SHIFT) | id;
       if (id === BlockType.WATER) {
@@ -195,12 +266,22 @@ const getTables = (registry: BlockRegistry): BlockTables => {
   occ[VOID] = 63;
   full[VOID] = 1;
   blocksLight[VOID] = 1;
-  const tables = { size: registry.size, kind, occ, full, opaque, blocksLight, glow, wet, models };
+  const tables = { size: registry.size, kind, occ, full, opaque, blocksLight, glow, sway, anySway, fx, anyFx, flicker, anyFlicker, wet, models };
   tableCache.set(registry, tables);
   return tables;
 };
 
 // --- Output buffers ----------------------------------------------------------------------------------------
+// The wind weights of the four corners of the quad about to be written, or null for a quad that does not sway. Bucket.quad
+// reads it; a module variable because quad() already takes more arguments than is pleasant.
+let quadSway: Float32Array | null = null;
+// Per-corner tints of the quad about to be written (three numbers a corner), or null to give all four the scalar tint.
+// Only water uses it: its tint channel carries depth and shore (see waterVertexData).
+let quadTint: Float32Array | null = null;
+// The flicker strength of the quad about to be written (0 for a quad that does not flicker): one number, the same at all four
+// corners, because a flame is a property of the whole block.
+let quadFlicker = 0;
+
 class Bucket {
   private positions = new Float32Array(3 * 1024);
   private normals = new Float32Array(3 * 1024);
@@ -208,9 +289,20 @@ class Bucket {
   private tints = new Float32Array(3 * 1024);
   private uvs = new Float32Array(2 * 1024);
   private layers = new Float32Array(2 * 1024);
+  private sway: Float32Array;
+  private swayWritten = false;
+  // Allocated by the first flickering quad, so a bucket without one (nearly every bucket) never carries it.
+  private flicker: Float32Array | null = null;
   private indices = new Uint32Array(6 * 512);
   vertexCount = 0;
   private indexCount = 0;
+
+  // With swayOn false the sway buffer stays empty and quad() never looks at quadSway. With it on, the buffer starts as
+  // zeros, so a quad that does not sway needs no write at all, and a bucket none of whose quads sway ends up with no
+  // buffer (the stone of a chunk does not upload a column of zeros).
+  constructor(private readonly swayOn: boolean) {
+    this.sway = new Float32Array(swayOn ? 1024 : 0);
+  }
 
   private reserve(vertices: number, indices: number): void {
     if ((this.vertexCount + vertices) * 3 > this.positions.length) {
@@ -222,6 +314,8 @@ class Bucket {
       this.uvs = grow(this.uvs, length2);
       this.layers = grow(this.layers, length2);
       this.light = grow(this.light, (length / 3) * 4);
+      if (this.swayOn) this.sway = grow(this.sway, length / 3);
+      if (this.flicker) this.flicker = grow(this.flicker, length / 3);
     }
     if (this.indexCount + indices > this.indices.length) {
       const next = new Uint32Array(Math.max(this.indices.length * 2, this.indexCount + indices));
@@ -247,9 +341,15 @@ class Bucket {
       this.normals[o] = nx;
       this.normals[o + 1] = ny;
       this.normals[o + 2] = nz;
-      this.tints[o] = tr;
-      this.tints[o + 1] = tg;
-      this.tints[o + 2] = tb;
+      if (quadTint) {
+        this.tints[o] = quadTint[i * 3];
+        this.tints[o + 1] = quadTint[i * 3 + 1];
+        this.tints[o + 2] = quadTint[i * 3 + 2];
+      } else {
+        this.tints[o] = tr;
+        this.tints[o + 1] = tg;
+        this.tints[o + 2] = tb;
+      }
       const o2 = (base + i) * 2;
       this.uvs[o2] = uvs[uvAt + i * 2];
       this.uvs[o2 + 1] = uvs[uvAt + i * 2 + 1];
@@ -260,6 +360,14 @@ class Bucket {
       this.light[o4 + 1] = lights[i * 4 + 1];
       this.light[o4 + 2] = lights[i * 4 + 2];
       this.light[o4 + 3] = lights[i * 4 + 3];
+    }
+    if (this.swayOn && quadSway) {
+      for (let i = 0; i < 4; i++) this.sway[base + i] = quadSway[i];
+      this.swayWritten = true;
+    }
+    if (quadFlicker > 0) {
+      if (!this.flicker) this.flicker = new Float32Array(this.positions.length / 3);
+      for (let i = 0; i < 4; i++) this.flicker[base + i] = quadFlicker;
     }
     const ix = this.indices;
     let k = this.indexCount;
@@ -284,6 +392,8 @@ class Bucket {
       tints: this.tints.slice(0, v),
       uvs: this.uvs.slice(0, v2),
       layers: this.layers.slice(0, v2),
+      sway: this.swayWritten ? this.sway.slice(0, this.vertexCount) : new Float32Array(0),
+      flicker: this.flicker ? this.flicker.slice(0, this.vertexCount) : new Float32Array(0),
       indices: this.indices.slice(0, this.indexCount),
     };
   }
@@ -355,6 +465,59 @@ let activeWildTint: WildTint = defaultWildTint;
 const tintOut = new Float32Array(3);
 const lo = new Float64Array(3);
 const hi = new Float64Array(3);
+const swayBuf = new Float32Array(4);
+const waterTintBuf = new Float32Array(12);
+// Set per meshChunk call from the options and the registry: whether the sway weights are being written.
+let swayActive = false;
+// Whether the flicker weights are being written for this call.
+let flickerActive = false;
+
+// A stalk (bamboo, reeds) is a stack of the same block. Its weight grows with the height up the stack, over at most this
+// many blocks, so a one block plant reaches its full strength at its tip and a tall stalk reaches it four blocks up.
+const STALK_BLOCKS = 4;
+// How far up and down the stack is looked at; beyond this the weight has long since saturated.
+const STALK_SCAN = 8;
+// Water this many cells deep or more is as dark as it gets.
+export const WATER_DEPTH_MAX = 8;
+
+// Where the effects start from, collected while the cells are walked. One scratch array per kind, sized to its cap, copied
+// out at the end (like the buckets, nothing is allocated per cell).
+const siteScratch: Int32Array[] = SITE_LIMITS.map((l) => new Int32Array(l.cap * SITE_STRIDE));
+const siteCount = new Int32Array(FX_KIND_COUNT);
+
+// Hash of a world cell, so which of the plants and leaves get a site does not depend on the chunk or the order they are met in.
+const siteHash = (x: number, y: number, z: number): number =>
+  (Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(z, 83492791)) >>> 8;
+
+// Notes cell `i` (world x, y, z) for each kind its block's flags name, if the kind's own rule lets it through.
+const noteSites = (
+  grid: Uint16Array, i: number, row: number, id: number, fx: number, wx: number, y: number, wz: number, kind: Uint8Array,
+): void => {
+  for (let k = 0; k < FX_KIND_COUNT; k++) {
+    if (!(fx & (1 << k))) continue;
+    const limit = SITE_LIMITS[k];
+    const n = siteCount[k];
+    if (n >= limit.cap) continue;
+    if (limit.keep > 1 && siteHash(wx, y, wz) % limit.keep !== 0) continue;
+    let aux = id;
+    if (k === 0) {
+      // Petals fall from the underside of a leaf that has air below it, down to whatever is under the air.
+      if (kind[grid[i - PAD * PAD]] !== KIND_AIR) continue;
+      let drop = 1;
+      while (drop < SITE_DROP_MAX && drop < row && kind[grid[i - (drop + 1) * PAD * PAD]] === KIND_AIR) drop++;
+      aux |= drop << 12;
+    } else if (k === 1 && kind[grid[i + PAD * PAD]] !== KIND_AIR) {
+      continue; // a firefly needs open air above the plant
+    }
+    const o = n * SITE_STRIDE;
+    const out = siteScratch[k];
+    out[o] = wx;
+    out[o + 1] = y;
+    out[o + 2] = wz;
+    out[o + 3] = aux;
+    siteCount[k] = n + 1;
+  }
+};
 
 // Emits one face of an axis-aligned box. lo and hi are the box corners, in chunk-local coordinates.
 const emitBoxFace = (
@@ -395,12 +558,24 @@ export const meshChunk = (
   const tables = getTables(registry);
   const layout = options.layout ?? flatLayoutFor(registry);
   const { kind, opaque, wet } = tables;
-  const opaqueB = new Bucket();
-  const cutoutB = new Bucket();
-  const waterB = new Bucket();
+  // Water does not sway; its waves are made in the shader from where each vertex is.
+  const swayOn = options.sway !== false && tables.anySway;
+  swayActive = swayOn;
+  // Flicker weights and effect sites: on unless the caller says no, and only when some block in the registry has them.
+  const flickerOn = options.effects !== false && tables.anyFlicker;
+  const sitesOn = options.effects !== false && tables.anyFx;
+  flickerActive = flickerOn;
+  quadSway = null;
+  quadTint = null;
+  quadFlicker = 0;
+  siteCount.fill(0);
+  const opaqueB = new Bucket(swayOn);
+  const cutoutB = new Bucket(swayOn);
+  const waterB = new Bucket(false);
 
   const finish = (): MeshData => ({
     cx, cz, opaque: opaqueB.finish(), cutout: cutoutB.finish(), water: waterB.finish(),
+    sites: siteScratch.map((scratch, k) => scratch.slice(0, siteCount[k] * SITE_STRIDE)),
   });
 
   const range = reader.yRange ? reader.yRange() : { minY: WORLD_MIN_Y, maxY: WORLD_MAX_Y };
@@ -457,14 +632,20 @@ export const meshChunk = (
         const k = kind[cell];
         if (k === KIND_AIR) continue;
 
+        if (sitesOn) {
+          const fx = tables.fx[cell & ID_MASK];
+          if (fx !== 0) noteSites(grid, i, y - rowMin, cell & ID_MASK, fx, x0 + lx, y, z0 + lz, kind);
+        }
+
         if (k === KIND_CUBE) {
           emitCube(opaque[cell] ? opaqueB : cutoutB, grid, lights, i, cell, lx, y, lz, x0, z0, tables, layout, aoMul);
         } else if (k === KIND_WATER) {
-          emitWaterCube(waterB, grid, lights, i, lx, y, lz, tables, layout);
+          emitWaterCube(waterB, grid, lights, i, lx, y, lz, tables, layout, y - rowMin);
         } else {
-          if (wet[cell]) emitWaterCube(waterB, grid, lights, i, lx, y, lz, tables, layout);
+          if (wet[cell]) emitWaterCube(waterB, grid, lights, i, lx, y, lz, tables, layout, y - rowMin);
           nbhd.i = i;
-          emitModel(opaque[cell] ? opaqueB : cutoutB, grid, lights, i, cell, lx, y, lz, x0, z0, tables, layout, aoMul, nbhd);
+          emitModel(opaque[cell] ? opaqueB : cutoutB, grid, lights, i, cell, lx, y, lz, x0, z0, tables, layout, aoMul, nbhd,
+            y - rowMin, rows);
         }
       }
     }
@@ -473,9 +654,55 @@ export const meshChunk = (
   return finish();
 };
 
+// How many cells of water or water-holding blocks there are from cell `i` down, at most WATER_DEPTH_MAX. `row` is the
+// cell's row in the grid, so the walk never leaves it. 0 when the cell itself holds no water.
+const waterColumn = (grid: Uint16Array, i: number, row: number, wet: Uint8Array): number => {
+  let n = 0;
+  while (n < WATER_DEPTH_MAX && n <= row && wet[grid[i - n * PAD * PAD]]) n++;
+  return n;
+};
+
+// What a water vertex carries in its tint: r is how deep the water is (0 to 1, WATER_DEPTH_MAX cells or more is 1) and g
+// how much of a shoreline it is (0 in open water, 1 where the three other cells around the corner are not water). The
+// water shader reads them to darken the deep and lighten the edge; water takes no biome tint, so the channel was free.
+// A top face takes both from the four cells around each corner, so they run smoothly across the surface; any other face
+// takes its own column's depth and no shore.
+const waterVertexData = (
+  grid: Uint16Array, i: number, row: number, f: number, wet: Uint8Array,
+): void => {
+  const own = waterColumn(grid, i, row, wet);
+  if (f !== 2) {
+    const depth = own / WATER_DEPTH_MAX;
+    for (let c = 0; c < 4; c++) {
+      waterTintBuf[c * 3] = depth;
+      waterTintBuf[c * 3 + 1] = 0;
+      waterTintBuf[c * 3 + 2] = 0;
+    }
+    return;
+  }
+  const su = STRIDE[FACES[f].u];
+  const sv = STRIDE[FACES[f].v];
+  for (let c = 0; c < 4; c++) {
+    const i1 = i + CORNER_U[c] * su;
+    const i2 = i + CORNER_V[c] * sv;
+    let depthSum = own;
+    let water = 1;
+    for (let k = 0; k < 3; k++) {
+      const n = waterColumn(grid, k === 0 ? i1 : k === 1 ? i2 : i1 + CORNER_V[c] * sv, row, wet);
+      if (n > 0) {
+        depthSum += n;
+        water++;
+      }
+    }
+    waterTintBuf[c * 3] = depthSum / water / WATER_DEPTH_MAX;
+    waterTintBuf[c * 3 + 1] = (4 - water) / 3;
+    waterTintBuf[c * 3 + 2] = 0;
+  }
+};
+
 const emitWaterCube = (
   bucket: Bucket, grid: Uint16Array, lights: Uint8Array | null, i: number, lx: number, y: number, lz: number,
-  tables: BlockTables, layout: TextureLayout,
+  tables: BlockTables, layout: TextureLayout, row: number,
 ): void => {
   const { occ, wet } = tables;
   const layers = layout.faceLayers;
@@ -485,7 +712,10 @@ const emitWaterCube = (
     const layer = layers[BlockType.WATER * 3 + FACE_KIND[f]];
     // Water is lit like everything else, but a shore does not darken it: no ambient occlusion.
     const flip = faceLight(grid, lights, i + SIDE_OFFSET[f], f, tables, null, 0);
+    waterVertexData(grid, i, row, f, wet);
+    quadTint = waterTintBuf;
     emitBoxFace(bucket, f, lx, y, lz, lx + 1, y + 1, lz + 1, lightBuf, flip, layer, layout.overlayOf[layer], 1, 1, 1);
+    quadTint = null;
   }
 };
 
@@ -620,6 +850,14 @@ const emitCube = (
   if (selfOpaque && full[grid[i + 1]] && full[grid[i - 1]] && full[grid[i + PAD]] && full[grid[i - PAD]]
     && full[grid[i + PAD * PAD]] && full[grid[i - PAD * PAD]]) return;
 
+  // A swaying cube (leaves) moves by the same amount at every corner: the whole block stirs a little.
+  const sw = swayActive ? tables.sway[id] : 0;
+  if (sw > 0) {
+    swayBuf.fill(sw);
+    quadSway = swayBuf;
+  }
+  if (flickerActive) quadFlicker = tables.flicker[id];
+
   for (let f = 0; f < 6; f++) {
     const front = i + SIDE_OFFSET[f];
     const nb = grid[front];
@@ -635,6 +873,8 @@ const emitCube = (
     const flip = faceLight(grid, lights, front, f, tables, aoMul, glow);
     emitBoxFace(bucket, f, lx, y, lz, lx + 1, y + 1, lz + 1, lightBuf, flip, layer, overlay, tintOut[0], tintOut[1], tintOut[2]);
   }
+  quadSway = null;
+  quadFlicker = 0;
 };
 
 // Whether the neighbour on the far side of a quad hides it: it covers the whole face, or every quarter the quad
@@ -650,10 +890,26 @@ const hidden = (q: ModelQuad, nb: number, tables: BlockTables): boolean => {
 const emitModel = (
   bucket: Bucket, grid: Uint16Array, lights: Uint8Array | null, i: number, cell: number, lx: number, y: number, lz: number,
   x0: number, z0: number, tables: BlockTables, layout: TextureLayout, aoMul: Float32Array | null, nbhd: Neighbourhood,
+  row: number, rows: number,
 ): void => {
   const id = cell & ID_MASK;
   const quads = tables.models[id].quads(cell >> STATE_SHIFT, nbhd);
   const glow = tables.glow[id];
+  if (flickerActive) quadFlicker = tables.flicker[id];
+
+  // Where this cell sits in a stalk of the same block: how many cells of it are below (`below`), and how tall the stalk
+  // is up to STALK_BLOCKS. A weight of (below + height in the cell) / stalkHeight is the same at the top of one cell and
+  // the bottom of the next, so a stack of bamboo bends as one piece.
+  const sw = swayActive ? tables.sway[id] : 0;
+  let below = 0;
+  let stalk = 1;
+  if (sw > 0) {
+    while (below < STALK_SCAN && below < row && (grid[i - (below + 1) * PAD * PAD] & ID_MASK) === id) below++;
+    let above = 0;
+    while (above < STALK_SCAN && row + above < rows - 1 && (grid[i + (above + 1) * PAD * PAD] & ID_MASK) === id) above++;
+    stalk = Math.min(below + above + 1, STALK_BLOCKS);
+  }
+
   for (let n = 0; n < quads.length; n++) {
     const q = quads[n];
     let flip = false;
@@ -675,7 +931,18 @@ const emitModel = (
     const slot = id * 3 + q.face;
     const layer = layout.faceLayers[slot];
     faceTint(layout, slot, lx, lz, x0, z0);
+    if (sw > 0) {
+      // Rooted at the bottom of the stalk, and moving more the higher the vertex is, a little faster than linearly.
+      for (let c = 0; c < 4; c++) {
+        const h = q.corners[c * 3 + 1];
+        const t = Math.min((below + (h < 0 ? 0 : h > 1 ? 1 : h)) / stalk, 1);
+        swayBuf[c] = sw * t * Math.sqrt(t);
+      }
+      quadSway = swayBuf;
+    }
     bucket.quad(q.corners, lx, y, lz, q.uvs, 0, q.nx, q.ny, q.nz, lightBuf, flip, layer, layout.overlayOf[layer],
       tintOut[0], tintOut[1], tintOut[2]);
   }
+  quadSway = null;
+  quadFlicker = 0;
 };

@@ -16,6 +16,8 @@ import { Rng } from '../../worldgen/noise';
 import { LegacyZoneAdapter } from '../../worldgen/LegacyZoneAdapter';
 import { VoxelverseGenerator } from '../../worldgen/VoxelverseGenerator';
 import { INITIAL_SPAWN } from '../../constants';
+import { getZone } from '../../zones';
+import { TempestCityZone } from '../../worldgen/tempest/TempestCityZone';
 import { BlockType, LodLevel, PLAYER_HEIGHT } from '../../worldConstants';
 
 const root = join(__dirname, '..', '..');
@@ -36,6 +38,15 @@ describe('the game runs on the Phase 6 generator', () => {
       const importsIt = /from\s+'[^']*LegacyZoneAdapter'/.test(readFileSync(join(root, f), 'utf8'));
       expect(importsIt, `${relative(root, join(root, f))} imports LegacyZoneAdapter`).toBe(false);
     }
+  });
+
+  it('keeps the old Tempest out of the game: only tests and tools use zones/TempestZone, and the game\'s Tempest is the city zone', () => {
+    const files = readdirSync(root, { recursive: true, encoding: 'utf8' })
+      .filter((f) => /\.(ts|tsx|mjs)$/.test(f) && !/^(node_modules|dist|tests|docs|tools|\.worktrees|\.claude)\//.test(f) && !f.includes('node_modules'));
+    const users = files.filter((f) => /from\s+'[^']*\/TempestZone'/.test(readFileSync(join(root, f), 'utf8')));
+    expect(users, 'files that import the legacy TempestZone').toEqual([]);
+    expect(getZone(1500, 0)).toBeInstanceOf(TempestCityZone);
+    expect(getZone(1500, 0).name).toBe('Federation of Tempest');
   });
 
   it('shows the generator\'s zone names and heights on the main thread', () => {
@@ -59,6 +70,11 @@ describe('main thread and worker agree', () => {
     ['Greensom', 0, 300], ['Great Tower', 0, 120], ['Town plaza', 0, 0], ['Tempest', 1400, 0], ['Amestris', -1500, 0],
     ['Bosse castle', 0, -1400], ['Bosse edge', 0, -1580], ['highway', 400, -8], ['cedar belt', 1000, 400],
     ['south forest', 300, 3600], ['coast', -2900, 100], ['mountains', 10800, 0], ['Greensom to Magnolia road', -700, 760],
+    // The city of Tempest: its square, the compound and Town Hall, the arena, the west gate, the bridge over the river, the tourism
+    // sector with the market hall, the farms, a diagonal street, the cave in the forest and the memorial cairn.
+    ['Tempest square', 1500, 0], ['Tempest compound', 1500, -165], ['Tempest arena', 1676, -250], ['Tempest west gate', 1313, 0],
+    ['Tempest bridge', 1837, 0], ['Tempest market hall', 1570, 70], ['Tempest farms', 1700, 60], ['Tempest diagonal', 1560, -121],
+    ['Tempest cave', 1466, -642], ['Tempest cairn', 1566, 210],
   ];
 
   it('give the same block at random points of chunks the worker built', () => {
@@ -127,6 +143,27 @@ describe('main thread and worker agree', () => {
       }
       expect(fromWorker.opaque.indices.length).toBeGreaterThan(0);
     }
+  });
+
+  it('mesh the Tempest chunks to the same geometry on both threads, lights and shaped blocks included', () => {
+    const mainThread: CellReader = {
+      getCell: (x, y, z) => voxelWorld.getCell(x, y, z),
+      yRange: () => ({ minY: WORLD_MIN_Y, maxY: 140 }),
+    };
+    let quads = 0;
+    for (const [name, px, pz] of PLACES.filter(([n]) => n.startsWith('Tempest'))) {
+      const cx = chunkCoord(px);
+      const cz = chunkCoord(pz);
+      const fromWorker = meshChunk(new NeighbourReader(cache.neighbourhood(cx, cz, LodLevel.HIGH)), cx, cz, workerRegistry);
+      const fromMain = meshChunk(mainThread, cx, cz, blockRegistry);
+      for (const bucket of ['opaque', 'cutout', 'water'] as const) {
+        expect(fromWorker[bucket].indices.length, `${name} ${bucket}`).toBe(fromMain[bucket].indices.length);
+        expect(Array.from(fromWorker[bucket].positions), `${name} ${bucket}`).toEqual(Array.from(fromMain[bucket].positions));
+        expect(Array.from(fromWorker[bucket].layers), `${name} ${bucket}`).toEqual(Array.from(fromMain[bucket].layers));
+      }
+      quads += fromWorker.opaque.indices.length / 6;
+    }
+    expect(quads).toBeGreaterThan(5000);
   });
 
   it('use the same chunk at LOD 0: only ground plants differ from full detail', () => {

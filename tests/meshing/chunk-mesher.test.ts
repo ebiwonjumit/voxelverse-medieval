@@ -409,8 +409,8 @@ describe('index validity', () => {
   it('lists every buffer for transfer, and the mesh survives a transfer', () => {
     const m = mesh(new MapReader([[1, 1, 1, WHITE], [4, 1, 1, BlockType.WATER], [6, 1, 1, BlockType.GLASS]]));
     const buffers = meshTransferables(m);
-    expect(buffers).toHaveLength(21); // seven attributes in each of three buckets
-    expect(new Set(buffers).size).toBe(21);
+    expect(buffers).toHaveLength(32); // nine attributes in each of three buckets, and one array of effect sites for each of five kinds
+    expect(new Set(buffers).size).toBe(32);
     const bytes = m.opaque.positions.byteLength;
     const clone = structuredClone(m, { transfer: buffers });
     expect(clone.opaque.positions.byteLength).toBe(bytes);

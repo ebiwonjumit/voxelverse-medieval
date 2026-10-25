@@ -17,6 +17,7 @@ export class GreensomZone extends Zone {
       fogColor: '#87CEEB', 
       skyTint: '#ffffff',
       fogDensity: 0.015,
+      clouds: 0.4,
       fixedTime: 0.25 // Always Noon
     };
   }

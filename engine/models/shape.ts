@@ -1,6 +1,6 @@
 import { FACE_BOTTOM, FACE_SIDE, FACE_TOP } from '../TextureLayout';
 import { Box, ModelQuad } from './BlockModel';
-import { DOWN, SIDES, UP } from './Side';
+import { DOWN, HORIZONTAL_SIDES, SIDES, UP } from './Side';
 
 // Turns boxes into the quads the mesher draws. Models describe themselves as a few boxes; this works out which of
 // their faces can be seen, what texture coordinates they get, which quarters of the cell's sides they cover and
@@ -29,6 +29,20 @@ export interface CompiledShape {
   /** Per side, the covered quarters (see BlockModel.faceCoverage). */
   coverage: Uint8Array;
 }
+
+/** Turns a box a quarter turn clockwise (seen from above) around the middle of the cell, `turns` times. North becomes east. */
+export const rotateBox = (box: Box, turns: number): Box => {
+  let [x0, y0, z0, x1, y1, z1] = box;
+  for (let t = 0; t < ((turns % 4) + 4) % 4; t++) {
+    // (x, z) -> (1 - z, x) about the centre of the cell.
+    const nx0 = 1 - z1;
+    const nx1 = 1 - z0;
+    const nz0 = x0;
+    const nz1 = x1;
+    x0 = nx0; x1 = nx1; z0 = nz0; z1 = nz1;
+  }
+  return [x0, y0, z0, x1, y1, z1];
+};
 
 const faceKind = (side: number): number => (side === UP ? FACE_TOP : side === DOWN ? FACE_BOTTOM : FACE_SIDE);
 
@@ -105,7 +119,29 @@ const coveredQuarters = (lo0: number, hi0: number, lo1: number, hi1: number): nu
   return mask;
 };
 
-export const compileBoxes = (parts: readonly BoxPart[], uv: UvMode, collision?: readonly Box[]): CompiledShape => {
+/**
+ * Where a turned shape's texture comes from: the side and the point a face had before the shape was turned `turns`
+ * quarter turns clockwise. Looking the texture up there makes the picture turn with the geometry, so a stripe that
+ * ran north to south on the authored shape still runs along it after the quarter turn.
+ */
+const unturn = (side: number, point: number[], turns: number): number => {
+  let [x, z] = [point[0], point[2]];
+  for (let t = 0; t < turns; t++) [x, z] = [z, 1 - x]; // inverse of (x, z) -> (1 - z, x)
+  point[0] = x;
+  point[2] = z;
+  const at = HORIZONTAL_SIDES.indexOf(side);
+  return at < 0 ? side : HORIZONTAL_SIDES[(at - turns + 8) % 4];
+};
+
+/**
+ * `uvTurns` (0 to 3) says the parts are an authored shape turned that many quarter turns, and makes the texture turn
+ * with it (see `unturn`). It is only for shapes built by turning boxes, so a face that is flush with the cell keeps
+ * its culling data but samples the texture of the side it came from.
+ */
+export const compileBoxes = (
+  parts: readonly BoxPart[], uv: UvMode, collision?: readonly Box[], uvTurns = 0,
+): CompiledShape => {
+  const turns = ((uvTurns % 4) + 4) % 4;
   const quads: ModelQuad[] = [];
   const coverage = new Uint8Array(6);
 
@@ -141,10 +177,16 @@ export const compileBoxes = (parts: readonly BoxPart[], uv: UvMode, collision?: 
         corners[i * 3] = point[0];
         corners[i * 3 + 1] = point[1];
         corners[i * 3 + 2] = point[2];
-        if (uv === 'stretch') {
-          for (let a = 0; a < 3; a++) point[a] = (point[a] - b[a]) / (b[3 + a] - b[a]);
+        let uvSide = side;
+        let uvBox = b;
+        if (turns) {
+          uvSide = unturn(side, point, turns);
+          uvBox = rotateBox(b, 4 - turns);
         }
-        faceUv(side, point[0], point[1], point[2], uvs, i * 2);
+        if (uv === 'stretch') {
+          for (let a = 0; a < 3; a++) point[a] = (point[a] - uvBox[a]) / (uvBox[3 + a] - uvBox[a]);
+        }
+        faceUv(uvSide, point[0], point[1], point[2], uvs, i * 2);
       }
 
       let need = 0;

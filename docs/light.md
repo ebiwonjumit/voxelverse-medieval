@@ -135,7 +135,7 @@ computed as follows (constants at the top of the fragment declarations):
 - A floor of 0.04 under the light keeps a sealed room from going black, and a final scale of 0.5 keeps full daylight from clipping once the renderer's ACES tone mapping has brightened it (ACES multiplies by 1/0.6 first, so an unscaled noon came out washed out).
 - The face factor is mild: `0.86 + 0.14 * normal.y - 0.05 * abs(normal.x)`, which is 1 on tops, 0.86 on north and south walls, 0.81 on east and west walls and 0.72 on undersides. Occlusion and baked light do the real shading.
 - **Glow.** The block light an emitter's own faces show is at least its emission, and the result is multiplied by `1 + glow * 0.45`, so a lantern is a little brighter than the light around it and stays lit when the area is dark. Block light by itself would make a magic crystal (10) only two thirds lit.
-- Fog is the scene's, as before. Water uses the same lighting, then its wave and blending.
+- Fog is the scene's, as before. Water uses the same lighting, then its flow, wave and blending ([effects.md](effects.md)); the sway of foliage moves vertices and leaves the baked light alone.
 
 `uDaylight` is one uniform shared by the three materials, 0 to 1. `ChunkRenderer.setDaylight(value)` sets it (clamped), and `World` calls it every frame. Nothing is re-meshed when it changes: sky light is baked as a level and scaled here. The sky clock ([sky.md](sky.md)) sets it every frame, together with `uSkyLight`, a colour multiplier on sky light (white by day, warm at dusk, blue at night, neutral in the sandbox pages). `?daylight=0..1` in the page address still overrides the number alone, which is handy for looking at the light without moving the sky.
 

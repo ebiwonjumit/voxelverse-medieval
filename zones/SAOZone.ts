@@ -15,7 +15,8 @@ export class SAOZone extends Zone {
     return {
       fogColor: '#87CEEB', // Standard Blue Sky
       skyTint: '#ffffff',
-      fogDensity: 0.02
+      fogDensity: 0.02,
+      clouds: 0.35, // a few high clouds, as the pictures of the city have
     };
   }
 

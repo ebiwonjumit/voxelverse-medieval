@@ -5,7 +5,7 @@ import { MOVE_SPEED, PLAYER_HEIGHT } from '../constants';
 import { voxelWorld } from '../gameWorld';
 import { FrameStats, summarizeFrames } from './stats';
 import { playerState } from '../playerState';
-import { getWorldProbe } from './worldProbe';
+import { getWorldStats } from './worldProbe';
 
 type Waypoint = [number, number];
 
@@ -62,6 +62,16 @@ const TEMPEST_EDGE: Waypoint = [1440, 0];
 const SOAK_LOOP: Waypoint[] = [
   SPAWN, PLAZA_EDGE, [-60, 0], [-140, 0], [-60, 0], [0, -60], [60, 0], [140, 0], [60, 0], PLAZA_EDGE, SPAWN,
 ];
+// Through the streets of Tempest (world coordinates, the Central Square at 1500, 0): in at the west gate along the commercial
+// avenue to the Central Square, up the north avenue towards the Town Hall, east and back down a side street, across the
+// square again and down the south avenue into the tourism sector. About 670 blocks, 48 s at sprint speed.
+const TEMPEST_STREETS: Waypoint[] = [
+  TEMPEST_EDGE, [1500, 0], [1500, -134], [1546, -134], [1546, -46], [1500, -46], [1500, 134], [1590, 134], [1590, 47],
+];
+// The same streets as a closed loop for the soak: the square, the north avenue, the side street, the south avenue and back.
+const TEMPEST_LOOP: Waypoint[] = [
+  [1500, 0], [1500, -134], [1546, -134], [1546, -46], [1500, -46], [1500, 134], [1590, 134], [1590, 47], [1546, 47], [1500, 47], [1500, 0],
+];
 const SOAK_SECONDS = 90;
 // ?bench=soak&soakSeconds=250 runs longer (a lap of the loop is about 82 s), to see whether the counts return to the
 // same values lap after lap.
@@ -81,9 +91,11 @@ const JUMP_PEAK = 1.78;     // 8^2 / (2 * GRAVITY)
 // The quick mode only checks that the harness works. Its numbers are not comparable with a full run.
 const buildLegs = (mode: BenchMode): LegDef[] => {
   if (mode === 'soak') {
+    // ?bench=soak&route=tempest soaks in the streets of Tempest instead of the old loop round the Town.
+    const tempest = new URLSearchParams(window.location.search).get('route') === 'tempest';
     return [
-      { name: 'load', path: [SPAWN], speed: 0, duration: 6 },
-      { name: 'soak', path: SOAK_LOOP, speed: SPRINT, duration: soakSeconds(), loop: true, soak: true },
+      { name: 'load', path: [tempest ? TEMPEST_LOOP[0] : SPAWN], speed: 0, duration: 6 },
+      { name: 'soak', path: tempest ? TEMPEST_LOOP : SOAK_LOOP, speed: SPRINT, duration: soakSeconds(), loop: true, soak: true },
     ];
   }
   const quick = mode === 'quick';
@@ -95,6 +107,7 @@ const buildLegs = (mode: BenchMode): LegDef[] => {
     { name: 'jump', path: [SPAWN], speed: 0, duration: idle, jump: true },
     { name: 'greensom-to-sao', path: [SPAWN, PLAZA_EDGE, EAST_ROAD], speed: walk },
     { name: 'sao-to-tempest', path: [EAST_ROAD, TEMPEST_EDGE], speed: walk },
+    { name: 'tempest-streets', path: TEMPEST_STREETS, speed: walk },
   ];
 };
 
@@ -167,7 +180,7 @@ const Benchmark: React.FC<BenchProps> = ({ mode, onProgress, onDone }) => {
       geometries: info.memory.geometries,
       textures: info.memory.textures,
       heapMB: heapMB(),
-      stats: getWorldProbe()?.getStats?.() ?? null,
+      stats: getWorldStats(),
     });
     r.all.push(...r.frames);
     r.frames = [];
@@ -252,7 +265,7 @@ const Benchmark: React.FC<BenchProps> = ({ mode, onProgress, onDone }) => {
         triangles: info.render.triangles,
         drawCalls: info.render.calls,
         heapMB: heapMB(),
-        stats: getWorldProbe()?.getStats?.() ?? null,
+        stats: getWorldStats(),
       });
       r.nextSample += SOAK_INTERVAL;
     }

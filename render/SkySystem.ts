@@ -112,15 +112,20 @@ export const daylightAt = (elevation: number): number =>
 
 // --- Zone atmosphere ----------------------------------------------------------------------------------------------
 
-/** A zone's `AtmosphereSettings` as numbers, so it can be blended. `tint` is the zone's `skyTint`. */
-export interface ZoneAtmosphere { fog: Rgb; tint: Rgb; density: number; }
+/** What a zone that does not say covers of the sky with cloud: a fair-weather sky, about two fifths of it. */
+export const DEFAULT_CLOUD_COVER = 0.45;
+
+/** A zone's `AtmosphereSettings` as numbers, so it can be blended. `tint` is the zone's `skyTint`, `clouds` its cloud cover (0 is clear). */
+export interface ZoneAtmosphere { fog: Rgb; tint: Rgb; density: number; clouds: number; }
 
 export const parseAtmosphere = (a: AtmosphereSettings): ZoneAtmosphere => ({
   fog: parseHex(a.fogColor), tint: parseHex(a.skyTint), density: a.fogDensity,
+  clouds: clamp01(a.clouds ?? DEFAULT_CLOUD_COVER),
 });
 
 export const lerpAtmosphere = (from: ZoneAtmosphere, to: ZoneAtmosphere, t: number): ZoneAtmosphere => ({
   fog: mix(from.fog, to.fog, t), tint: mix(from.tint, to.tint, t), density: from.density + (to.density - from.density) * t,
+  clouds: from.clouds + (to.clouds - from.clouds) * t,
 });
 
 /** The fogDensity at which the fog still starts and ends at the old fixed distances; denser zones pull both in. */
@@ -139,6 +144,50 @@ export const fogRange = (density: number, renderDistance: number = RENDER_DISTAN
   const k = density > REFERENCE_FOG_DENSITY ? REFERENCE_FOG_DENSITY / density : 1;
   const far = Math.max(baseFar * k, Math.min(MIN_FOG_FAR, baseFar));
   return { far, near: Math.max(far - (baseFar - baseNear) * k, 0) };
+};
+
+// --- Clouds -------------------------------------------------------------------------------------------------------
+
+/**
+ * What the cloud layer (render/CloudLayer.ts) needs to know about the sky: how much of it is covered, the colour of a cloud's lit
+ * and shaded parts, and how solid the layer is. All derived from the time of day and the zone, so the clouds follow the sky: white
+ * by day, orange-pink at sunrise and sunset, a dim blue-grey lit by the moon at night, grey where the zone is overcast.
+ */
+export interface CloudState {
+  /** 0 is a clear sky and no clouds are drawn; 1 is overcast. The zone's `clouds` setting, blended as the zone changes. */
+  cover: number;
+  /** The colour of the parts of a cloud facing the light. */
+  lit: Rgb;
+  /** The colour of the parts turned away from it. */
+  shade: Rgb;
+  /** The most opaque a cloud gets, 0 to 1: thinner at night so the stars show through. */
+  opacity: number;
+}
+
+/** Below this cover the layer is not drawn at all (a clear zone costs nothing, and a blend into one ends cleanly). */
+export const CLOUD_MIN_COVER = 0.02;
+
+const MOON_LIT: Rgb = [0.12, 0.145, 0.25];
+const SUN_LIT: Rgb = [1.0, 0.99, 0.97];
+const SUNSET_LIT: Rgb = [1.0, 0.6, 0.42];
+const CLOUD_SHADE_TINT: Rgb = [0.74, 0.8, 0.94];
+
+/**
+ * The look of the clouds for a sun elevation, the horizon colour (which carries the zone's fog colour, so a green haze or a pink
+ * magic tints them) and a cover. Pure.
+ */
+export const cloudLook = (elevation: number, horizon: Rgb, cover: number): CloudState => {
+  const day = smoothstep(-0.12, 0.25, elevation);
+  const warm = smoothstep(-0.25, 0.0, elevation) * (1 - smoothstep(0.05, 0.5, elevation));
+  const sunLit = mix(SUN_LIT, SUNSET_LIT, warm * 0.85);
+  let lit = mix(MOON_LIT, sunLit, day);
+  // A touch of the horizon's colour, so the sky and the clouds in it belong together.
+  lit = mix(lit, scale(horizon, 1.08), 0.16 + 0.08 * (1 - day));
+  // An overcast sky is a lid of grey: darker and flatter than a few clouds in blue.
+  const overcast = smoothstep(0.55, 1, cover);
+  lit = scale(lit, 1 - 0.38 * overcast);
+  const shade = scale(mul(lit, CLOUD_SHADE_TINT), 0.74 + 0.1 * overcast);
+  return { cover: clamp01(cover), lit, shade, opacity: 0.6 + 0.35 * day };
 };
 
 // --- The sky at one moment ----------------------------------------------------------------------------------------
@@ -166,6 +215,8 @@ export interface SkyState {
   moon: number;
   /** Light added around the sun (colour already scaled by strength), strongest at sunrise and sunset. */
   sunGlow: Rgb;
+  /** The cloud layer's look at this moment (see CloudState). */
+  clouds: CloudState;
 }
 
 /** The zone's atmosphere with nothing else, the "zone fog colour" the fog is blended from. */
@@ -213,6 +264,8 @@ export const computeSky = (
       stars: 0.45,
       moon: 0.8,
       sunGlow: [0, 0, 0],
+      // The old fixed look is a dusk: the clouds take the colours of one.
+      clouds: cloudLook(0.02, mix(TWILIGHT_HORIZON, zone.fog, 0.5), zone.clouds),
     };
   }
 
@@ -236,6 +289,7 @@ export const computeSky = (
     stars: 1 - smoothstep(-0.2, 0.0, elevation),
     moon: 1 - 0.7 * day,
     sunGlow,
+    clouds: cloudLook(elevation, horizon, zone.clouds),
   };
 };
 

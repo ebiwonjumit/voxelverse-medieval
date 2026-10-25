@@ -4,7 +4,7 @@
 //   npm run bench                  (full run, about 2.5 minutes)
 //   npm run bench -- --quick       (harness smoke test)
 //   npm run bench -- --url http://localhost:4173/?bench --out docs/bench-prod.json
-//   npm run bench -- --smoke       (loads the real game, drops the player, checks the HUD zone, walks forward, presses the sky keys, reports console errors)
+//   npm run bench -- --smoke       (loads the real game, drops the player, checks the HUD zone, walks forward, presses the sky keys and the effect keys, reports console errors)
 //   npm run bench -- --soak        (90 s closed-loop walk, prints geometry and triangle counts every 5 s)
 //   npm run bench -- --shot docs/screens/p2/spawn.png --url "http://localhost:3000/?shot=0,10,300,0,0"
 //                                  (screenshot at 1280x800 once the world reports window.__SHOT_READY__)
@@ -13,6 +13,8 @@
 //   --url <url>       page to load (defaults to port 3000; use --url for any other port)
 //   --out <file>      where the JSON result goes (default docs/bench-latest.json, docs/bench-soak.json with --soak)
 //   --timeout <ms>    give up after this long (screenshots wait for __SHOT_READY__ for up to 3 minutes)
+//   --then <file>     with --shot: after the first capture wait --gap ms (default 1000) and capture the same page again, for pairs
+//                     that show the wind and the water moving (tools/shot-diff.ts puts them side by side)
 //   --width/--height  window size, default 1280x800
 //   --chrome <path>   Chrome binary
 //
@@ -21,7 +23,7 @@
 //
 // Chrome is driven over --remote-debugging-pipe, so there are no extra dependencies.
 import { spawn } from 'node:child_process';
-import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -36,6 +38,8 @@ const quick = flag('quick');
 const smoke = flag('smoke');
 const soak = flag('soak');
 const shotFile = option('shot', null);
+const thenFile = option('then', null);
+const gapMs = Number(option('gap', 1000));
 const defaultMode = quick ? '=quick' : soak ? '=soak' : '';
 const url = option('url', smoke ? 'http://localhost:3000/' : `http://localhost:3000/?bench${defaultMode}`);
 const out = option('out', quick ? 'docs/bench-quick.json' : soak ? 'docs/bench-soak.json' : 'docs/bench-latest.json');
@@ -58,6 +62,8 @@ const chrome = spawn(
     '--disable-renderer-backgrounding',
     '--disable-backgrounding-occluded-windows',
     '--no-first-run',
+    '--disable-gpu-shader-disk-cache',
+    '--disk-cache-size=1',
     'about:blank',
   ],
   { stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'] },
@@ -112,6 +118,8 @@ const printSoak = (samples) => {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const shutdown = (code) => {
   chrome.kill('SIGKILL');
+  // Every run's Chrome profile is up to 160 MB; left behind they add up to tens of gigabytes after a few hundred shots.
+  try { rmSync(profile, { recursive: true, force: true, maxRetries: 3 }); } catch { /* the temp folder gets cleaned eventually */ }
   process.exit(code);
 };
 chrome.on('exit', () => {});
@@ -162,9 +170,36 @@ try {
     await sleep(400);
     const timeStepped = await readTime();
 
+    // The debug panel: F3 opens it, the digit keys 1 to 9 flip the nine living-world effects (sway, water, fireflies, petals, smoke,
+    // embers, flicker, halos, clouds), and the panel says which are on.
+    const EFFECT_LABELS = ['Foliage sway', 'Water animation', 'Fireflies', 'Sakura petals', 'Chimney smoke', 'Hearth embers', 'Lantern flicker', 'Lamp halos', 'Clouds'];
+    const panelText = async () => {
+      const text = await evaluate('document.body.innerText');
+      return EFFECT_LABELS.map((label) => new RegExp(`${label}: (on|off)`).exec(text)?.[1] ?? '?').join(' ');
+    };
+    const flipAll = async () => {
+      for (let n = 1; n <= 9; n++) {
+        await key('rawKeyDown', `Digit${n}`, 48 + n);
+        await key('keyUp', `Digit${n}`, 48 + n);
+      }
+      await sleep(300);
+    };
+    // The game listens for F3 by e.key, which the helper above would write in lower case.
+    for (const type of ['rawKeyDown', 'keyUp']) {
+      await send('Input.dispatchKeyEvent', { type, code: 'F3', key: 'F3', windowsVirtualKeyCode: 114 }, sessionId);
+    }
+    await sleep(300);
+    const panelOpen = await panelText();
+    await flipAll();
+    const panelOff = await panelText();
+    await flipAll();
+    const panelOn = await panelText();
+    const effectsRunning = await evaluate('Boolean(window.__EFFECTS__)');
+
     console.log('  after landing:', landed, 'zone:', zoneAtSpawn);
     console.log('  after 3 s of W:', walked);
     console.log(`  sky clock: ${timeBefore}, after F4: ${timeDawn}, after ]: ${timeStepped}`);
+    console.log(`  debug panel: ${panelOpen}; after 1 to 9: ${panelOff}; after 1 to 9 again: ${panelOn}; effects system running: ${effectsRunning}`);
     console.log(`  page errors: ${pageErrors.length}`);
     for (const e of pageErrors.slice(0, 5)) console.log('   ', String(e).slice(0, 200));
 
@@ -177,6 +212,12 @@ try {
     if (zoneAtSpawn !== 'Greensom Village') problems.push(`the HUD names the zone "${zoneAtSpawn}" at the spawn`);
     if (timeDawn !== '06:15 dawn') problems.push(`F4 did not select the dawn preset (${timeDawn})`);
     if (timeStepped !== '07:15 stopped') problems.push(`] did not step the clock to 07:15 (${timeStepped})`);
+    const allOn = EFFECT_LABELS.map(() => 'on').join(' ');
+    const allOff = EFFECT_LABELS.map(() => 'off').join(' ');
+    if (panelOpen !== allOn) problems.push(`the debug panel does not list the nine effects as on (${panelOpen})`);
+    if (panelOff !== allOff) problems.push(`1 to 9 did not switch the effects off (${panelOff})`);
+    if (panelOn !== allOn) problems.push(`1 to 9 did not switch the effects back on (${panelOn})`);
+    if (effectsRunning !== true) problems.push('the effects system is not running (window.__EFFECTS__)');
     if (pageErrors.length) problems.push('page errors');
     console.log(problems.length ? `FAILED: ${problems.join('; ')}` : 'OK');
     shutdown(problems.length ? 1 : 0);
@@ -193,6 +234,13 @@ try {
         mkdirSync(dirname(shotFile), { recursive: true });
         writeFileSync(shotFile, Buffer.from(data, 'base64'));
         console.log(`Wrote ${shotFile} after ${((Date.now() - started) / 1000).toFixed(1)}s, page errors: ${pageErrors.length}`);
+        if (thenFile) {
+          await sleep(gapMs);
+          const second = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
+          mkdirSync(dirname(thenFile), { recursive: true });
+          writeFileSync(thenFile, Buffer.from(second.data, 'base64'));
+          console.log(`Wrote ${thenFile} ${gapMs} ms later`);
+        }
         shutdown(0);
       }
     }

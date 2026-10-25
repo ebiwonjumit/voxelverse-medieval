@@ -17,7 +17,8 @@ export class RankingZone extends Zone {
     return {
       fogColor: '#fff176', // Bright, almost heavenly/gold tint
       skyTint: '#fff9c4',
-      fogDensity: 0.01 // Very clear air
+      fogDensity: 0.01, // Very clear air
+      clouds: 0, // and a clear sky: no cloud layer at all
     };
   }
 

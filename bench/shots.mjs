@@ -2,6 +2,9 @@
 //
 //   node bench/shots.mjs --prefix before --url http://localhost:3101     (writes docs/screens/p2/before-<name>.png)
 //   node bench/shots.mjs --prefix after --url http://localhost:3101 --only spawn,great-tower
+//   node bench/shots.mjs --file bench/cityshots.json --prefix city --dir docs/screens/p7 --url http://localhost:3105
+//     (an entry with "pair": true is captured twice, 1 s apart, as <prefix>-<name>.png and <prefix>-<name>-b.png)
+//     (an entry may carry a `query` such as "&sky=dusk", added to the URL; --timeout ms is how long each shot waits for the world, default 10 minutes)
 //
 // The game must already be running at --url (dev server or vite preview).
 import { spawnSync } from 'node:child_process';
@@ -20,13 +23,14 @@ const prefix = option('prefix', 'shot');
 const base = option('url', 'http://localhost:3000').replace(/\/$/, '');
 const dir = option('dir', 'docs/screens/p2');
 const only = option('only', null)?.split(',');
-const viewpoints = JSON.parse(readFileSync(join(here, 'viewpoints.json'), 'utf8')).filter((v) => !only || only.includes(v.name));
+const viewpoints = JSON.parse(readFileSync(option('file', join(here, 'viewpoints.json')), 'utf8')).filter((v) => !only || only.includes(v.name));
 
 let failed = 0;
 for (const v of viewpoints) {
   const file = `${dir}/${prefix}-${v.name}.png`;
   console.log(`${v.name} (${v.shot})`);
-  const result = spawnSync('node', [join(here, 'run.mjs'), '--url', `${base}/?shot=${v.shot}`, '--shot', file], { stdio: 'inherit' });
+  const second = v.pair ? ['--then', `${dir}/${prefix}-${v.name}-b.png`] : [];
+  const result = spawnSync('node', [join(here, 'run.mjs'), '--url', `${base}/?shot=${v.shot}${v.query ?? ''}`, '--shot', file, ...second, '--timeout', option('timeout', '600000')], { stdio: 'inherit' });
   if (result.status !== 0) failed++;
 }
 process.exit(failed ? 1 : 0);

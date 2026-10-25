@@ -6,6 +6,7 @@ export { CrossModel } from './CrossModel';
 export { CropModel } from './CropModel';
 export { CUBE_MODEL, CubeModel } from './CubeModel';
 export { FENCE_GROUP, FenceModel } from './FenceModel';
+export { OrientedBoxModel, orientedState } from './OrientedBoxModel';
 export { PANE_GROUP, PaneModel } from './PaneModel';
 export { PlaneModel } from './PlaneModel';
 export { PlateModel } from './PlateModel';

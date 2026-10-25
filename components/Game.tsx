@@ -1,19 +1,22 @@
-import React, { useState, Suspense, useEffect, useMemo } from 'react';
+import React, { useState, Suspense, useEffect, useMemo, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Stats } from '@react-three/drei';
 import World from './World';
 import SkyRig from './SkyRig';
+import EffectsRig from './EffectsRig';
 import Player from './Player';
 import { MILE } from '../constants';
 import { SkyClock, SkySystem, parseSkyOptions } from '../render/SkySystem';
-import { voxelWorld, worldGenerator } from '../gameWorld';
+import { blockRegistry, voxelWorld, worldGenerator } from '../gameWorld';
 import { biomeName } from '../worldgen/biomes/Biome';
 import { playerState } from '../playerState';
 import Benchmark, { BenchMode, BenchResult } from '../bench/Benchmark';
 import BenchResults from '../bench/BenchResults';
 import ShotCamera from '../bench/ShotCamera';
 import { getWorldProbe } from '../bench/worldProbe';
-import { parseShot } from '../bench/shot';
+import { parseRenderDistance, parseShot } from '../bench/shot';
+import { EFFECT_KEYS, effectSettings, toggleEffect } from '../render/effectSettings';
+import { EffectsSystem } from '../render/EffectsSystem';
 
 // How often the HUD and the atmosphere look at playerState. The player moves every frame, but nothing
 // on screen needs React to hear about it that often.
@@ -26,6 +29,8 @@ const Game: React.FC = () => {
   const [loadedChunks, setLoadedChunks] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const [showStats, setShowStats] = useState(false);
+  // The debug panel's switches for the living-world effects, mirrored from effectSettings so the panel redraws.
+  const [effects, setEffects] = useState(() => ({ ...effectSettings }));
 
   // ?bench runs a scripted flythrough instead of the player; ?bench=quick is a short smoke run
   // and ?bench=soak walks a closed loop for 90 s while recording geometry counts.
@@ -44,10 +49,16 @@ const Game: React.FC = () => {
       clock: new SkyClock(parseSkyOptions(window.location.search, shot !== null)),
       // In the wilderness the fog and sky lean a little toward the biome, the same one the HUD shows.
       biomeAt: (x, z) => worldGenerator.biomeAt(x, z),
+      renderDistance: (shot !== null ? parseRenderDistance(window.location.search) : null) ?? undefined,
     }),
     [shot],
   );
   useEffect(() => () => sky.dispose(), [sky]);
+
+  // The particles and the clouds: their spawn points come from the meshes the chunk renderer builds (effects.sites), and they
+  // follow the sky clock and the switches below. A fixed seed keeps a screenshot repeatable.
+  const effectsSystem = useMemo(() => new EffectsSystem({ registry: blockRegistry }), []);
+  useEffect(() => () => effectsSystem.dispose(), [effectsSystem]);
   const [skyInfo, setSkyInfo] = useState(() => sky.clock.describe());
 
   // Copy playerState into React state about 10 times a second, and only when the rounded position changed.
@@ -69,6 +80,10 @@ const Game: React.FC = () => {
     return () => clearTimeout(timer);
   }, []);
 
+  // The key handler lives for the whole session, so it reads whether the panel is open from a ref.
+  const showStatsRef = useRef(false);
+  showStatsRef.current = showStats;
+
   // Toggle stats with F3
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -78,6 +93,15 @@ const Game: React.FC = () => {
       }
       if (e.key === 'h' || e.key === 'H') {
         setShowControls(prev => !prev);
+      }
+      // While the debug panel is open, the digit keys switch the effects it lists (1 to 9, in the order of EFFECT_KEYS).
+      if (showStatsRef.current && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const match = /^Digit([1-9])$/.exec(e.code);
+        const entry = match ? EFFECT_KEYS[Number(match[1]) - 1] : undefined;
+        if (entry) {
+          toggleEffect(entry.name);
+          setEffects({ ...effectSettings });
+        }
       }
     };
     
@@ -181,6 +205,7 @@ const Game: React.FC = () => {
               <div><span className="text-gray-400">F4</span> Sky preset</div>
               <div><span className="text-gray-400">[ ]</span> Time -1h / +1h</div>
               <div><span className="text-gray-400">- =</span> Time slower / faster</div>
+              <div><span className="text-gray-400">F3, 1-9</span> Effects on / off</div>
             </div>
             <div className="text-xs text-gray-500 mt-2 pt-1 border-t border-white/10">
               Press H to toggle this help
@@ -198,6 +223,11 @@ const Game: React.FC = () => {
             <div>Zone: {hud.currentZone}{hud.biome ? ` (${hud.biome})` : ''}</div>
             <div>Chunks Loaded: {loadedChunks}</div>
             <div>Time: {skyInfo}</div>
+            <div className="pt-1 mt-1 border-t border-white/10">
+              {EFFECT_KEYS.map((entry, i) => (
+                <div key={entry.name}><span className="text-gray-400">[{i + 1}]</span> {entry.label}: {effects[entry.name] ? 'on' : 'off'}</div>
+              ))}
+            </div>
             <div className="text-gray-400 text-xs mt-2">Press F3 to toggle</div>
           </div>
         </div>
@@ -219,7 +249,7 @@ const Game: React.FC = () => {
         <SkyRig sky={sky} />
 
         <Suspense fallback={null}>
-          <World sky={sky} />
+          <World sky={sky} sites={effectsSystem.sites} />
         </Suspense>
         
         {shot ? (
@@ -233,6 +263,8 @@ const Game: React.FC = () => {
         ) : (
           <Player />
         )}
+
+        <EffectsRig effects={effectsSystem} sky={sky} />
       </Canvas>
     </div>
   );

@@ -27,7 +27,8 @@ export class TempestZone extends Zone {
     return {
       fogColor: '#a5d6a7', // Lush Green tint
       skyTint: '#e8f5e9',
-      fogDensity: 0.02
+      fogDensity: 0.02,
+      clouds: 0.5, // a soft, humid sky over the forest
     };
   }
 

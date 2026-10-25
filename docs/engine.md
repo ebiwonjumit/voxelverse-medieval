@@ -7,7 +7,7 @@ Phase 1 of the rebuild plan added a block and chunk layer under the game. The pl
 | Folder | What is in it |
 | --- | --- |
 | `engine/` | Voxel core: `coords`, `cell`, `BlockRegistry`, `Chunk`, `ChunkStore`, `VoxelWorld`, the `WorldGenerator` interface, box `collision` ([collision.md](collision.md)) and `spawn` (`standingEyeY`, the eye height for standing on a column). No Three.js, no React. `engine/models/` holds the block models, see [models.md](models.md). |
-| `content/` | Block definitions. `blocks.ts` registers the legacy blocks (ids 0 to 47), then calls `registerNatureBlocks` (`blocksNature.ts`, ids 48 to 79) for the wilderness and `registerShapedBlocks` (`blocksShaped.ts`, the stairs, slabs and pane at ids 80 to 92). `content/textures/` holds the generated pixel-art tiles, see [textures.md](textures.md). |
+| `content/` | Block definitions. `blocks.ts` registers the legacy blocks (ids 0 to 47), then calls `registerNatureBlocks` (`blocksNature.ts`, ids 48 to 79) for the wilderness, `registerShapedBlocks` (`blocksShaped.ts`, the stairs, slabs and pane at ids 80 to 92) and `registerTempestBlocks` (`blocksTempest.ts`, the 72 blocks of the city at ids 128 to 199, see [tempest-blocks.md](tempest-blocks.md); the smoke vent at id 200 comes with the living-world effects, see [effects.md](effects.md); ids 201 to 255 are still free). `content/textures/` holds the generated pixel-art tiles, see [textures.md](textures.md). |
 | `meshing/` | Pure chunk mesher, the light engine and the mesh worker pool, worker-safe. See [meshing.md](meshing.md) and [light.md](light.md). |
 | `render/` | The Three.js chunk renderer and `SkySystem`, the day/night clock, sky dome and fog. See [renderer.md](renderer.md) and [sky.md](sky.md). |
 | `worldgen/` | Things that implement `WorldGenerator`. `VoxelverseGenerator` is the Phase 6 generator described in [worldgen.md](worldgen.md): biomes, rivers, vegetation, roads and bridges between the zones, the legacy zone interiors inside them. It is what the game runs on (`createWorkerGenerator.ts` for the workers, `gameWorld.ts` for the main thread). `LegacyZoneAdapter` wraps the old zones alone and is kept as the reference the parity and timing tests compare against; the game does not use it. |
@@ -35,12 +35,13 @@ What the state bits mean, per model (`engine/models/`, details and the quads eac
 | `StairModel` | bits 0-1, bit 2 | facing, the way you climb (the tall back is on that side): 0 north (-z), 1 east (+x), 2 south (+z), 3 west (-x); bit 2 set is upside down. Build it with `stairState(facing, upsideDown)` |
 | `FenceModel`, `PaneModel` | none | which sides they join is read from the four neighbours whenever the block is meshed or bumped into, never stored |
 | `CrossModel`, `CropModel`, `BoxModel`, `PlateModel` | none | one look each (a crop's growth stage is a block of its own) |
+| `OrientedBoxModel` | bits 0-1 | quarter turns clockwise from how the boxes are written, 0 to 3: a ridge cap with its horn, an awning, a curtain, a sign. The texture turns with the boxes |
 
 A model ignores state bits it does not use, so a stray bit never changes anything. Bit 3 of a stair's state and bits 1 to 3 of a slab's are unused today; a model that starts using bits must say so in this table. A new model kind declares its states here and in [models.md](models.md), and shows up in `?sandbox=models` by itself.
 
 ## Blocks
 
-`BlockRegistry` holds a `BlockDef` per block: id, name, flat colour, `solid`, `opaque`, `emits`, and optionally `lightDim`, `faces`, `tint`, `model` and `holdsWater`. The legacy blocks keep their old `BlockType` numbers as ids, so the old zones work without changes. Registration rejects duplicate ids and names, any colour that is not `#rrggbb`, a `faces` object with a missing name and a `tint` other than `grass` or `foliage`.
+`BlockRegistry` holds a `BlockDef` per block: id, name, flat colour, `solid`, `opaque`, `emits`, and optionally `lightDim`, `faces`, `tint`, `model`, `holdsWater` `sway` (how far the wind moves it, 0 to 1, see [effects.md](effects.md)), `fx` (a set of `BlockFx` bits from `engine/blockFx.ts`: which living-world effects start from the block) and `flicker` (how strongly its glow flickers, 0 to 1). The legacy blocks keep their old `BlockType` numbers as ids, so the old zones work without changes. Registration rejects duplicate ids and names, any colour that is not `#rrggbb`, a `faces` object with a missing name and a `tint` other than `grass` or `foliage`.
 
 ### Light
 
@@ -64,6 +65,9 @@ A block with no `faces`, or whose face names a tile the catalog does not have, i
 ```ts
 model?: BlockModel;      // default: a plain cube
 holdsWater?: boolean;    // the cell also holds a cube of water (a lily pad)
+sway?: number;           // 0..1, how far the wind moves the block (leaves, grass, bamboo); visual only
+fx?: number;             // BlockFx bits: PETALS, HABITAT, SMOKE, LAMP, EMBERS; where particles start from; visual only
+flicker?: number;        // 0..1, how strongly the block's own glow flickers (a lantern 0.5, a hearth 1); visual only
 ```
 
 `model` says what the block looks like, where it can be bumped into and which sides of its cell it covers. A block with no model, and any block whose id the registry does not know, is a cube, so a block added by another branch with only an id and a colour still draws as a full cube in its flat colour. `registry.model(id)` is the lookup. `opaque` now means "a solid material that hides the faces of neighbours it covers": a stair is opaque but only hides what its model covers. Models, their state bits and how faces are culled against them are in [models.md](models.md).
@@ -84,14 +88,14 @@ Loaded chunks answer from their stored cells. Anything else, which means a chunk
 
 ## Generator interface
 
-`generateChunk(chunk, options?)` takes an optional `{ lod }`: `LodLevel.HIGH` (the default) or `LodLevel.LOW`, which a generator may use to leave out small detail that nobody can see from far away. `VoxelWorld.loadChunk` and the parity tests use the default. The mesh workers pass HIGH within 2 chunks of the player and LOW beyond. `sampleBlock` always answers at full detail. A generator may also implement `sampleCell(x, y, z)`, the whole cell with its state, which the mesher uses for the ring around a chunk and `VoxelWorld.getCell` for unloaded chunks; without it the state of those cells reads as 0 (neither the legacy zones nor the Phase 6 generator place any).
+`generateChunk(chunk, options?)` takes an optional `{ lod }`: `LodLevel.HIGH` (the default) or `LodLevel.LOW`, which a generator may use to leave out small detail that nobody can see from far away. `VoxelWorld.loadChunk` and the parity tests use the default. The mesh workers pass HIGH within 2 chunks of the player and LOW beyond. `sampleBlock` always answers at full detail. A generator may also implement `sampleCell(x, y, z)`, the whole cell with its state, which the mesher uses for the ring around a chunk and `VoxelWorld.getCell` for unloaded chunks; without it the state of those cells reads as 0. `VoxelverseGenerator` implements it (zones answer `getCell`), because the Tempest city places stairs, awnings and ridge horns whose facing must survive a chunk border; the legacy zones place none.
 
 ## Legacy adapter
 
 The game no longer uses it (see [worldgen.md](worldgen.md#wired-into-the-game)); it stays as the reference that the Phase 6 generator's zone cores are checked against, and these parity tests keep guarding the zones themselves. `LegacyZoneAdapter` fills a chunk exactly the way `getBlockAt` answers a single block (at HIGH detail; at LOW it passes `LodLevel.LOW` to the zones, which then skip lanterns, crops, lily pads and the like): stone below the ground, water above it up to the water level, and the zone's own blocks from the ground up to 64 blocks above. Tests compare it with the old function:
 
 - 10,000 random points across 50 chunks, including the coast and mountains.
-- Every block above the ground in 12 landmark chunks (the Great Tower, Tempest's Coliseum and Town Hall, Greensom, Bosse, Fremmevilla, Magnolia), more than 500,000 comparisons.
+- Every block above the ground in 12 landmark chunks (the Great Tower, Greensom, Bosse, Fremmevilla, Magnolia and, before step 7.5, Tempest's Coliseum and Town Hall), more than 500,000 comparisons. Tempest is no longer compared with the adapter, since the game's Tempest is the city zone; the old zone is still the legacy adapter's Tempest.
 - 5,000 points in chunks that are not loaded.
 
 ## Meshing and rendering architecture

@@ -7,6 +7,7 @@ import { Apple, Flower, LilyPad, Sugarcane, TallGrass } from './recipes/plants';
 import { Dirt, Farmland, FarmlandSide, GrassSide, GrassTop, Leaves, Path, Sand, Snow, Speckle, Stone, Water, Wheat } from './recipes/natural';
 import { Bamboo, BambooLeaves, Fern, Mushroom, Reeds, Wildflower, fallenLeaves, sakuraPetals } from './recipes/undergrowth';
 import { Blossom, CedarLeaves, Gravel, Granite, Moss, Mud, Podzol, SnowyPine, SoilSide } from './recipes/wilds';
+import { tempestRecipes } from './recipes/tempest';
 import { hex, palette } from './Pixels';
 
 export interface CatalogEntry {
@@ -53,8 +54,8 @@ export class TextureCatalog {
   }
 }
 
-export const createDefaultCatalog = (): TextureCatalog =>
-  new TextureCatalog()
+export const createDefaultCatalog = (): TextureCatalog => {
+  const catalog = new TextureCatalog()
     // Ground and terrain
     .register('grass_top', new GrassTop())
     .register('grass_side', new GrassSide())
@@ -139,3 +140,7 @@ export const createDefaultCatalog = (): TextureCatalog =>
     .register('slime', new Slime())
     .register('lantern', new Lantern())
     .register('speckle', new Speckle('speckle', palette('#6e6e72', '#808085', '#929297', '#a5a5aa'), palette('#4f4f53', '#c9c9cd'), 10));
+  // The Tempest set: content/blocksTempest.ts
+  for (const recipe of tempestRecipes()) catalog.register(recipe.id, recipe);
+  return catalog;
+};

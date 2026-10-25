@@ -16,7 +16,8 @@ export class MagnoliaZone extends Zone {
     return {
       fogColor: '#fce4ec', // Pinkish magic
       skyTint: '#f8bbd0',
-      fogDensity: 0.02
+      fogDensity: 0.02,
+      clouds: 0.5,
     };
   }
 

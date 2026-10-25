@@ -33,8 +33,9 @@ A `ModelQuad` is one face, ready to copy into the mesh: four corners counter-clo
 | `PaneModel` | a thin upright pane, two sixteenths thick, joining sideways | unused, connections read from the neighbours | glass pane (92) |
 | `CrossModel(width, height)` | two planes crossing on the diagonals, each drawn on both sides | unused | flowers, tall grass, sugarcane, and the nature plants: bamboo, bamboo leaves, fern, reeds, four wildflowers, two mushrooms (ids 52 to 55, 58 to 63) |
 | `CropModel` | four planes in a number sign, a quarter in from each edge, each on both sides, a sixteenth lower than the cell | unused (the growth stage is in the tile: one block per stage) | wheat and its two growth stages |
-| `BoxModel(boxes, uv)` | one or more fixed boxes | unused | small rock, magic crystal, lantern, red apple, and farmland (a cube 15/16 high) |
-| `PlateModel(inset, y)` | a flat square 1/16 thick, lying at height `y` | unused | lily pad, fallen leaves and sakura petals (ids 64, 65: `PlateModel(0, 0)`, a carpet over the whole cell) |
+| `BoxModel(boxes, uv)` | one or more fixed boxes | unused | small rock, magic crystal, lantern, red apple, and farmland (a cube 15/16 high); and most of Tempest's props, lanterns, columns, the basin, tatami and furniture ([tempest-blocks.md](tempest-blocks.md#models)) |
+| `PlateModel(inset, y)` | a flat square 1/16 thick, lying at height `y` | unused | lily pad, fallen leaves and sakura petals (ids 64, 65: `PlateModel(0, 0)`, a carpet over the whole cell), and in Tempest the koi pond and the stepping stones |
+| `OrientedBoxModel(boxes, uv)` | boxes written in one orientation that can stand four ways, the texture turning with them | bits 0 and 1: quarter turns clockwise, 0 to 3 | Tempest's ridge caps and horned ends, awnings, noren curtains, signboard and laundry pole (ids 156 to 159, 193 to 199) |
 
 **Stair facing** is the way you climb: the tall back is on that side and the low step on the other. Facings turn clockwise seen from above: 0 north (-z), 1 east (+x), 2 south (+z), 3 west (-x), the order of `HORIZONTAL_SIDES`. `stairState(facing, upsideDown)` builds the state byte. Only straight stairs exist, no corners.
 
@@ -107,11 +108,12 @@ Stairs and slabs are `solid` and `opaque` (so they go in the opaque bucket and c
 | --- | --- |
 | `?sandbox=models` | everything: the stairs and slabs on the left; the house, the fence and pane joins, and the single-state models on the right |
 | `?sandbox=models&view=close` | one stair block in all eight states (the four facings, then the same four upside down) and two slab blocks, bottom and top |
-| `?sandbox=models&view=joins` | a fence and a pane beside nothing, a copy of themselves, and a stone brick and glass cube |
+| `?sandbox=models&view=joins` | a fence and a pane beside nothing, a copy of themselves, and a stone brick and glass cube (the wood fence and the glass pane; the whole page shows every fence and pane block) |
+| `?sandbox=models&view=oriented` | every oriented block in its four turns, captioned `turn 1` to `turn 3` |
 | `?sandbox=models&view=house` | the house alone, from the south east |
 | `&cam=px,py,pz,tx,ty,tz` | an explicit camera, on any view |
 
-Sections, top to bottom: **stairs** (six stair blocks, eight cells each, captioned with the facing and a triangle for upside down, the block id on the first), **slabs** (bottom and top for each of six blocks), **fence** and **pane** (eight surroundings each: alone, pair, line, corner, T, cross, against stone brick, against glass), and the one-state models (plants, crops, lantern, rock, farmland, lily pad, with the block id and model kind). The fence row shows the join rules: it reaches stone brick and other fences but leaves the glass cube alone; the pane row shows panes joining stone and glass, and the lone pane drawing its cross.
+Sections, top to bottom (the whole page also has an **oriented boxes** section, four turns of each, and shows every fence and pane block, not only the first): **stairs** (six stair blocks, eight cells each, captioned with the facing and a triangle for upside down, the block id on the first), **slabs** (bottom and top for each of six blocks), **fence** and **pane** (eight surroundings each: alone, pair, line, corner, T, cross, against stone brick, against glass), and the one-state models (plants, crops, lantern, rock, farmland, lily pad, with the block id and model kind). The fence row shows the join rules: it reaches stone brick and other fences but leaves the glass cube alone; the pane row shows panes joining stone and glass, and the lone pane drawing its cross.
 
 ![Stairs in all eight states and slabs, close up](screens/p4/models-close.png)
 
@@ -133,6 +135,16 @@ node bench/run.mjs --url "http://localhost:3101/?sandbox=models&view=close&cam=8
 node bench/run.mjs --url "http://localhost:3101/?sandbox=models&view=joins" --shot docs/screens/p4/models-joins.png
 node bench/run.mjs --url "http://localhost:3101/?sandbox=models&view=house" --shot docs/screens/p4/models-house.png
 ```
+
+## Oriented boxes
+
+`OrientedBoxModel` (`engine/models/OrientedBoxModel.ts`, added with the Tempest set) is for a shape that has to stand more than one way: you write the boxes once, as if the shape faced one way, and the block's state says how many quarter turns clockwise (seen from above, around the middle of the cell) it is turned. North becomes east at one turn, south at two, west at three. What turns with it:
+
+- the **boxes**, by `rotateBox` (the same function the stairs use, now in `shape.ts` and re-exported from `ShapeModel.ts`);
+- the **texture**: `compileBoxes(parts, uv, collision, uvTurns)` looks each face's texture coordinates up where the face was before the turn (`unturn`), so a stripe that ran north to south on the written shape still runs along it, and a tile laid over the cell in `cell` mode shows the same picture turned;
+- **collision, coverage and culling**: a face that lies flat against a side of the cell covers and is hidden by the neighbour on the side it moved to.
+
+Only boxes built by turning should use `uvTurns`; a model of its own states (stairs) keeps the old behaviour. Models that use it must say what their written orientation is: the Tempest ridge caps are written running east to west with the horn at the east end, the awnings with the wall to the north, the curtains and signs as planes along x ([tempest-blocks.md](tempest-blocks.md#orientedboxmodel)). `tests/models/oriented.test.ts` checks the geometry, the collision, the texture of every quad after every turn, the culling and that bits 2 and 3 do nothing.
 
 ## Adding a model
 

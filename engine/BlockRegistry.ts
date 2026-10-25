@@ -1,3 +1,4 @@
+import { FX_ALL } from './blockFx';
 import { MAX_BLOCK_ID } from './cell';
 import { BlockModel } from './models/BlockModel';
 import { CUBE_MODEL } from './models/CubeModel';
@@ -34,6 +35,17 @@ export interface BlockDef {
   model?: BlockModel;
   // The cell also holds a cube of water, so water beside it is not drawn against it (a lily pad sits in water).
   holdsWater?: boolean;
+  // How far the wind moves the block, 0 (never) to 1 (a blade of grass). Purely visual: the mesher writes a per-vertex
+  // weight from it and the chunk material displaces by that weight (see docs/effects.md). Collision, light and culling
+  // never see it. A full cube (leaves) sways by the same amount everywhere; any other shape sways more toward its top and
+  // not at all at its base, and a stack of the same block (bamboo, reeds) sways as one stalk.
+  sway?: number;
+  // Which living-world effects start from this block: a bit set of BlockFx (see engine/blockFx.ts). Purely visual, like sway.
+  fx?: number;
+  // How strongly the block's own glow flickers, 0 (steady) to 1 (a fire). The mesher writes it per vertex and the chunk
+  // shader modulates the block's brightness by a time-based pattern (docs/effects.md): the baked light is not touched, so
+  // nothing is re-meshed. Only blocks that emit light make sense here.
+  flicker?: number;
 }
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
@@ -45,6 +57,9 @@ export class BlockRegistry {
   private readonly opaqueTable = new Uint8Array(MAX_BLOCK_ID + 1);
   private readonly emitTable = new Uint8Array(MAX_BLOCK_ID + 1);
   private readonly dimTable = new Uint8Array(MAX_BLOCK_ID + 1);
+  private readonly swayTable = new Float32Array(MAX_BLOCK_ID + 1);
+  private readonly fxTable = new Uint8Array(MAX_BLOCK_ID + 1);
+  private readonly flickerTable = new Float32Array(MAX_BLOCK_ID + 1);
   private readonly modelTable: BlockModel[] = new Array(MAX_BLOCK_ID + 1).fill(CUBE_MODEL);
 
   get size(): number {
@@ -61,6 +76,15 @@ export class BlockRegistry {
     }
     if (def.lightDim !== undefined && (!Number.isInteger(def.lightDim) || def.lightDim < 0 || def.lightDim > 15)) {
       throw new RangeError(`Block ${def.name} has lightDim ${def.lightDim}, expected 0..15`);
+    }
+    if (def.sway !== undefined && !(def.sway >= 0 && def.sway <= 1)) {
+      throw new RangeError(`Block ${def.name} has sway ${def.sway}, expected 0..1`);
+    }
+    if (def.fx !== undefined && (!Number.isInteger(def.fx) || def.fx < 0 || def.fx > FX_ALL)) {
+      throw new RangeError(`Block ${def.name} has fx ${def.fx}, expected a set of BlockFx bits (0..${FX_ALL})`);
+    }
+    if (def.flicker !== undefined && !(def.flicker >= 0 && def.flicker <= 1)) {
+      throw new RangeError(`Block ${def.name} has flicker ${def.flicker}, expected 0..1`);
     }
     if (!HEX_COLOR.test(def.color)) {
       throw new Error(`Block ${def.name} has color ${def.color}, expected #rrggbb`);
@@ -91,6 +115,9 @@ export class BlockRegistry {
     this.opaqueTable[frozen.id] = frozen.opaque ? 1 : 0;
     this.emitTable[frozen.id] = frozen.emits;
     this.dimTable[frozen.id] = frozen.lightDim ?? 0;
+    this.swayTable[frozen.id] = frozen.sway ?? 0;
+    this.fxTable[frozen.id] = frozen.fx ?? 0;
+    this.flickerTable[frozen.id] = frozen.flicker ?? 0;
     this.modelTable[frozen.id] = frozen.model ?? CUBE_MODEL;
     return frozen;
   }
@@ -131,6 +158,21 @@ export class BlockRegistry {
 
   lightDim(id: number): number {
     return this.dimTable[id];
+  }
+
+  // How far the wind moves the block, 0 to 1. Unknown ids do not sway.
+  sway(id: number): number {
+    return this.swayTable[id];
+  }
+
+  // The living-world effects that start from the block, as a set of BlockFx bits. Unknown ids have none.
+  fx(id: number): number {
+    return this.fxTable[id];
+  }
+
+  // How strongly the block's glow flickers, 0 to 1. Unknown ids do not flicker.
+  flicker(id: number): number {
+    return this.flickerTable[id];
   }
 
   // The model of a block. Unknown ids read as plain cubes, which is how the mesher draws them (as magenta cubes).

@@ -6,20 +6,20 @@ import { AtmosphereSettings } from './Zone';
 // meadow changes nothing, and each biome nudges it only a little: a green haze under dense woods, a pale mist over
 // wetland, crisp and pale over the mountains and the coast. Densities stay at or under the 0.02 reference so the fog
 // never closes in on the horizon (see docs/sky.md). Colours are hex strings like every zone's.
-export const WILDERNESS_BASE: AtmosphereSettings = { fogColor: '#87ceeb', skyTint: '#f4f9ff', fogDensity: 0.015 };
+export const WILDERNESS_BASE: AtmosphereSettings = { fogColor: '#87ceeb', skyTint: '#f4f9ff', fogDensity: 0.015, clouds: 0.42 };
 
 const BIOME_ATMOSPHERE: Readonly<Record<Biome, AtmosphereSettings>> = {
   [Biome.MEADOW]: WILDERNESS_BASE,
-  [Biome.BIRCH_WOOD]: { fogColor: '#8dcfdc', skyTint: '#f1f9fa', fogDensity: 0.016 },
-  [Biome.OAK_WOOD]: { fogColor: '#8ccfd4', skyTint: '#f0f9f8', fogDensity: 0.016 },
-  [Biome.CEDAR_FOREST]: { fogColor: '#86cbcc', skyTint: '#ecf7f6', fogDensity: 0.018 },
-  [Biome.PINE_FOREST]: { fogColor: '#88cad0', skyTint: '#edf6f8', fogDensity: 0.018 },
-  [Biome.BAMBOO_GROVE]: { fogColor: '#92d4c8', skyTint: '#eff9f5', fogDensity: 0.018 },
-  [Biome.SAKURA_GROVE]: { fogColor: '#9ccfee', skyTint: '#f6f6ff', fogDensity: 0.015 },
-  [Biome.WETLAND]: { fogColor: '#aed6e0', skyTint: '#f4f9fb', fogDensity: 0.02 },
-  [Biome.ROCKY_HILLS]: { fogColor: '#98cbe9', skyTint: '#f4f9ff', fogDensity: 0.014 },
-  [Biome.ALPINE]: { fogColor: '#addaf3', skyTint: '#f2f8ff', fogDensity: 0.012 },
-  [Biome.BEACH]: { fogColor: '#a6d9ef', skyTint: '#f6fbff', fogDensity: 0.014 },
+  [Biome.BIRCH_WOOD]: { fogColor: '#8dcfdc', skyTint: '#f1f9fa', fogDensity: 0.016, clouds: 0.42 },
+  [Biome.OAK_WOOD]: { fogColor: '#8ccfd4', skyTint: '#f0f9f8', fogDensity: 0.016, clouds: 0.42 },
+  [Biome.CEDAR_FOREST]: { fogColor: '#86cbcc', skyTint: '#ecf7f6', fogDensity: 0.018, clouds: 0.5 },
+  [Biome.PINE_FOREST]: { fogColor: '#88cad0', skyTint: '#edf6f8', fogDensity: 0.018, clouds: 0.5 },
+  [Biome.BAMBOO_GROVE]: { fogColor: '#92d4c8', skyTint: '#eff9f5', fogDensity: 0.018, clouds: 0.5 },
+  [Biome.SAKURA_GROVE]: { fogColor: '#9ccfee', skyTint: '#f6f6ff', fogDensity: 0.015, clouds: 0.46 },
+  [Biome.WETLAND]: { fogColor: '#aed6e0', skyTint: '#f4f9fb', fogDensity: 0.02, clouds: 0.6 },
+  [Biome.ROCKY_HILLS]: { fogColor: '#98cbe9', skyTint: '#f4f9ff', fogDensity: 0.014, clouds: 0.34 },
+  [Biome.ALPINE]: { fogColor: '#addaf3', skyTint: '#f2f8ff', fogDensity: 0.012, clouds: 0.28 },
+  [Biome.BEACH]: { fogColor: '#a6d9ef', skyTint: '#f6fbff', fogDensity: 0.014, clouds: 0.34 },
 };
 
 // The wilderness atmosphere over a biome, or the plain base where the biome is unknown.

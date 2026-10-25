@@ -1,7 +1,7 @@
 import { BlockRegistry } from '../engine/BlockRegistry';
 import { Chunk } from '../engine/Chunk';
 import { WorldGenerator } from '../engine/WorldGenerator';
-import { cellId, packCell } from '../engine/cell';
+import { AIR_CELL, Cell, cellId, packCell } from '../engine/cell';
 import { CHUNK_SIZE, WORLD_MAX_Y, WORLD_MIN_Y } from '../engine/coords';
 import { LodLevel } from '../zones/Zone';
 import { BlockType, WATER_LEVEL, WORLD_SEED } from '../worldConstants';
@@ -74,25 +74,25 @@ export class VoxelverseGenerator implements WorldGenerator {
     return dy > POST_FENCE ? BlockType.LANTERN : BlockType.WOOD_FENCE;
   }
 
-  // One rule for every block of the terrain itself, so sampleBlock and generateChunk cannot drift apart.
-  private terrainBlock(col: Column, x: number, y: number, z: number, lod: LodLevel): number {
+  // One rule for every cell of the terrain itself, so sampleCell and generateChunk cannot drift apart.
+  private terrainCell(col: Column, x: number, y: number, z: number, lod: LodLevel): Cell {
     const ground = col.ground;
     if (col.wild) {
       if (col.road.bridge && col.road.onRoad) {
         const b = this.bridgeBlock(col, y);
-        if (b !== NO_BLOCK) return b;
+        if (b !== NO_BLOCK) return packCell(b);
       }
-      if (y < ground - col.depth) return BlockType.STONE;
-      if (y < ground) return col.subsoil;
-      if (y === ground) return col.surface;
-      return y <= WATER_LEVEL ? BlockType.WATER : BlockType.AIR;
+      if (y < ground - col.depth) return packCell(BlockType.STONE);
+      if (y < ground) return packCell(col.subsoil);
+      if (y === ground) return packCell(col.surface);
+      return y <= WATER_LEVEL ? packCell(BlockType.WATER) : AIR_CELL;
     }
-    if (y < ground) return BlockType.STONE;
-    if (y > ground && y <= WATER_LEVEL) return BlockType.WATER;
+    if (y < ground) return packCell(BlockType.STONE);
+    if (y > ground && y <= WATER_LEVEL) return packCell(BlockType.WATER);
     // A road painted onto a zone's ground clears everything above it, houses and factories included.
-    if (col.road.onRoad) return y === ground ? col.surface : BlockType.AIR;
-    if (y - ground > ZONE_SCAN_ABOVE) return BlockType.AIR;
-    return col.zone.getBlock(x, y, z, ground, lod);
+    if (col.road.onRoad) return y === ground ? packCell(col.surface) : AIR_CELL;
+    if (y - ground > ZONE_SCAN_ABOVE) return AIR_CELL;
+    return col.zone.getCell(x, y, z, ground, lod);
   }
 
   generateChunk(chunk: Chunk, options?: GenerateOptions): void {
@@ -138,8 +138,8 @@ export class VoxelverseGenerator implements WorldGenerator {
         const top = Math.min(ground + ZONE_SCAN_ABOVE, WORLD_MAX_Y);
         for (let y = ground; y <= top; y++) {
           if (y > ground && y <= WATER_LEVEL) continue; // already water
-          const block = col.zone.getBlock(x, y, z, ground, lod);
-          if (block !== BlockType.AIR) chunk.setCell(lx, y, lz, packCell(block));
+          const cell = col.zone.getCell(x, y, z, ground, lod);
+          if (cell !== AIR_CELL) chunk.setCell(lx, y, lz, cell);
         }
       }
     }
@@ -167,15 +167,20 @@ export class VoxelverseGenerator implements WorldGenerator {
   }
 
   sampleBlock(x: number, y: number, z: number): number {
+    return cellId(this.sampleCell(x, y, z));
+  }
+
+  // The whole cell, so a stair or an awning at the edge of a chunk is read with its facing.
+  sampleCell(x: number, y: number, z: number): Cell {
     const col = this.columns.sample(x, z, this.scratch);
-    const terrain = this.terrainBlock(col, x, y, z, LodLevel.HIGH);
+    const terrain = this.terrainCell(col, x, y, z, LodLevel.HIGH);
     if (!col.wild) return terrain;
-    const block = this.features.blockAt(x, y, z, col, terrain);
+    const block = this.features.blockAt(x, y, z, col, cellId(terrain));
     if (col.ground > WATER_LEVEL && this.roads.hasPost(x, z)) {
       const post = VoxelverseGenerator.postBlock(col, y);
-      if (post !== NO_BLOCK && canReplace(block, post)) return post;
+      if (post !== NO_BLOCK && canReplace(block, post)) return packCell(post);
     }
-    return block;
+    return block === cellId(terrain) ? terrain : packCell(block);
   }
 
   terrainHeight(x: number, z: number): number {

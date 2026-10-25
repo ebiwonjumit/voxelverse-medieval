@@ -1,0 +1,69 @@
+[
+  {
+    "name": "river-crops",
+    "shot": "1812,14,-40,-120,-4",
+    "pair": true
+  },
+  {
+    "name": "river-crops-still",
+    "shot": "1812,14,-40,-120,-4",
+    "query": "&sway=0&waterfx=0"
+  },
+  {
+    "name": "farms",
+    "shot": "1690,18,60,-90,-12",
+    "pair": true
+  },
+  {
+    "name": "pond",
+    "shot": "-868,11,1123,109,-22",
+    "pair": true
+  },
+  {
+    "name": "pond-still",
+    "shot": "-868,11,1123,109,-22",
+    "query": "&waterfx=0"
+  },
+  {
+    "name": "pond-dusk",
+    "shot": "-868,11,1123,109,-22",
+    "query": "&sky=dusk"
+  },
+  {
+    "name": "pond-night",
+    "shot": "-868,11,1123,109,-22",
+    "query": "&sky=night"
+  },
+  {
+    "name": "sakura-grove",
+    "shot": "1500,14,1000,0,0",
+    "pair": true
+  },
+  {
+    "name": "bamboo-grove",
+    "shot": "994,16,-860,-41,-25",
+    "pair": true
+  },
+  {
+    "name": "river-dusk",
+    "shot": "1812,14,-40,-120,-4",
+    "query": "&sky=dusk"
+  },
+  {
+    "name": "avenue-eye",
+    "shot": "1385,10.8,-1,-90,0",
+    "pair": true
+  },
+  {
+    "name": "diagonal-street-eye",
+    "shot": "1560,10.8,-121,-135,0"
+  },
+  {
+    "name": "gardens",
+    "shot": "1700,30,130,90,-25"
+  },
+  {
+    "name": "square-eye",
+    "shot": "1500,12,16,0,-5"
+  }
+]

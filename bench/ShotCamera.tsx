@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect } from 'react';
 import { useThree } from '@react-three/fiber';
 import { playerState } from '../playerState';
-import { getWorldProbe } from './worldProbe';
+import { getWorldProbe, readyGatesOpen } from './worldProbe';
 import { Shot } from './shot';
 
 const POLL_MS = 250;
@@ -25,7 +25,7 @@ const ShotCamera: React.FC<{ shot: Shot }> = ({ shot }) => {
     const flags = window as unknown as { __SHOT_READY__?: boolean };
     flags.__SHOT_READY__ = false;
     const timer = setInterval(() => {
-      if (getWorldProbe()?.isReady()) {
+      if (getWorldProbe()?.isReady() && readyGatesOpen()) {
         flags.__SHOT_READY__ = true;
         clearInterval(timer);
       }

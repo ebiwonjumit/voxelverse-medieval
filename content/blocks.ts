@@ -1,4 +1,5 @@
 import { BlockFaces, BlockRegistry, BlockTint } from '../engine/BlockRegistry';
+import { BlockFx } from '../engine/blockFx';
 import { BlockModel } from '../engine/models/BlockModel';
 import { BoxModel } from '../engine/models/BoxModel';
 import { CropModel } from '../engine/models/CropModel';
@@ -8,6 +9,7 @@ import { PlateModel } from '../engine/models/PlateModel';
 import { BlockType, COLORS } from '../worldConstants';
 import { registerNatureBlocks } from './blocksNature';
 import { registerShapedBlocks } from './blocksShaped';
+import { registerTempestBlocks } from './blocksTempest';
 
 // The legacy blocks, registered under their old BlockType numbers so the existing zones keep working.
 // Flat colours come from COLORS. They are the fallback tile for blocks without faces, so blocks added later
@@ -168,6 +170,41 @@ const TINT = new Map<BlockType, BlockTint>([
 // Leaves are see-through but shade what is under them: sky light does not fall through a canopy for free.
 const LEAF_BLOCKS = new Set<BlockType>([BlockType.LEAVES, BlockType.BIRCH_LEAVES, BlockType.PINE_LEAVES]);
 
+// How far the wind moves each block (BlockDef.sway, docs/effects.md). Canopies stir a little over the whole block;
+// grass, flowers and crops lean with their tops. Pine needles are stiffer than oak and birch, the lily pad lies on
+// the water and does not move.
+const SWAY = new Map<BlockType, number>([
+  [BlockType.LEAVES, 0.35],
+  [BlockType.BIRCH_LEAVES, 0.4],
+  [BlockType.PINE_LEAVES, 0.25],
+  [BlockType.TALL_GRASS, 0.9],
+  [BlockType.FLOWER_YELLOW, 0.75],
+  [BlockType.FLOWER_RED, 0.75],
+  [BlockType.SUGARCANE, 0.6],
+  [BlockType.WHEAT, 0.65],
+  [BlockType.WHEAT_STAGE_1, 0.65],
+  [BlockType.WHEAT_STAGE_2, 0.65],
+]);
+
+// What the living-world effects do with a block (BlockDef.fx, docs/effects.md): fireflies hide in the plants a meadow is made
+// of, and a lantern gets a halo at night. Both purely visual.
+const FX = new Map<BlockType, number>([
+  [BlockType.TALL_GRASS, BlockFx.HABITAT],
+  [BlockType.FLOWER_YELLOW, BlockFx.HABITAT],
+  [BlockType.FLOWER_RED, BlockFx.HABITAT],
+  [BlockType.SUGARCANE, BlockFx.HABITAT],
+  [BlockType.WHEAT, BlockFx.HABITAT],
+  [BlockType.WHEAT_STAGE_1, BlockFx.HABITAT],
+  [BlockType.WHEAT_STAGE_2, BlockFx.HABITAT],
+  [BlockType.LILY_PAD, BlockFx.HABITAT],
+  [BlockType.LANTERN, BlockFx.LAMP],
+]);
+
+// How much a light's own glow flickers (BlockDef.flicker): a lantern flame, a little.
+const FLICKER = new Map<BlockType, number>([
+  [BlockType.LANTERN, 0.6],
+]);
+
 const EMITS = new Map<BlockType, number>([
   [BlockType.LANTERN, 15],
   [BlockType.MAGIC_CRYSTAL, 10],
@@ -188,11 +225,15 @@ export const createDefaultRegistry = (): BlockRegistry => {
       faces: type === BlockType.AIR ? undefined : FACES[type as Colored],
       tint: TINT.get(type),
       model: MODELS.get(type),
+      sway: SWAY.get(type),
+      fx: FX.get(type),
+      flicker: FLICKER.get(type),
       // The old renderer drew a water cube under every lily pad.
       holdsWater: type === BlockType.LILY_PAD ? true : undefined,
     });
   }
   registerNatureBlocks(registry);
   registerShapedBlocks(registry);
+  registerTempestBlocks(registry);
   return registry;
 };
