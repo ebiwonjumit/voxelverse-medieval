@@ -1,6 +1,6 @@
 import { NatureBlock } from '../../../content/blocksNature';
 import { ShapedBlock } from '../../../content/blocksShaped';
-import { TempestBlock as T } from '../../../content/blocksTempest';
+import { TempestBlock as T, TempestFxBlock } from '../../../content/blocksTempest';
 import { BlockType } from '../../../worldConstants';
 import { Rng } from '../../noise';
 import { Blueprint } from '../../structures/Blueprint';
@@ -209,6 +209,7 @@ const smithy = (b: BlueprintBuilder, lot: Lot, flip: boolean, lanterns: boolean)
   const chZ = walls.z0 + 3;
   b.column(chX, chZ, 1, info.crestTop + 2, 'wallBase');
   b.set(chX, info.crestTop + 3, chZ, 'stoneSlab', 0);
+  b.set(chX, info.crestTop + 4, chZ, TempestFxBlock.SMOKE_VENT);
   b.set(chX, FLOOR + 1, chZ + 1, T.STONE_LANTERN_LIGHT);
 
   // The forge inside: the furnace at one end of the back wall, the loft stair at the other.

@@ -1,6 +1,6 @@
 import { NatureBlock } from '../../../content/blocksNature';
 import { ShapedBlock } from '../../../content/blocksShaped';
-import { TempestBlock as T } from '../../../content/blocksTempest';
+import { TempestBlock as T, TempestFxBlock } from '../../../content/blocksTempest';
 import { hash2 } from '../../noise';
 import { Blueprint } from '../../structures/Blueprint';
 import { furnish } from '../../tempest/interiors';
@@ -319,10 +319,11 @@ export const hangingSign = (b: BlueprintBuilder, x: number, y: number, z: number
   b.signboard(sx, y - 1, sz, side === NORTH || side === SOUTH ? 'z' : 'x');
 };
 
-/** A chimney stack of mossy stone running through a roof: stands on `y0`, ends above `top` under a slab cap. */
+/** A chimney stack of mossy stone running through a roof: stands on `y0`, ends above `top` under a slab cap and a clay pot, the smoke vent. */
 export const chimneyStack = (b: BlueprintBuilder, x: number, z: number, y0: number, top: number): void => {
   b.column(x, z, y0, top, 'stone');
   b.set(x, top + 1, z, 'stoneSlab', 0);
+  b.set(x, top + 2, z, TempestFxBlock.SMOKE_VENT);
 };
 
 /** A lantern hung on a short fence-post bracket from the wall cell next to (x, y, z): the post at (x, y, z), the lantern under it. */

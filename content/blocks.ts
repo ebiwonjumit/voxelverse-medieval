@@ -1,4 +1,5 @@
 import { BlockFaces, BlockRegistry, BlockTint } from '../engine/BlockRegistry';
+import { BlockFx } from '../engine/blockFx';
 import { BlockModel } from '../engine/models/BlockModel';
 import { BoxModel } from '../engine/models/BoxModel';
 import { CropModel } from '../engine/models/CropModel';
@@ -185,6 +186,25 @@ const SWAY = new Map<BlockType, number>([
   [BlockType.WHEAT_STAGE_2, 0.65],
 ]);
 
+// What the living-world effects do with a block (BlockDef.fx, docs/effects.md): fireflies hide in the plants a meadow is made
+// of, and a lantern gets a halo at night. Both purely visual.
+const FX = new Map<BlockType, number>([
+  [BlockType.TALL_GRASS, BlockFx.HABITAT],
+  [BlockType.FLOWER_YELLOW, BlockFx.HABITAT],
+  [BlockType.FLOWER_RED, BlockFx.HABITAT],
+  [BlockType.SUGARCANE, BlockFx.HABITAT],
+  [BlockType.WHEAT, BlockFx.HABITAT],
+  [BlockType.WHEAT_STAGE_1, BlockFx.HABITAT],
+  [BlockType.WHEAT_STAGE_2, BlockFx.HABITAT],
+  [BlockType.LILY_PAD, BlockFx.HABITAT],
+  [BlockType.LANTERN, BlockFx.LAMP],
+]);
+
+// How much a light's own glow flickers (BlockDef.flicker): a lantern flame, a little.
+const FLICKER = new Map<BlockType, number>([
+  [BlockType.LANTERN, 0.6],
+]);
+
 const EMITS = new Map<BlockType, number>([
   [BlockType.LANTERN, 15],
   [BlockType.MAGIC_CRYSTAL, 10],
@@ -206,6 +226,8 @@ export const createDefaultRegistry = (): BlockRegistry => {
       tint: TINT.get(type),
       model: MODELS.get(type),
       sway: SWAY.get(type),
+      fx: FX.get(type),
+      flicker: FLICKER.get(type),
       // The old renderer drew a water cube under every lily pad.
       holdsWater: type === BlockType.LILY_PAD ? true : undefined,
     });

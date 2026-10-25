@@ -16,7 +16,8 @@ export class FremmevillaZone extends Zone {
     return {
       fogColor: '#e3f2fd', // Cool technological blue
       skyTint: '#bbdefb',
-      fogDensity: 0.015
+      fogDensity: 0.015,
+      clouds: 0.3,
     };
   }
 

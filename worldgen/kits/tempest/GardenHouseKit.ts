@@ -1,4 +1,4 @@
-import { TempestBlock as T } from '../../../content/blocksTempest';
+import { TempestBlock as T, TempestFxBlock } from '../../../content/blocksTempest';
 import { Rng } from '../../noise';
 import { Blueprint } from '../../structures/Blueprint';
 import { BlueprintBuilder, Dir, EAST, NORTH, SOUTH, WEST, rect } from '../../structures/BlueprintBuilder';
@@ -78,6 +78,7 @@ export class GardenHouseKit extends BuildingKit {
     if (chimney) {
       b.column(walls.x0 + 1, walls.z0 + 1, FLOOR + 1, info.crestTop + 1, 'wallBase');
       b.set(walls.x0 + 1, info.crestTop + 2, walls.z0 + 1, 'stoneSlab', 0);
+      b.set(walls.x0 + 1, info.crestTop + 3, walls.z0 + 1, TempestFxBlock.SMOKE_VENT);
     }
 
     // Rooms, and the stair of the villa in the east corner, climbing north.

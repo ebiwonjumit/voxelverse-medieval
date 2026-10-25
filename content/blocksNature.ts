@@ -1,4 +1,5 @@
 import { BlockFaces, BlockRegistry } from '../engine/BlockRegistry';
+import { BlockFx } from '../engine/blockFx';
 import { BlockModel } from '../engine/models/BlockModel';
 import { CrossModel } from '../engine/models/CrossModel';
 import { PlateModel } from '../engine/models/PlateModel';
@@ -48,6 +49,8 @@ interface NatureDef {
   model?: BlockModel;
   // How far the wind moves it (BlockDef.sway). Trunks, stone, litter and mushrooms stand still.
   sway?: number;
+  // What the living-world effects do with it (BlockDef.fx): blossom drops petals, low plants hide fireflies.
+  fx?: number;
 }
 
 const same = (name: string): BlockFaces => ({ top: name, bottom: name, side: name });
@@ -72,17 +75,17 @@ const DEFS: readonly NatureDef[] = [
   { id: NatureBlock.CEDAR_LOG, name: 'cedar_log', color: '#6d4330', kind: 'cube', faces: ends('cedar_log_top', 'cedar_log_side') },
   { id: NatureBlock.CEDAR_LEAVES, name: 'cedar_leaves', color: '#2c6e49', kind: 'leaves', faces: same('cedar_leaves'), sway: 0.3 },
   { id: NatureBlock.SAKURA_LOG, name: 'sakura_log', color: '#4e3b3b', kind: 'cube', faces: ends('sakura_log_top', 'sakura_log_side') },
-  { id: NatureBlock.SAKURA_LEAVES, name: 'sakura_leaves', color: '#f4a7c1', kind: 'leaves', faces: same('sakura_leaves'), sway: 0.45 },
+  { id: NatureBlock.SAKURA_LEAVES, name: 'sakura_leaves', color: '#f4a7c1', kind: 'leaves', faces: same('sakura_leaves'), sway: 0.45, fx: BlockFx.PETALS },
   { id: NatureBlock.BAMBOO, name: 'bamboo', color: '#7fb83d', kind: 'plant', faces: same('bamboo'), model: STALK, sway: 0.8 },
   { id: NatureBlock.BAMBOO_LEAVES, name: 'bamboo_leaves', color: '#5da130', kind: 'plant', faces: same('bamboo_leaves'), model: new CrossModel(1, 1), sway: 1 },
-  { id: NatureBlock.FERN, name: 'fern', color: '#3f7d2c', kind: 'plant', faces: same('fern'), model: TUFT, sway: 0.6 },
-  { id: NatureBlock.REEDS, name: 'reeds', color: '#9aa04a', kind: 'plant', faces: same('reeds'), model: STALK, sway: 0.9 },
+  { id: NatureBlock.FERN, name: 'fern', color: '#3f7d2c', kind: 'plant', faces: same('fern'), model: TUFT, sway: 0.6, fx: BlockFx.HABITAT },
+  { id: NatureBlock.REEDS, name: 'reeds', color: '#9aa04a', kind: 'plant', faces: same('reeds'), model: STALK, sway: 0.9, fx: BlockFx.HABITAT },
   { id: NatureBlock.GRAVEL, name: 'gravel', color: '#8a8d8f', kind: 'cube', faces: same('gravel') },
   { id: NatureBlock.MOSS, name: 'moss', color: '#5f8f3a', kind: 'cube', faces: capped('moss', 'moss_side') },
-  { id: NatureBlock.WILDFLOWER_BLUE, name: 'wildflower_blue', color: '#4f7cff', kind: 'plant', faces: same('wildflower_blue'), model: FLOWER, sway: 0.75 },
-  { id: NatureBlock.WILDFLOWER_WHITE, name: 'wildflower_white', color: '#f5f5f0', kind: 'plant', faces: same('wildflower_white'), model: FLOWER, sway: 0.75 },
-  { id: NatureBlock.WILDFLOWER_PINK, name: 'wildflower_pink', color: '#ff8fb8', kind: 'plant', faces: same('wildflower_pink'), model: FLOWER, sway: 0.75 },
-  { id: NatureBlock.WILDFLOWER_PURPLE, name: 'wildflower_purple', color: '#9b59d0', kind: 'plant', faces: same('wildflower_purple'), model: FLOWER, sway: 0.75 },
+  { id: NatureBlock.WILDFLOWER_BLUE, name: 'wildflower_blue', color: '#4f7cff', kind: 'plant', faces: same('wildflower_blue'), model: FLOWER, sway: 0.75, fx: BlockFx.HABITAT },
+  { id: NatureBlock.WILDFLOWER_WHITE, name: 'wildflower_white', color: '#f5f5f0', kind: 'plant', faces: same('wildflower_white'), model: FLOWER, sway: 0.75, fx: BlockFx.HABITAT },
+  { id: NatureBlock.WILDFLOWER_PINK, name: 'wildflower_pink', color: '#ff8fb8', kind: 'plant', faces: same('wildflower_pink'), model: FLOWER, sway: 0.75, fx: BlockFx.HABITAT },
+  { id: NatureBlock.WILDFLOWER_PURPLE, name: 'wildflower_purple', color: '#9b59d0', kind: 'plant', faces: same('wildflower_purple'), model: FLOWER, sway: 0.75, fx: BlockFx.HABITAT },
   { id: NatureBlock.MUSHROOM_RED, name: 'mushroom_red', color: '#d6362f', kind: 'plant', faces: same('mushroom_red'), model: FUNGUS },
   { id: NatureBlock.MUSHROOM_BROWN, name: 'mushroom_brown', color: '#8b6b4a', kind: 'plant', faces: same('mushroom_brown'), model: FUNGUS },
   { id: NatureBlock.FALLEN_LEAVES, name: 'fallen_leaves', color: '#b5651d', kind: 'plant', faces: same('fallen_leaves'), model: LITTER },
@@ -108,6 +111,7 @@ export const registerNatureBlocks = (registry: BlockRegistry): void => {
       faces: def.faces,
       model: def.model,
       sway: def.sway,
+      fx: def.fx,
     });
   }
 };

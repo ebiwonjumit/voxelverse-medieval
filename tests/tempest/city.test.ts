@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TempestBlock as T } from '../../content/blocksTempest';
+import { TempestBlock as T, TempestFxBlock } from '../../content/blocksTempest';
 import { Chunk } from '../../engine/Chunk';
 import { cellId } from '../../engine/cell';
 import { CHUNK_SIZE, WORLD_MAX_Y, WORLD_MIN_Y } from '../../engine/coords';
@@ -160,5 +160,23 @@ describe('the town in chunks', () => {
     }
     const mean = times.reduce((s, v) => s + v, 0) / times.length;
     expect(mean).toBeLessThan(tolerant(40));
+  });
+});
+
+describe('the smoke vents', () => {
+  it('crown the chimneys of the houses: clay pots on a slab cap, standing on something, with open air above', () => {
+    const vents: Array<[number, number, number]> = [];
+    for (let x = 1240; x <= 1760; x++) {
+      for (let zz = -260; zz <= 260; zz++) {
+        for (let y = 10; y <= 40; y++) if (cellId(zone.sample(x, y, zz)) === TempestFxBlock.SMOKE_VENT) vents.push([x, y, zz]);
+      }
+    }
+    // About one house in three has a chimney, and there are 269 houses.
+    expect(vents.length).toBeGreaterThan(20);
+    for (const [x, y, zz] of vents) {
+      const below = cellId(zone.sample(x, y - 1, zz));
+      expect(below, `${x},${y},${zz}`).not.toBe(0);
+      expect(cellId(zone.sample(x, y + 1, zz)), `${x},${y},${zz}`).toBe(0);
+    }
   });
 });

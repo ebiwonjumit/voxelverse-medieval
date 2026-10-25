@@ -9,6 +9,9 @@ export interface AtmosphereSettings {
   skyTint: string;
   fogDensity: number;
   fixedTime?: number;
+  // How much of the sky the cloud layer covers, 0 (clear: no clouds are drawn) to 1 (overcast). Optional; the sky system's default is
+  // used where a zone does not say (see DEFAULT_CLOUD_COVER in render/SkySystem.ts).
+  clouds?: number;
 }
 
 export abstract class Zone {

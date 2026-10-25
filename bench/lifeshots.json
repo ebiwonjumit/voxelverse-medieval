@@ -1,0 +1,52 @@
+[
+  {
+    "name": "avenue-dusk",
+    "shot": "1500,11,30,0,5",
+    "query": "&sky=dusk"
+  },
+  {
+    "name": "roofs-dusk",
+    "shot": "1440,42,12,0,-26",
+    "query": "&sky=dusk"
+  },
+  {
+    "name": "roofs-noon",
+    "shot": "1440,42,12,0,-26"
+  },
+  {
+    "name": "pond-dusk",
+    "shot": "-868,11,1123,109,-12",
+    "query": "&sky=dusk"
+  },
+  {
+    "name": "pond-night",
+    "shot": "-868,11,1123,109,-12",
+    "query": "&sky=night"
+  },
+  {
+    "name": "garden-night",
+    "shot": "1700,14,125,90,-8",
+    "query": "&sky=night"
+  },
+  {
+    "name": "sakura-grove",
+    "shot": "1500,14,1000,0,0"
+  },
+  {
+    "name": "square-night",
+    "shot": "1500,12,16,0,-5",
+    "query": "&sky=night"
+  },
+  {
+    "name": "meadow-clouds",
+    "shot": "0,10,300,0,18"
+  },
+  {
+    "name": "bosse-clear",
+    "shot": "0,45,-1400,0,10"
+  },
+  {
+    "name": "amestris-overcast",
+    "shot": "-1500,12,0,0,15"
+  }
+]

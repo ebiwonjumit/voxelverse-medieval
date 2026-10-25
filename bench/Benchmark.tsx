@@ -5,7 +5,7 @@ import { MOVE_SPEED, PLAYER_HEIGHT } from '../constants';
 import { voxelWorld } from '../gameWorld';
 import { FrameStats, summarizeFrames } from './stats';
 import { playerState } from '../playerState';
-import { getWorldProbe } from './worldProbe';
+import { getWorldStats } from './worldProbe';
 
 type Waypoint = [number, number];
 
@@ -180,7 +180,7 @@ const Benchmark: React.FC<BenchProps> = ({ mode, onProgress, onDone }) => {
       geometries: info.memory.geometries,
       textures: info.memory.textures,
       heapMB: heapMB(),
-      stats: getWorldProbe()?.getStats?.() ?? null,
+      stats: getWorldStats(),
     });
     r.all.push(...r.frames);
     r.frames = [];
@@ -265,7 +265,7 @@ const Benchmark: React.FC<BenchProps> = ({ mode, onProgress, onDone }) => {
         triangles: info.render.triangles,
         drawCalls: info.render.calls,
         heapMB: heapMB(),
-        stats: getWorldProbe()?.getStats?.() ?? null,
+        stats: getWorldStats(),
       });
       r.nextSample += SOAK_INTERVAL;
     }

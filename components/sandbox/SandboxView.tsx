@@ -96,6 +96,7 @@ const Scene: React.FC<SceneProps> = ({ build, cam, onCount, look, fov }) => {
     const effects = createEffectUniforms();
     effects.sway.value = effectSettings.sway ? 1 : 0;
     effects.water.value = effectSettings.waterAnimation ? 1 : 0;
+    effects.flicker.value = effectSettings.flicker ? 1 : 0;
     const materials = createBlockMaterials(
       textures, time, { value: look.daylight }, { value: new Vector3(...look.skyLight) }, effects,
     );

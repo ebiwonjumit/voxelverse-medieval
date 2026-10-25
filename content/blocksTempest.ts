@@ -1,4 +1,5 @@
 import { BlockFaces, BlockRegistry } from '../engine/BlockRegistry';
+import { BlockFx } from '../engine/blockFx';
 import { Box, BlockModel } from '../engine/models/BlockModel';
 import { BoxModel } from '../engine/models/BoxModel';
 import { FenceModel } from '../engine/models/FenceModel';
@@ -98,6 +99,15 @@ export const TempestBlock = {
   LAUNDRY_POLE: 199,
 } as const;
 
+/**
+ * Blocks of the city that belong to the living-world effects (docs/effects.md), after the set above so the 128..199 range
+ * stays exactly the 72 blocks its tests pin. Never renumber one.
+ */
+export const TempestFxBlock = {
+  /** A clay chimney pot: the smoke vent. Smoke rises from the top of every one near the player. */
+  SMOKE_VENT: 200,
+} as const;
+
 // --- Shapes ----------------------------------------------------------------------------------------------------
 // Boxes are written in pixels of the 16 by 16 tile (x east, y up, z south) and turned into cell units by `px`. Most of
 // them are laid over the whole cell and show the part of their tile they cover (the models' `cell` mapping), so a tile
@@ -153,6 +163,10 @@ interface TempestDef {
   lightDim?: number;
   model?: BlockModel;
   holdsWater?: boolean;
+  /** BlockDef.fx: what the living-world effects do with it. */
+  fx?: number;
+  /** BlockDef.flicker: how much its glow flickers. */
+  flicker?: number;
 }
 
 const same = (name: string): BlockFaces => ({ top: name, bottom: name, side: name });
@@ -217,26 +231,29 @@ const defs = (): TempestDef[] => [
   { id: TempestBlock.DARK_RIDGE_HORN, name: 'dark_ridge_horn', color: '#2f3645', faces: same('dark_ridge'), solid: true, opaque: false, model: new OrientedBoxModel(px(...RIDGE_HORN)) },
   // Windows and light. Paper takes a little of the light it lets through (lightDim), and a lit screen is a lamp behind it.
   { id: TempestBlock.SHOJI_PANE, name: 'shoji_pane', color: '#ebe4d0', faces: same('shoji'), solid: true, opaque: false, lightDim: 2, model: new PaneModel() },
-  { id: TempestBlock.SHOJI_PANE_LIT, name: 'shoji_pane_lit', color: '#fbc063', faces: same('shoji_lit'), solid: true, opaque: false, lightDim: 2, emits: 8, model: new PaneModel() },
+  { id: TempestBlock.SHOJI_PANE_LIT, name: 'shoji_pane_lit', color: '#fbc063', faces: same('shoji_lit'), solid: true, opaque: false, lightDim: 2, emits: 8, model: new PaneModel(), flicker: 0.3 },
   { id: TempestBlock.LATTICE_WINDOW, name: 'lattice_window', color: '#5b4129', faces: same('lattice_window'), solid: true, opaque: false, model: new PaneModel() },
   // The paper lanterns hang at the height of a head (from a lamp arm, a beam, the eave, a ceiling cord) and have no collision: a
   // person walks through one as through a curtain, instead of being stopped by a lamp over a room's floor.
   {
     id: TempestBlock.PAPER_LANTERN_RED, name: 'paper_lantern_red', color: '#d03a2a', faces: faces('black_lacquer', 'paper_lantern_red'),
     solid: false, opaque: false, emits: 14, model: new BoxModel(px([5, 2, 5, 11, 14, 11], [7, 14, 7, 9, 16, 9]), 'cell'),
+    fx: BlockFx.LAMP, flicker: 0.5,
   },
   {
     id: TempestBlock.PAPER_LANTERN_STRIPED, name: 'paper_lantern_striped', color: '#e0a79a', faces: faces('black_lacquer', 'paper_lantern_striped'),
     solid: false, opaque: false, emits: 14, model: new BoxModel(px([5, 2, 5, 11, 14, 11], [7, 14, 7, 9, 16, 9]), 'cell'),
+    fx: BlockFx.LAMP, flicker: 0.5,
   },
   { id: TempestBlock.STONE_LANTERN_BASE, name: 'stone_lantern_base', color: '#8f959a', faces: same('lantern_stone'), solid: true, opaque: false, model: new BoxModel(px(...LANTERN_BASE), 'cell') },
   {
     id: TempestBlock.STONE_LANTERN_LIGHT, name: 'stone_lantern_light', color: '#d9a35a', faces: faces('lantern_stone', 'stone_lantern_light'),
     solid: true, opaque: false, emits: 12, model: new BoxModel(px(...LANTERN_LIGHT), 'cell'),
+    fx: BlockFx.LAMP, flicker: 0.45,
   },
   { id: TempestBlock.STONE_LANTERN_CAP, name: 'stone_lantern_cap', color: '#8f959a', faces: same('lantern_stone'), solid: true, opaque: false, model: new BoxModel(px(...LANTERN_CAP), 'cell') },
-  { id: TempestBlock.BLUE_ORE_LAMP, name: 'blue_ore_lamp', color: '#2f9be0', faces: same('blue_ore_lamp'), emits: 15 },
-  { id: TempestBlock.GREEN_ORE_LAMP, name: 'green_ore_lamp', color: '#38c06a', faces: same('green_ore_lamp'), emits: 13 },
+  { id: TempestBlock.BLUE_ORE_LAMP, name: 'blue_ore_lamp', color: '#2f9be0', faces: same('blue_ore_lamp'), emits: 15, fx: BlockFx.LAMP },
+  { id: TempestBlock.GREEN_ORE_LAMP, name: 'green_ore_lamp', color: '#38c06a', faces: same('green_ore_lamp'), emits: 13, fx: BlockFx.LAMP },
   // Floors, paving and garden stone
   { id: TempestBlock.TATAMI, name: 'tatami', color: '#b9bf80', faces: faces('tatami_top', 'tatami_side'), model: new BoxModel(px([0, 0, 0, 16, 4, 16]), 'cell') },
   { id: TempestBlock.ENGAWA_FLOOR, name: 'engawa_floor', color: '#c4935f', faces: faces('engawa_floor', 'timber_beam') },
@@ -248,7 +265,7 @@ const defs = (): TempestDef[] => [
   { id: TempestBlock.MOSSY_STONE_SLAB, name: 'mossy_stone_slab', color: '#7c8a78', faces: same('mossy_stone'), model: SLAB },
   { id: TempestBlock.MOSSY_STONE_STAIRS, name: 'mossy_stone_stairs', color: '#7c8a78', faces: same('mossy_stone'), model: STAIRS },
   { id: TempestBlock.STONE_BASIN, name: 'stone_basin', color: '#7cb4d0', faces: faces('basin_top', 'ashlar'), solid: true, opaque: false, model: new BoxModel(px(...BASIN), 'cell') },
-  { id: TempestBlock.KOI_POND, name: 'koi_pond', color: '#3b94c4', faces: same('koi'), solid: false, opaque: false, holdsWater: true, model: new PlateModel(0, 0.985) },
+  { id: TempestBlock.KOI_POND, name: 'koi_pond', color: '#3b94c4', faces: same('koi'), solid: false, opaque: false, holdsWater: true, model: new PlateModel(0, 0.985), fx: BlockFx.HABITAT },
   { id: TempestBlock.WATER_JET, name: 'water_jet', color: '#b4e0f2', faces: same('water_jet'), solid: false, opaque: false, model: new BoxModel(px([6, 0, 6, 10, 16, 10], [3, 12, 3, 13, 16, 13]), 'cell') },
   { id: TempestBlock.STONE_BOLLARD, name: 'stone_bollard', color: '#8f959a', faces: same('lantern_stone'), solid: true, opaque: false, model: new BoxModel(px([5, 0, 5, 11, 10, 11], [4, 10, 4, 12, 11, 12]), 'cell') },
   // Furniture and props
@@ -262,7 +279,7 @@ const defs = (): TempestDef[] => [
   },
   { id: TempestBlock.CUSHION, name: 'cushion', color: '#27407d', faces: same('cushion'), solid: true, opaque: false, model: new BoxModel(px([3, 0, 3, 13, 3, 13]), 'stretch') },
   { id: TempestBlock.BOOKSHELF, name: 'bookshelf', color: '#4a3322', faces: faces('timber_post_side', 'bookshelf') },
-  { id: TempestBlock.HEARTH, name: 'hearth', color: '#7a6455', faces: faces('hearth_top', 'hearth_side'), solid: true, opaque: false, emits: 8, model: new BoxModel(px([0, 0, 0, 16, 10, 16]), 'cell') },
+  { id: TempestBlock.HEARTH, name: 'hearth', color: '#7a6455', faces: faces('hearth_top', 'hearth_side'), solid: true, opaque: false, emits: 8, model: new BoxModel(px([0, 0, 0, 16, 10, 16]), 'cell'), fx: BlockFx.EMBERS, flicker: 1 },
   { id: TempestBlock.BARREL, name: 'barrel', color: '#8a6236', faces: faces('barrel_top', 'barrel_side'), solid: true, opaque: false, model: new BoxModel(px(...shaft(14, 3)), 'cell') },
   { id: TempestBlock.CRATE, name: 'crate', color: '#a07c48', faces: same('crate') },
   { id: TempestBlock.RICE_BALE, name: 'rice_bale', color: '#c7a85a', faces: same('rice_bale'), solid: true, opaque: false, model: new BoxModel(px([2, 0, 2, 14, 9, 14]), 'stretch') },
@@ -280,8 +297,17 @@ const defs = (): TempestDef[] => [
   { id: TempestBlock.LAUNDRY_POLE, name: 'laundry_pole', color: '#d6d9db', faces: same('laundry'), solid: false, opaque: false, model: new OrientedBoxModel(px(...WASHING)) },
 ];
 
+// A clay pot on a chimney: a body and a lip, in the barrel tile of the terracotta roofs with a sooty mouth. The block has no
+// light and no collision beyond its boxes; what makes it a vent is the SMOKE flag.
+const fxDefs = (): TempestDef[] => [
+  {
+    id: TempestFxBlock.SMOKE_VENT, name: 'smoke_vent', color: '#8a4a2c', faces: faces('black_lacquer', 'terracotta_roof'),
+    solid: true, opaque: false, model: new BoxModel(px([4, 0, 4, 12, 10, 12], [3, 10, 3, 13, 12, 13]), 'cell'), fx: BlockFx.SMOKE,
+  },
+];
+
 export const registerTempestBlocks = (registry: BlockRegistry): void => {
-  for (const def of defs()) {
+  for (const def of [...defs(), ...fxDefs()]) {
     registry.register({
       id: def.id,
       name: `voxelverse:${def.name}`,
@@ -293,6 +319,8 @@ export const registerTempestBlocks = (registry: BlockRegistry): void => {
       faces: def.faces,
       model: def.model,
       holdsWater: def.holdsWater,
+      fx: def.fx,
+      flicker: def.flicker,
     });
   }
 };

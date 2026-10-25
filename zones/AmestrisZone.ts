@@ -27,7 +27,8 @@ export class AmestrisZone extends Zone {
     return {
       fogColor: '#90a4ae', // Industrial Grey/Smog
       skyTint: '#cfd8dc',
-      fogDensity: 0.035
+      fogDensity: 0.035,
+      clouds: 0.92, // a lid of smog
     };
   }
 

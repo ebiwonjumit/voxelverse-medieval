@@ -4,7 +4,7 @@
 //   npm run bench                  (full run, about 2.5 minutes)
 //   npm run bench -- --quick       (harness smoke test)
 //   npm run bench -- --url http://localhost:4173/?bench --out docs/bench-prod.json
-//   npm run bench -- --smoke       (loads the real game, drops the player, checks the HUD zone, walks forward, presses the sky keys, reports console errors)
+//   npm run bench -- --smoke       (loads the real game, drops the player, checks the HUD zone, walks forward, presses the sky keys and the effect keys, reports console errors)
 //   npm run bench -- --soak        (90 s closed-loop walk, prints geometry and triangle counts every 5 s)
 //   npm run bench -- --shot docs/screens/p2/spawn.png --url "http://localhost:3000/?shot=0,10,300,0,0"
 //                                  (screenshot at 1280x800 once the world reports window.__SHOT_READY__)
@@ -170,31 +170,36 @@ try {
     await sleep(400);
     const timeStepped = await readTime();
 
-    // The debug panel: F3 opens it, 1 and 2 flip the sway and the water animation, and the panel says which are on.
-    const panelText = async () => (await evaluate('document.body.innerText')).match(/(Foliage sway: \w+)[\s\S]*?(Water animation: \w+)/)?.slice(1, 3).join(', ');
+    // The debug panel: F3 opens it, the digit keys 1 to 9 flip the nine living-world effects (sway, water, fireflies, petals, smoke,
+    // embers, flicker, halos, clouds), and the panel says which are on.
+    const EFFECT_LABELS = ['Foliage sway', 'Water animation', 'Fireflies', 'Sakura petals', 'Chimney smoke', 'Hearth embers', 'Lantern flicker', 'Lamp halos', 'Clouds'];
+    const panelText = async () => {
+      const text = await evaluate('document.body.innerText');
+      return EFFECT_LABELS.map((label) => new RegExp(`${label}: (on|off)`).exec(text)?.[1] ?? '?').join(' ');
+    };
+    const flipAll = async () => {
+      for (let n = 1; n <= 9; n++) {
+        await key('rawKeyDown', `Digit${n}`, 48 + n);
+        await key('keyUp', `Digit${n}`, 48 + n);
+      }
+      await sleep(300);
+    };
     // The game listens for F3 by e.key, which the helper above would write in lower case.
     for (const type of ['rawKeyDown', 'keyUp']) {
       await send('Input.dispatchKeyEvent', { type, code: 'F3', key: 'F3', windowsVirtualKeyCode: 114 }, sessionId);
     }
     await sleep(300);
     const panelOpen = await panelText();
-    await key('rawKeyDown', 'Digit1', 49);
-    await key('keyUp', 'Digit1', 49);
-    await key('rawKeyDown', 'Digit2', 50);
-    await key('keyUp', 'Digit2', 50);
-    await sleep(300);
+    await flipAll();
     const panelOff = await panelText();
-    await key('rawKeyDown', 'Digit1', 49);
-    await key('keyUp', 'Digit1', 49);
-    await key('rawKeyDown', 'Digit2', 50);
-    await key('keyUp', 'Digit2', 50);
-    await sleep(300);
+    await flipAll();
     const panelOn = await panelText();
+    const effectsRunning = await evaluate('Boolean(window.__EFFECTS__)');
 
     console.log('  after landing:', landed, 'zone:', zoneAtSpawn);
     console.log('  after 3 s of W:', walked);
     console.log(`  sky clock: ${timeBefore}, after F4: ${timeDawn}, after ]: ${timeStepped}`);
-    console.log(`  debug panel: ${panelOpen}; after 1 and 2: ${panelOff}; after 1 and 2 again: ${panelOn}`);
+    console.log(`  debug panel: ${panelOpen}; after 1 to 9: ${panelOff}; after 1 to 9 again: ${panelOn}; effects system running: ${effectsRunning}`);
     console.log(`  page errors: ${pageErrors.length}`);
     for (const e of pageErrors.slice(0, 5)) console.log('   ', String(e).slice(0, 200));
 
@@ -207,9 +212,12 @@ try {
     if (zoneAtSpawn !== 'Greensom Village') problems.push(`the HUD names the zone "${zoneAtSpawn}" at the spawn`);
     if (timeDawn !== '06:15 dawn') problems.push(`F4 did not select the dawn preset (${timeDawn})`);
     if (timeStepped !== '07:15 stopped') problems.push(`] did not step the clock to 07:15 (${timeStepped})`);
-    if (panelOpen !== 'Foliage sway: on, Water animation: on') problems.push(`the debug panel does not list both effects as on (${panelOpen})`);
-    if (panelOff !== 'Foliage sway: off, Water animation: off') problems.push(`1 and 2 did not switch the effects off (${panelOff})`);
-    if (panelOn !== 'Foliage sway: on, Water animation: on') problems.push(`1 and 2 did not switch the effects back on (${panelOn})`);
+    const allOn = EFFECT_LABELS.map(() => 'on').join(' ');
+    const allOff = EFFECT_LABELS.map(() => 'off').join(' ');
+    if (panelOpen !== allOn) problems.push(`the debug panel does not list the nine effects as on (${panelOpen})`);
+    if (panelOff !== allOff) problems.push(`1 to 9 did not switch the effects off (${panelOff})`);
+    if (panelOn !== allOn) problems.push(`1 to 9 did not switch the effects back on (${panelOn})`);
+    if (effectsRunning !== true) problems.push('the effects system is not running (window.__EFFECTS__)');
     if (pageErrors.length) problems.push('page errors');
     console.log(problems.length ? `FAILED: ${problems.join('; ')}` : 'OK');
     shutdown(problems.length ? 1 : 0);

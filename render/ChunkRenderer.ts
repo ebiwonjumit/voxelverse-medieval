@@ -10,6 +10,8 @@ import { CHUNK_SIZE, LodLevel, RENDER_DISTANCE } from '../worldConstants';
 import { Atlas, buildAtlas } from './AtlasBuilder';
 import { BlockMaterials, createBlockMaterials, createEffectUniforms } from './BlockMaterials';
 import { createMeshWorker } from './createMeshWorker';
+import { SiteStore } from './effects/SiteStore';
+import { windHeading } from './effects/wind';
 
 // Chunks this close to the player (in chunks) are built with full detail, the rest without small decorations.
 export const HIGH_LOD_DISTANCE = 2;
@@ -34,10 +36,6 @@ const WAVE_PAD = 0.15;
 
 // Foliage moves by at most about 0.31 blocks downwind in the sway shader (0.2 + 0.05 along, 0.06 across).
 const SWAY_PAD = 0.4;
-
-// The wind swings slowly around this heading (radians, 0 is +x, positive turns toward +z) so the gusts do not always
-// run the same way.
-const WIND_HEADING = 0.64;
 
 type BucketName = (typeof BUCKET_NAMES)[number];
 
@@ -79,6 +77,9 @@ export interface ChunkRendererOptions {
   atlas?: Atlas;
   // Tests turn this off so they do not fight over the one registered probe.
   registerProbe?: boolean;
+  // Where the effect sites of each chunk (MeshData.sites: sakura leaves, plants, vents, lamps, hearths) are handed over when its
+  // mesh arrives and taken back when it is dropped. The effects system reads them (docs/effects.md). Without one they are ignored.
+  sites?: SiteStore;
 }
 
 // Centre and radius that hold every vertex of a bucket. Chunk-local, so it moves with the mesh.
@@ -111,6 +112,8 @@ export const bucketGeometry = (data: BucketData, pad = 0): BufferGeometry => {
   geometry.setAttribute('texLayer', new BufferAttribute(data.layers, 2));
   // Only a bucket with something swaying has weights; the others skip the upload and read 0 (see createBlockMaterials).
   if (data.sway.length > 0) geometry.setAttribute('sway', new BufferAttribute(data.sway, 1));
+  // The same for the lamp flicker weights: only a bucket with a lantern or a hearth in it has them.
+  if (data.flicker.length > 0) geometry.setAttribute('flicker', new BufferAttribute(data.flicker, 1));
   geometry.setIndex(new BufferAttribute(data.indices, 1));
   // Set by hand: the default would scan the positions again the first time the mesh is culled.
   geometry.boundingSphere = boundingSphereOf(data.positions, pad);
@@ -127,6 +130,7 @@ export class ChunkRenderer {
   private readonly chunks = new Map<number, ChunkEntry>();
   private readonly uploads = new Map<number, UploadItem>();
   private readonly unregisterProbe: (() => void) | null;
+  private readonly sites: SiteStore | null;
 
   // Three shared materials (opaque, cutout, water), all sampling the one texture array.
   private readonly atlas: Atlas;
@@ -153,6 +157,7 @@ export class ChunkRenderer {
 
   constructor(options: ChunkRendererOptions = {}) {
     this.renderDistance = options.renderDistance ?? RENDER_DISTANCE;
+    this.sites = options.sites ?? null;
     this.group.name = 'chunks';
     this.ownsAtlas = !options.atlas;
     this.atlas = options.atlas
@@ -214,6 +219,15 @@ export class ChunkRenderer {
     return this.effects.sway.value > 0.5;
   }
 
+  // Lamp flicker and the shimmer of block light on or off. Same rules as setSwayEnabled.
+  setFlickerEnabled(enabled: boolean): void {
+    this.effects.flicker.value = enabled ? 1 : 0;
+  }
+
+  isFlickerEnabled(): boolean {
+    return this.effects.flicker.value > 0.5;
+  }
+
   // The water's animation (flowing tile and wave) on or off. Off leaves the surface still and flat, with its depth colour.
   setWaterAnimated(animated: boolean): void {
     this.effects.water.value = animated ? 1 : 0;
@@ -235,7 +249,7 @@ export class ChunkRenderer {
     if (this.disposed) return;
     this.timeUniform.value = time;
     if (this.effects.water.value > 0.5) this.effects.waterTime.value = time;
-    const heading = WIND_HEADING + 0.4 * Math.sin(time * 0.05) + 0.15 * Math.sin(time * 0.13 + 1);
+    const heading = windHeading(time);
     this.effects.wind.value.set(Math.cos(heading), Math.sin(heading));
 
     const cx = Math.floor(x / CHUNK_SIZE);
@@ -260,7 +274,10 @@ export class ChunkRenderer {
     this.disposed = true;
     this.unregisterProbe?.();
     this.pool.dispose();
-    for (const entry of this.chunks.values()) this.removeMeshes(entry);
+    for (const entry of this.chunks.values()) {
+      this.removeMeshes(entry);
+      this.sites?.delete(entry.cx, entry.cz);
+    }
     this.chunks.clear();
     this.uploads.clear();
     this.group.clear();
@@ -283,6 +300,7 @@ export class ChunkRenderer {
       this.pool.cancel(entry.cx, entry.cz);
       this.uploads.delete(key);
       this.removeMeshes(entry);
+      this.sites?.delete(entry.cx, entry.cz);
       this.chunks.delete(key);
       this.lastActivityAt = performance.now();
     }
@@ -330,6 +348,8 @@ export class ChunkRenderer {
     const key = ChunkStore.keyOf(mesh.cx, mesh.cz);
     const entry = this.chunks.get(key);
     if (!entry) return; // unloaded while the worker was busy
+    // The effects only need the notes of the mesh, not its geometry, so they are handed over as soon as the mesh arrives.
+    if (this.sites && mesh.sites && mesh.sites.length > 0) this.sites.set(mesh.cx, mesh.cz, mesh.sites);
     this.uploads.set(key, { mesh, lod, next: 0 });
     this.lastActivityAt = performance.now();
   }

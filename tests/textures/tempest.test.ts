@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultRegistry } from '../../content/blocks';
 import {
-  TEMPEST_ID_MAX, TEMPEST_ID_MIN, TempestBlock, tempestBlockIds, tempestBlockNames,
+  TEMPEST_ID_MAX, TEMPEST_ID_MIN, TempestBlock, TempestFxBlock, tempestBlockIds, tempestBlockNames,
 } from '../../content/blocksTempest';
 import { createDefaultCatalog } from '../../content/textures/TextureCatalog';
 import { createDefaultTextureLayout } from '../../content/textures/layout';
@@ -60,9 +60,15 @@ describe('Tempest block ids', () => {
       expect(id).toBeGreaterThanOrEqual(128);
       expect(id).toBeLessThanOrEqual(199);
     }
-    // Nothing else lives in the Tempest range yet, and the Tempest set owns nothing outside it.
+    // Nothing else lives in the Tempest range but the blocks of the living-world effects (the smoke vent, 200 and up), and the
+    // Tempest set owns nothing outside it.
+    const fx: number[] = Object.values(TempestFxBlock);
     for (const def of registry.all()) {
-      if (def.id >= 128) expect(ids.includes(def.id), def.name).toBe(true);
+      if (def.id >= 128) expect(ids.includes(def.id) || fx.includes(def.id), def.name).toBe(true);
+    }
+    for (const id of fx) {
+      expect(id).toBeGreaterThan(TEMPEST_ID_MAX);
+      expect(registry.has(id), `${id}`).toBe(true);
     }
   });
 

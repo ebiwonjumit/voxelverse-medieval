@@ -2,6 +2,7 @@ import { DataArrayTexture, Mesh, MeshBasicMaterial } from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getWorldProbe } from '../../bench/worldProbe';
 import { MeshData } from '../../meshing/ChunkMesher';
+import { SiteStore } from '../../render/effects/SiteStore';
 import {
   ChunkRenderer, HIGH_LOD_DISTANCE, MAX_GEOMETRIES_PER_FRAME, boundingSphereOf,
 } from '../../render/ChunkRenderer';
@@ -556,6 +557,60 @@ describe('ChunkRenderer', () => {
       expect(material.defaultAttributeValues.sway).toEqual([0]);
     });
 
+    it('flickers lamps in the vertex shader of the opaque and cutout materials, from a per-vertex weight and the clock', () => {
+      const { renderer } = upload(['opaque', 'cutout']);
+      for (const mesh of meshesIn(renderer)) {
+        const shader = shaderOf(mesh);
+        expect(shader.vertexShader).toContain('attribute float flicker');
+        expect(shader.vertexShader).toContain('flameFlicker( uTime');
+        expect(shader.vertexShader).toContain('uFlickerOn');
+        // One multiplier, written per vertex: the fragment shader applies it to block light and the glow boost, and never to the baked
+        // attribute itself, so nothing is re-meshed.
+        expect(shader.vertexShader).toContain('vBakedLight = bakedLight');
+        expect(shader.fragmentShader).toContain('varying float vFlicker');
+        expect(shader.fragmentShader).toMatch(/pow\( max\( vBakedLight\.y, vBakedLight\.w \), LIGHT_CURVE \) \* vFlicker/);
+      }
+    });
+
+    it('gives water no flicker code and leaves its light steady', () => {
+      const { renderer } = upload(['water']);
+      const shader = shaderOf(meshesIn(renderer)[0]);
+      expect(shader.vertexShader).not.toContain('attribute float flicker');
+      expect(shader.vertexShader).not.toContain('flameFlicker');
+      expect(shader.vertexShader).toContain('vFlicker = 1.0');
+    });
+
+    it('shares one flicker switch, which setFlickerEnabled flips without touching a mesh or a geometry', () => {
+      const { renderer } = upload(['opaque', 'cutout']);
+      const geometries = renderer.getStats().geometries;
+      const shaders = meshesIn(renderer).map(shaderOf);
+      expect(new Set(shaders.map((s) => s.uniforms.uFlickerOn)).size).toBe(1);
+      expect(renderer.isFlickerEnabled()).toBe(true);
+      expect(shaders[0].uniforms.uFlickerOn.value).toBe(1);
+      renderer.setFlickerEnabled(false);
+      expect(renderer.isFlickerEnabled()).toBe(false);
+      expect(shaders[0].uniforms.uFlickerOn.value).toBe(0);
+      renderer.setFlickerEnabled(true);
+      expect(shaders[1].uniforms.uFlickerOn.value).toBe(1);
+      expect(renderer.getStats().geometries).toBe(geometries);
+    });
+
+    it('gives only a bucket that has flicker weights the attribute, and reads a missing one as zero', () => {
+      const ctx = track(make({ renderDistance: 1, poolSize: 1 }));
+      ctx.renderer.update(...inChunk(3, -2), 0);
+      drain(ctx.workers, (cx, cz) => {
+        const m = quadMesh(cx, cz, ['opaque', 'cutout']);
+        m.cutout.flicker = new Float32Array(8).fill(0.5);
+        return m;
+      });
+      frames(ctx.renderer, ...inChunk(3, -2), 60);
+      const [opaque, cutout] = meshesIn(ctx.renderer).filter((m) => m.geometry.getAttribute('position').count === 8);
+      expect(opaque.geometry.getAttribute('flicker')).toBeUndefined();
+      expect(cutout.geometry.getAttribute('flicker').count).toBe(8);
+      const material = opaque.material as unknown as { defaultAttributeValues: Record<string, number[]> };
+      expect(material.defaultAttributeValues.flicker).toEqual([0]);
+    });
+
     it('drives the water by its own clock, which stops and flattens the wave when the animation is off', () => {
       const { renderer } = upload(['water']);
       const shader = shaderOf(meshesIn(renderer)[0]);
@@ -582,6 +637,56 @@ describe('ChunkRenderer', () => {
       expect(shader.fragmentShader).toContain('uWaterTime');
       expect(shader.fragmentShader).toContain('bakedLighting()');
       expect(shader.fragmentShader).toContain('textureGrad');
+    });
+  });
+
+  describe('effect sites', () => {
+    const withSites = (cx: number, cz: number): MeshData => {
+      const m = quadMesh(cx, cz, ['opaque']);
+      m.sites = [new Int32Array(0), new Int32Array(0), Int32Array.from([cx * 32 + 1, 5, cz * 32 + 2, 200]), new Int32Array(0), new Int32Array(0)];
+      return m;
+    };
+
+    it('hands the sites of a chunk to the store as soon as its mesh arrives, and takes them back when the chunk is dropped', () => {
+      const sites = new SiteStore();
+      const { factory, workers } = fakeWorkerFactory();
+      const renderer = new ChunkRenderer({ workerFactory: factory, registerProbe: false, renderDistance: 1, poolSize: 1, sites });
+      renderers.push(renderer);
+      renderer.update(...inChunk(0, 0), 0);
+      drain(workers, withSites);
+      expect(sites.size).toBeGreaterThan(0);
+      sites.refresh(16, 16);
+      expect(sites.nearTotals[2]).toBe(sites.size);
+      // Walk far enough that the first chunks fall out of range: their sites go with them.
+      frames(renderer, ...inChunk(0, 0), 5);
+      renderer.update(...inChunk(40, 0), 1);
+      drain(workers, withSites);
+      expect(sites.get(0, 0)).toBeUndefined();
+      expect(sites.get(40, 0)).toBeDefined();
+    });
+
+    it('empties the store of its chunks on dispose, and works without one', () => {
+      const sites = new SiteStore();
+      const { factory, workers } = fakeWorkerFactory();
+      const renderer = new ChunkRenderer({ workerFactory: factory, registerProbe: false, renderDistance: 1, poolSize: 1, sites });
+      renderer.update(...inChunk(0, 0), 0);
+      drain(workers, withSites);
+      expect(sites.size).toBeGreaterThan(0);
+      renderer.dispose();
+      expect(sites.size).toBe(0);
+      const plain = track(make({ renderDistance: 1, poolSize: 1 }));
+      plain.renderer.update(...inChunk(0, 0), 0);
+      expect(() => drain(plain.workers, withSites)).not.toThrow();
+    });
+
+    it('ignores a mesh that carries no sites', () => {
+      const sites = new SiteStore();
+      const { factory, workers } = fakeWorkerFactory();
+      const renderer = new ChunkRenderer({ workerFactory: factory, registerProbe: false, renderDistance: 1, poolSize: 1, sites });
+      renderers.push(renderer);
+      renderer.update(...inChunk(0, 0), 0);
+      drain(workers); // quadMesh has `sites: []`
+      expect(sites.size).toBe(0);
     });
   });
 
